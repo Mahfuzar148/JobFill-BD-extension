@@ -1,0 +1,435 @@
+/* JobFill BD - In-Page Assistant Widget & Review Modal Styles */
+
+#jobfill-floating-trigger {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  max-width: calc(100vw - 24px);
+  z-index: 2147483645;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  box-sizing: border-box;
+}
+
+#jobfill-floating-trigger *,
+#jobfill-floating-trigger *::before,
+#jobfill-floating-trigger *::after {
+  box-sizing: border-box;
+}
+
+#jobfill-floating-trigger .jobfill-toolbar-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 100%;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 6px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+#jobfill-floating-trigger .jobfill-btn-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 10px 25px -5px rgba(22, 163, 74, 0.4), 0 8px 10px -6px rgba(22, 163, 74, 0.3);
+  cursor: pointer;
+  border: 2px solid #86efac;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+#jobfill-floating-trigger .jobfill-btn-trigger:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 14px 28px -5px rgba(22, 163, 74, 0.5);
+  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+}
+
+#jobfill-floating-trigger .jobfill-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  margin: 0 1px;
+}
+
+#jobfill-floating-trigger .jobfill-close-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  user-select: none;
+}
+
+#jobfill-floating-trigger .jobfill-close-btn:hover {
+  background: rgba(239, 68, 68, 0.85);
+  border-color: rgba(254, 202, 202, 0.9);
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+#jobfill-floating-trigger .jobfill-close-btn:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  #jobfill-floating-trigger {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    max-width: calc(100vw - 24px);
+  }
+  #jobfill-floating-trigger .jobfill-toolbar-bar {
+    border-radius: 16px;
+    gap: 6px;
+    padding: 6px;
+  }
+}
+
+#jobfill-review-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#jobfill-review-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#jobfill-review-modal-container {
+  background: #ffffff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  border: 1px solid #d1fae5;
+  transform: scale(0.96);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#jobfill-review-modal-backdrop.open #jobfill-review-modal-container {
+  transform: scale(1);
+}
+
+.jobfill-modal-header {
+  background: linear-gradient(135deg, #15803d 0%, #14532d 100%);
+  color: #ffffff;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jobfill-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  flex: 1;
+  background: #f8fafc;
+}
+
+.jobfill-modal-footer {
+  background: #ffffff;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jobfill-field-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: border-color 0.15s;
+}
+
+.jobfill-field-card:hover {
+  border-color: #86efac;
+}
+
+.jobfill-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.jobfill-badge-high {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.jobfill-badge-medium {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.jobfill-badge-low {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+.jobfill-safety-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Host CSS isolation for all JobFill overlays and Document Approval Modal */
+#jobfill-review-modal-backdrop,
+#jobfill-review-modal-backdrop *,
+#jobfill-doc-modal-backdrop,
+#jobfill-doc-modal-backdrop *,
+#jobfill-http-warning-overlay,
+#jobfill-http-warning-overlay * {
+  box-sizing: border-box !important;
+  line-height: 1.45 !important;
+  letter-spacing: normal !important;
+  text-transform: none;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+}
+
+#jobfill-review-modal-backdrop p,
+#jobfill-review-modal-backdrop span,
+#jobfill-review-modal-backdrop strong,
+#jobfill-review-modal-backdrop h2,
+#jobfill-review-modal-backdrop h3,
+#jobfill-doc-modal-backdrop p,
+#jobfill-doc-modal-backdrop span,
+#jobfill-doc-modal-backdrop strong,
+#jobfill-doc-modal-backdrop h2,
+#jobfill-doc-modal-backdrop h3 {
+  height: auto !important;
+  min-height: 0 !important;
+  position: static !important;
+  float: none !important;
+}
+
+#jobfill-doc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#jobfill-doc-modal-container {
+  background: #ffffff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 660px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  border: 1px solid #bae6fd;
+  color: #0f172a;
+}
+
+.jobfill-doc-modal-header {
+  background: linear-gradient(135deg, #0369a1, #0c4a6e);
+  color: #ffffff;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.jobfill-doc-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+  background: #f8fafc;
+}
+
+.jobfill-doc-modal-footer {
+  padding: 12px 20px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.jobfill-doc-safety-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  height: auto !important;
+}
+
+.jobfill-doc-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  height: auto !important;
+}
+
+.jobfill-doc-preview {
+  width: 74px;
+  height: 74px;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.jobfill-doc-file-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #0369a1;
+  font-weight: 700;
+  font-size: 10px;
+  text-align: center;
+  padding: 4px;
+}
+
+.jobfill-doc-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  height: auto !important;
+}
+
+.jobfill-doc-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.jobfill-doc-row {
+  display: block;
+  width: 100%;
+  margin: 0;
+  height: auto !important;
+  font-size: 11px;
+}
+
+.jobfill-doc-actions {
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.jobfill-doc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto !important;
+  height: auto !important;
+  white-space: nowrap;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.jobfill-teach-box {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}

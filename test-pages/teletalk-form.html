@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teletalk Alljobs Application Form — Simulation</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f6f9; padding:20px; font-size:13px; color:#212529; }
+    .box { max-width:850px; margin:0 auto; background:#fff; border:1px solid #dee2e6; border-radius:6px; padding:24px; }
+    .header { background:#0d6efd; color:#fff; padding:10px 16px; border-radius:4px; font-weight:bold; margin-bottom:16px; font-size:15px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:14px; }
+    label { display:block; font-weight:bold; font-size:11px; margin-bottom:3px; color:#495057; }
+    input, select { width:100%; border:1px solid #ced4da; border-radius:4px; padding:6px 10px; font-size:13px; }
+    input:focus, select:focus { border-color:#0d6efd; outline:none; }
+    .btn { background:#0d6efd; color:#fff; border:none; padding:10px 24px; border-radius:4px; font-weight:bold; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="header">Government Job Online Application Form (Teletalk Portal)</div>
+
+    <div class="grid">
+      <div>
+        <label>Applicant's Name</label>
+        <input type="text" name="name" id="name" placeholder="Full Name in English" />
+      </div>
+      <div>
+        <label>প্রার্থীর নাম (বাংলায়)</label>
+        <input type="text" name="name_bn" id="name_bn" placeholder="বাংলায় নাম" />
+      </div>
+      <div>
+        <label>Father's Name</label>
+        <input type="text" name="father_name" id="father_name" />
+      </div>
+      <div>
+        <label>Mother's Name</label>
+        <input type="text" name="mother_name" id="mother_name" />
+      </div>
+      <div>
+        <label>Date of Birth</label>
+        <input type="date" name="dob" id="dob" />
+      </div>
+      <div>
+        <label>Gender</label>
+        <select name="gender" id="gender">
+          <option value="">Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div>
+        <label>National ID No.</label>
+        <input type="text" name="nid" id="nid" />
+      </div>
+      <div>
+        <label>Mobile Number</label>
+        <input type="text" name="mobile" id="mobile" />
+      </div>
+      <div>
+        <label>Email Address</label>
+        <input type="email" name="email" id="email" />
+      </div>
+      <div>
+        <label>Quota</label>
+        <select name="quota" id="quota">
+          <option value="General">General</option>
+          <option value="Freedom Fighter">Freedom Fighter</option>
+          <option value="Women">Women</option>
+          <option value="Tribal">Tribal</option>
+          <option value="Disabled">Disabled</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:20px;">
+      <button type="submit" class="btn">Proceed Next Step (Manual Review)</button>
+    </div>
+  </div>
+  <!-- JobFill BD In-Page Assistant for Mock Testing -->
+  <link rel="stylesheet" href="../content.css">
+  <script src="../content.js"></script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>JobFill BD - Universal Form Controls Test Page</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f4f6f9; padding: 20px; }
+    .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h2 { border-bottom: 2px solid #006a4e; padding-bottom: 8px; color: #006a4e; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"], input[type="email"], input[type="date"], textarea, select {
+      width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 14px;
+    }
+    .radio-group, .checkbox-group { display: flex; gap: 15px; align-items: center; }
+    .radio-group label, .checkbox-group label { font-weight: normal; margin-bottom: 0; cursor: pointer; }
+    .section-title { font-size: 18px; font-weight: bold; margin-top: 24px; margin-bottom: 12px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>JobFill BD - Comprehensive Form Controls Validation Form</h2>
+    
+    <form id="test_job_form">
+      <!-- 1. Text Inputs -->
+      <div class="section-title">1. Text Inputs</div>
+      <div class="form-group">
+        <label for="applicant_name">Applicant's Name (English)</label>
+        <input type="text" id="applicant_name" name="applicant_name" placeholder="Full name in English">
+      </div>
+      <div class="form-group">
+        <label for="applicant_name_bn">Applicant's Name (Bangla)</label>
+        <input type="text" id="applicant_name_bn" name="applicant_name_bn" placeholder="আবেদনকারীর নাম বাংলায়">
+      </div>
+
+      <!-- 2. Textareas -->
+      <div class="section-title">2. Textareas</div>
+      <div class="form-group">
+        <label for="job_description">Job Description</label>
+        <textarea id="job_description" name="job_description" rows="3" maxlength="300" placeholder="Max 300 characters"></textarea>
+      </div>
+
+      <!-- 3. Native Select Dropdowns -->
+      <div class="section-title">3. Native Select Dropdowns</div>
+      <div class="form-group">
+        <label for="religion">Religion</label>
+        <select id="religion" name="religion">
+          <option value="">Select Religion</option>
+          <option value="islam">Islam</option>
+          <option value="hinduism">Hinduism</option>
+          <option value="christianity">Christianity</option>
+          <option value="buddhism">Buddhism</option>
+        </select>
+      </div>
+
+      <!-- 4. Dependent Cascading Dropdowns -->
+      <div class="section-title">4. Present Address - Dependent Cascading Dropdowns (District -> Upazila)</div>
+      <div class="present-address-box">
+        <div class="form-group">
+          <label for="present_district">Present District</label>
+          <select id="present_district" name="present_district">
+            <option value="">Select District</option>
+            <option value="dhaka">Dhaka</option>
+            <option value="chittagong">Chittagong</option>
+            <option value="rajshahi">Rajshahi</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="present_upazila">Present Upazila / Thana</label>
+          <select id="present_upazila" name="present_upazila">
+            <option value="">Select Upazila</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 5. Radio Groups -->
+      <div class="section-title">5. Radio Button Groups</div>
+      <div class="form-group">
+        <label>Gender</label>
+        <div class="radio-group">
+          <label><input type="radio" name="gender" id="gender_male" value="Male"> Male</label>
+          <label><input type="radio" name="gender" id="gender_female" value="Female"> Female</label>
+          <label><input type="radio" name="gender" id="gender_other" value="Other"> Other</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Marital Status</label>
+        <div class="radio-group">
+          <label><input type="radio" name="marital_status" id="marital_single" value="Single"> Single (অবিবাহিত)</label>
+          <label><input type="radio" name="marital_status" id="marital_married" value="Married"> Married (বিবাহিত)</label>
+        </div>
+      </div>
+
+      <!-- 6. Checkboxes -->
+      <div class="section-title">6. Checkboxes</div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="same_as_present" name="same_as_present" value="1"> Same as Present Address (বর্তমান ঠিকানার অনুরূপ)</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="currently_working" name="currently_working" value="1"> Currently Working (বর্তমানে কর্মরত)</label>
+        </div>
+      </div>
+      <!-- Legal Declaration Checkbox (Must NOT be auto-filled) -->
+      <div class="form-group">
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="declaration" name="declaration" value="1"> I declare that all information provided above is true and correct.</label>
+        </div>
+      </div>
+
+      <!-- 7. Date Inputs -->
+      <div class="section-title">7. Date Inputs</div>
+      <div class="form-group">
+        <label for="native_dob">Date of Birth (Native Date Picker)</label>
+        <input type="date" id="native_dob" name="dob">
+      </div>
+      <div class="form-group">
+        <label for="text_dob">Date of Birth (Text DD-MM-YYYY format)</label>
+        <input type="text" id="text_dob" name="text_dob" placeholder="DD-MM-YYYY">
+      </div>
+      <div class="form-group">
+        <label for="service_start">Length of Service (DD-MM-YY format)</label>
+        <input type="text" id="service_start" name="service_start" placeholder="DD-MM-YY">
+      </div>
+
+      <!-- 8. React-Controlled Input Simulator -->
+      <div class="section-title">8. React Controlled Input</div>
+      <div class="form-group">
+        <label for="contact_mobile">Mobile Number (React State Bound)</label>
+        <input type="text" id="contact_mobile" name="mobile">
+      </div>
+
+      <div style="margin-top: 30px;">
+        <button type="button" id="btn_submit_mock" style="padding: 10px 20px; background: #006a4e; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Manual Submit (No Auto Submit)
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Dependent Dropdown Dynamic Population Script
+    const districtSelect = document.getElementById('present_district') || document.getElementById('district');
+    const upazilaSelect = document.getElementById('present_upazila') || document.getElementById('upazila');
+
+    const thanaData = {
+      dhaka: ['Mohammadpur', 'Dhanmondi', 'Gulshan', 'Mirpur', 'Uttara', 'Motijheel'],
+      chittagong: ['Pahartali', 'Kotwali', 'Panchlaish', 'Double Mooring'],
+      rajshahi: ['Boalia', 'Motihar', 'Rajpara', 'Shah Makhdum']
+    };
+
+    districtSelect.addEventListener('change', function() {
+      const selected = this.value.toLowerCase();
+      upazilaSelect.innerHTML = '<option value="">Select Upazila</option>';
+      if (thanaData[selected]) {
+        thanaData[selected].forEach(thana => {
+          const opt = document.createElement('option');
+          opt.value = thana.toLowerCase();
+          opt.textContent = thana;
+          upazilaSelect.appendChild(opt);
+        });
+      }
+    });
+
+    // Simulate React 16+ Value Tracker on Mobile Input
+    const mobileInput = document.getElementById('contact_mobile');
+    let reactState = '';
+    mobileInput._valueTracker = {
+      getValue() { return reactState; },
+      setValue(val) { reactState = val; }
+    };
+    mobileInput.addEventListener('input', (e) => {
+      reactState = e.target.value;
+    });
+  </script>
+</body>
+</html>

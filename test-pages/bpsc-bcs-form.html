@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BPSC BCS Application Form-1 Simulation — JobFill BD</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background:#f8fafc; padding:20px; font-size:12.5px; }
+    .card { max-width:850px; margin:0 auto; background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:20px; }
+    .title { background:#047857; color:#fff; padding:10px 14px; border-radius:4px; font-weight:bold; font-size:14px; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+    label { display:block; font-weight:700; font-size:11px; margin-bottom:3px; color:#334155; }
+    input, select { width:100%; border:1px solid #cbd5e1; border-radius:4px; padding:6px 8px; font-size:12.5px; }
+    input:focus, select:focus { border-color:#047857; outline:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="title">Bangladesh Public Service Commission (BPSC) — BCS Form-1</div>
+
+    <div class="grid">
+      <div>
+        <label>Candidate Name (English)</label>
+        <input type="text" name="applicant_name" id="applicant_name" />
+      </div>
+      <div>
+        <label>প্রার্থীর নাম (বাংলা)</label>
+        <input type="text" name="applicant_name_bn" id="applicant_name_bn" />
+      </div>
+      <div>
+        <label>Father's Name</label>
+        <input type="text" name="father_name" id="father_name" />
+      </div>
+      <div>
+        <label>Mother's Name</label>
+        <input type="text" name="mother_name" id="mother_name" />
+      </div>
+      <div>
+        <label>Date of Birth</label>
+        <input type="date" name="dob" id="dob" />
+      </div>
+      <div>
+        <label>Gender</label>
+        <select name="gender" id="gender">
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div>
+        <label>Height (cm)</label>
+        <input type="text" name="height" id="height" placeholder="e.g. 172.5" />
+      </div>
+      <div>
+        <label>Weight (kg)</label>
+        <input type="text" name="weight" id="weight" placeholder="e.g. 68" />
+      </div>
+      <div>
+        <label>Chest (cm)</label>
+        <input type="text" name="chest" id="chest" placeholder="e.g. 84" />
+      </div>
+      <div>
+        <label>National ID No</label>
+        <input type="text" name="nid" id="nid" />
+      </div>
+      <div>
+        <label>Mobile Number</label>
+        <input type="text" name="mobile" id="mobile" />
+      </div>
+      <div>
+        <label>Email Address</label>
+        <input type="email" name="email" id="email" />
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:16px;">
+      <button type="submit" style="background:#047857;color:#fff;border:none;padding:8px 20px;border-radius:4px;font-weight:bold;cursor:pointer;">Save Draft (Manual Verification)</button>
+    </div>
+  </div>
+  <!-- JobFill BD In-Page Assistant for Mock Testing -->
+  <link rel="stylesheet" href="../content.css">
+  <script src="../content.js"></script>
+</body>
+</html>

@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petrobangla Application Form — Simulation Test Page</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; padding: 20px; font-size: 13px; }
+    .form-container { max-width: 950px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow: hidden; }
+    
+    .form-header-bar {
+      background-color: #6da786;
+      color: #ffffff;
+      padding: 10px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 16px 16px 0 0;
+      margin: 12px 14px 16px;
+    }
+
+    .form-section-title {
+      background-color: #6da786;
+      color: #ffffff;
+      padding: 7px 16px;
+      font-size: 13.5px;
+      font-weight: 700;
+      border-radius: 12px 12px 0 0;
+      margin: 16px 14px 10px;
+    }
+
+    .form-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; padding: 0 20px; }
+    .form-table td { padding: 4px 8px; vertical-align: middle; }
+    .label-col { width: 28%; text-align: right; font-weight: 700; color: #334155; padding-right: 18px; }
+    .input-col { width: 72%; }
+
+    input[type="text"], input[type="email"], input[type="tel"], input[type="date"], select, textarea {
+      width: 100%;
+      border: 1.5px solid #ef4444; /* matching screenshot red outline for unfilled inputs */
+      border-radius: 5px;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: #0f172a;
+      outline: none;
+      background: #ffffff;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: #16a34a !important;
+      box-shadow: 0 0 0 2px rgba(22,163,74,0.15);
+    }
+
+    select { cursor: pointer; }
+
+    /* Address 2-column layout matching screenshot 2 */
+    .address-wrapper { display: flex; gap: 14px; padding: 0 14px 14px; }
+    .address-col { flex: 1; border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+    .address-col-title {
+      background-color: #6da786;
+      color: #ffffff;
+      padding: 7px 12px;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 6px 6px 0 0;
+    }
+    .address-col-body { padding: 12px; }
+    .addr-row { display: flex; align-items: center; margin-bottom: 9px; }
+    .addr-label { width: 34%; font-weight: 700; text-align: right; padding-right: 12px; font-size: 12px; }
+    .addr-input { width: 66%; }
+
+    /* Education Table matching screenshot 3 */
+    .edu-block { border: 1.5px solid #cbd5e1; border-radius: 8px; margin: 12px 14px 18px; overflow: hidden; }
+    .edu-header { background-color: #6da786; color: #fff; padding: 7px 14px; font-weight: 700; font-size: 13px; }
+    .edu-body { padding: 12px 16px; }
+    .edu-grid { display: grid; grid-template-columns: 140px 1fr 140px 1fr; gap: 10px 14px; align-items: center; }
+    .edu-grid label { text-align: right; font-weight: 700; font-size: 12px; }
+
+    /* Experience Card matching screenshot 4 */
+    .exp-box { border: 1.5px solid #cbd5e1; border-radius: 8px; margin: 12px 14px; padding: 14px; background: #fff; }
+    .exp-badge { background: #86efac; color: #14532d; font-weight: 900; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; margin-right: 8px; }
+
+    .submit-bar { padding: 20px; text-align: center; background: #f1f5f9; border-top: 1px solid #cbd5e1; margin-top: 20px; }
+    .btn-submit { background: #16a34a; color: white; border: none; padding: 10px 28px; font-size: 14px; font-weight: 700; border-radius: 6px; cursor: pointer; }
+    .btn-submit:hover { background: #15803d; }
+  </style>
+</head>
+<body>
+
+  <div class="form-container">
+    <div style="padding:14px 20px 6px; text-align:center;">
+      <h2 style="color:#166534;font-size:18px;">BANGLADESH OIL, GAS & MINERAL CORPORATION (PETROBANGLA)</h2>
+      <p style="color:#64748b;font-size:12px;">Official Online Application Form Simulation</p>
+    </div>
+
+    <!-- 1. BASIC INFORMATION (Matches Screenshot 1) -->
+    <div class="form-header-bar">Basic Information</div>
+    <table class="form-table">
+      <tr>
+        <td class="label-col">Applicant's Name</td>
+        <td class="input-col"><input type="text" name="applicant_name" id="applicant_name" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">আবেদনকারীর নাম (বাংলায়)</td>
+        <td class="input-col"><input type="text" name="applicant_name_bn" id="applicant_name_bn" placeholder="আবেদনকারীর নাম (বাংলায়)" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Father's Name</td>
+        <td class="input-col"><input type="text" name="father_name" id="father_name" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">পিতার নাম (বাংলায়)</td>
+        <td class="input-col"><input type="text" name="father_name_bn" id="father_name_bn" placeholder="পিতার নাম (বাংলায়)" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Mother's Name</td>
+        <td class="input-col"><input type="text" name="mother_name" id="mother_name" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">মাতার নাম (বাংলায়)</td>
+        <td class="input-col"><input type="text" name="mother_name_bn" id="mother_name_bn" placeholder="মাতার নাম (বাংলায়)" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Date of Birth</td>
+        <td class="input-col"><input type="text" name="dob" id="dob" placeholder="DD-MM-YYYY" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Nationality</td>
+        <td class="input-col">
+          <select name="nationality" id="nationality" style="border-color:#16a34a;">
+            <option value="Bangladeshi">Bangladeshi</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Religion</td>
+        <td class="input-col">
+          <select name="religion" id="religion">
+            <option value="">Select</option>
+            <option value="Islam">Islam</option>
+            <option value="Hinduism">Hinduism</option>
+            <option value="Christianity">Christianity</option>
+            <option value="Buddhism">Buddhism</option>
+            <option value="Other">Other</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Gender</td>
+        <td class="input-col">
+          <select name="gender" id="gender">
+            <option value="">Select</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">National ID</td>
+        <td class="input-col">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select name="nid" id="nid" style="width:140px;">
+              <option value="">Select</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+            <input type="text" name="nid_no" id="nid_no" placeholder="National ID No" style="display:none;flex:1;" />
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Birth Registration</td>
+        <td class="input-col">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select name="birth_reg" id="birth_reg" style="width:140px;">
+              <option value="">Select</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+            <input type="text" name="birth_reg_no" id="birth_reg_no" placeholder="Birth Registration No" style="display:none;flex:1;" />
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Passport ID</td>
+        <td class="input-col">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select name="passport" id="passport" style="width:140px;">
+              <option value="">Select</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+            <input type="text" name="passport_no" id="passport_no" placeholder="Passport No" style="display:none;flex:1;" />
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Marital Status</td>
+        <td class="input-col">
+          <select name="marital_status" id="marital_status">
+            <option value="">Select</option>
+            <option value="Single">Single</option>
+            <option value="Married">Married</option>
+            <option value="Divorced">Divorced</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Mobile Number</td>
+        <td class="input-col"><input type="text" name="mobile" id="mobile" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Confirm Mobile Number</td>
+        <td class="input-col"><input type="text" name="confirm_mobile" id="confirm_mobile" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Email</td>
+        <td class="input-col"><input type="email" name="email" id="email" placeholder="" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">Quota</td>
+        <td class="input-col">
+          <select name="quota" id="quota">
+            <option value="">Select</option>
+            <option value="General">General</option>
+            <option value="Freedom Fighter">Freedom Fighter</option>
+            <option value="District">District</option>
+            <option value="Women">Women</option>
+            <option value="Tribal">Tribal</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Departmental Status</td>
+        <td class="input-col">
+          <select name="departmental_status" id="departmental_status">
+            <option value="">Select</option>
+            <option value="No">No</option>
+            <option value="Government Employee">Government Employee</option>
+            <option value="Semi-Government">Semi-Government</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+
+    <!-- 2. ADDRESS (Matches Screenshot 2) -->
+    <div style="padding: 10px 14px 4px; text-align:right;">
+      <label style="cursor:pointer;font-weight:700;font-size:12px;">
+        <input type="checkbox" id="chk_same_as_present" /> Same as Present Address
+      </label>
+    </div>
+
+    <div class="address-wrapper">
+      <!-- Present Address -->
+      <div class="address-col">
+        <div class="address-col-title">Present Address (বর্তমান ঠিকানা)</div>
+        <div class="address-col-body">
+          <div class="addr-row">
+            <div class="addr-label">Care Of</div>
+            <div class="addr-input"><input type="text" name="present_care" id="present_care" /></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Village/ Road/<br>House/ Flat</div>
+            <div class="addr-input"><textarea rows="2" name="present_village" id="present_village"></textarea></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">District</div>
+            <div class="addr-input">
+              <select name="present_district" id="present_district">
+                <option value="">Select</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Chittagong">Chittagong</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Rangpur">Rangpur</option>
+                <option value="Khulna">Khulna</option>
+                <option value="Sylhet">Sylhet</option>
+              </select>
+            </div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Upazila/P.S.</div>
+            <div class="addr-input">
+              <select name="present_upazila" id="present_upazila">
+                <option value="">Select</option>
+                <option value="Mirpur">Mirpur</option>
+                <option value="Mohammadpur">Mohammadpur</option>
+                <option value="Dhanmondi">Dhanmondi</option>
+                <option value="Gulshan">Gulshan</option>
+                <option value="Rangpur Sadar">Rangpur Sadar</option>
+              </select>
+            </div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Post Office</div>
+            <div class="addr-input"><input type="text" name="present_post" id="present_post" /></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Post Code</div>
+            <div class="addr-input"><input type="text" name="present_postcode" id="present_postcode" /></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Permanent Address -->
+      <div class="address-col">
+        <div class="address-col-title">Permanent Address (স্থায়ী ঠিকানা)</div>
+        <div class="address-col-body">
+          <div class="addr-row">
+            <div class="addr-label">Care Of</div>
+            <div class="addr-input"><input type="text" name="permanent_care" id="permanent_care" /></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Village/ Road/<br>House/ Flat</div>
+            <div class="addr-input"><textarea rows="2" name="permanent_village" id="permanent_village"></textarea></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">District</div>
+            <div class="addr-input">
+              <select name="permanent_district" id="permanent_district">
+                <option value="">Select</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Chittagong">Chittagong</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Rangpur">Rangpur</option>
+                <option value="Khulna">Khulna</option>
+              </select>
+            </div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Upazila/P.S.</div>
+            <div class="addr-input">
+              <select name="permanent_upazila" id="permanent_upazila">
+                <option value="">Select</option>
+                <option value="Mirpur">Mirpur</option>
+                <option value="Mohammadpur">Mohammadpur</option>
+                <option value="Rangpur Sadar">Rangpur Sadar</option>
+              </select>
+            </div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Post Office</div>
+            <div class="addr-input"><input type="text" name="permanent_post" id="permanent_post" /></div>
+          </div>
+          <div class="addr-row">
+            <div class="addr-label">Post Code</div>
+            <div class="addr-input"><input type="text" name="permanent_postcode" id="permanent_postcode" /></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. SSC / EQUIVALENT (Matches Screenshot 3) -->
+    <div class="edu-block">
+      <div class="edu-header">SSC/Equivalent Level</div>
+      <div class="edu-body">
+        <div class="edu-grid">
+          <label>Examination</label>
+          <select name="ssc_exam" id="ssc_exam">
+            <option value="">Select</option>
+            <option value="S.S.C">S.S.C</option>
+            <option value="Dakhil">Dakhil</option>
+            <option value="S.S.C Vocational">S.S.C Vocational</option>
+            <option value="O Level/Cambridge">O Level/Cambridge</option>
+            <option value="S.S.C Equivalent">S.S.C Equivalent</option>
+            <option value="Dakhil Vocational">Dakhil Vocational</option>
+          </select>
+
+          <label>Board</label>
+          <select name="ssc_board" id="ssc_board">
+            <option value="">Select</option>
+            <option value="Dhaka">Dhaka</option>
+            <option value="Chittagong">Chittagong</option>
+            <option value="Rajshahi">Rajshahi</option>
+            <option value="Khulna">Khulna</option>
+            <option value="Madrasah">Madrasah</option>
+            <option value="Technical">Technical</option>
+          </select>
+
+          <label>Roll No</label>
+          <input type="text" name="ssc_roll" id="ssc_roll" />
+
+          <label>Result</label>
+          <div style="display:flex;gap:4px;">
+            <select name="ssc_result" id="ssc_result" style="width:130px;">
+              <option value="">Select</option>
+              <option value="GPA(out of 5)">GPA(out of 5)</option>
+              <option value="GPA(out of 4)">GPA(out of 4)</option>
+              <option value="First Division">First Division</option>
+            </select>
+            <input type="text" name="ssc_gpa" id="ssc_gpa" placeholder="GPA" style="width:70px;" />
+          </div>
+
+          <label>Group/Subject</label>
+          <select name="ssc_group" id="ssc_group">
+            <option value="">Select</option>
+            <option value="Science">Science</option>
+            <option value="Humanities">Humanities</option>
+            <option value="Commerce">Commerce</option>
+          </select>
+
+          <label>Passing Year</label>
+          <select name="ssc_year" id="ssc_year">
+            <option value="">Select</option>
+            <option value="2014">2014</option>
+            <option value="2015">2015</option>
+            <option value="2016">2016</option>
+            <option value="2018">2018</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- HSC / EQUIVALENT / DIPLOMA (Matches Screenshot 3) -->
+    <div class="edu-block">
+      <div class="edu-header">HSC/Equivalent Level/Diploma-in-Engineering</div>
+      <div class="edu-body">
+        <div class="edu-grid">
+          <label>Examination</label>
+          <select name="hsc_exam" id="hsc_exam">
+            <option value="">Select</option>
+            <option value="H.S.C">H.S.C</option>
+            <option value="Alim">Alim</option>
+            <option value="H.S.C Vocational">H.S.C Vocational</option>
+            <option value="A Level/Cambridge">A Level/Cambridge</option>
+            <option value="Diploma-in-Engineering">Diploma-in-Engineering</option>
+            <option value="H.S.C Equivalent">H.S.C Equivalent</option>
+          </select>
+
+          <label>Board</label>
+          <select name="hsc_board" id="hsc_board">
+            <option value="">Select</option>
+            <option value="Dhaka">Dhaka</option>
+            <option value="Chittagong">Chittagong</option>
+            <option value="Madrasah">Madrasah</option>
+            <option value="BTEB">BTEB</option>
+          </select>
+
+          <label>Roll No</label>
+          <input type="text" name="hsc_roll" id="hsc_roll" />
+
+          <label>Result</label>
+          <div style="display:flex;gap:4px;">
+            <select name="hsc_result" id="hsc_result" style="width:130px;">
+              <option value="">Select</option>
+              <option value="GPA(out of 5)">GPA(out of 5)</option>
+              <option value="GPA(out of 4)">GPA(out of 4)</option>
+              <option value="First Division">First Division</option>
+            </select>
+            <input type="text" name="hsc_gpa" id="hsc_gpa" placeholder="GPA" style="width:70px;" />
+          </div>
+
+          <label>Group/Subject</label>
+          <select name="hsc_group" id="hsc_group">
+            <option value="">Select</option>
+            <option value="Science">Science</option>
+            <option value="Engineering">Engineering</option>
+          </select>
+
+          <label>Passing Year</label>
+          <select name="hsc_year" id="hsc_year">
+            <option value="">Select</option>
+            <option value="2016">2016</option>
+            <option value="2017">2017</option>
+            <option value="2020">2020</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRADUATION (Matches Screenshot 3 & 4) -->
+    <div style="padding:0 14px 4px;">
+      <label style="cursor:pointer;font-weight:700;">
+        <input type="checkbox" id="chk_grad" checked /> If Applicable
+      </label>
+    </div>
+    <div class="edu-block">
+      <div class="edu-header">Graduation/Equivalent Level</div>
+      <div class="edu-body">
+        <div class="edu-grid">
+          <label>Examination</label>
+          <select name="gra_examination" id="gra_examination">
+            <option value="">Select</option>
+            <option value="B.Sc Engineering">B.Sc Engineering</option>
+            <option value="B.Sc (Hons)">B.Sc (Hons)</option>
+            <option value="B.B.A (Hons)">B.B.A (Hons)</option>
+          </select>
+
+          <label>Subject/Degree</label>
+          <input type="text" name="gra_subject" id="gra_subject" />
+
+          <label>University/Inst.</label>
+          <input type="text" name="gra_university" id="gra_university" />
+
+          <label>Result</label>
+          <div style="display:flex;gap:4px;">
+            <select name="gra_result" id="gra_result" style="width:130px;">
+              <option value="">Select</option>
+              <option value="CGPA (out of 4)">CGPA (out of 4)</option>
+              <option value="CGPA (out of 5)">CGPA (out of 5)</option>
+              <option value="First Class">First Class</option>
+            </select>
+            <input type="text" name="gra_cgpa" id="gra_cgpa" placeholder="CGPA" style="width:70px;" />
+          </div>
+
+          <label>Passing Year</label>
+          <select name="gra_passing_year" id="gra_passing_year">
+            <option value="">Select</option>
+            <option value="2020">2020</option>
+            <option value="2021">2021</option>
+          </select>
+
+          <label>Course Duration</label>
+          <select name="gra_duration" id="gra_duration">
+            <option value="">Select</option>
+            <option value="4 Years">4 Years</option>
+            <option value="3 Years">3 Years</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. JOB EXPERIENCE (Matches Screenshot 4) -->
+    <div style="padding:0 14px 4px;">
+      <label style="cursor:pointer;font-weight:700;">
+        <input type="checkbox" id="chk_exp" checked /> If Applicable
+      </label>
+    </div>
+    <div class="edu-block">
+      <div class="edu-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Job Experiences</span>
+        <button type="button" style="background:#3b82f6;color:#fff;border:none;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">+ ADD MORE</button>
+      </div>
+      <div class="edu-body">
+        <div class="exp-box">
+          <div style="display:flex;align-items:center;margin-bottom:12px;">
+            <span class="exp-badge">1</span>
+            <strong>Employment Record</strong>
+          </div>
+          <div class="edu-grid">
+            <label>Employed on</label>
+            <select name="exp_employed_on" id="exp_employed_on">
+              <option value="">Select</option>
+              <option value="Private">Private</option>
+              <option value="Government">Government</option>
+              <option value="Autonomous">Autonomous</option>
+            </select>
+
+            <label>Organization</label>
+            <input type="text" name="exp_organization" id="exp_organization" />
+
+            <label>Designation/Post</label>
+            <input type="text" name="exp_designation" id="exp_designation" />
+
+            <label>Address</label>
+            <input type="text" name="exp_address" id="exp_address" />
+
+            <label>Length of Service</label>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="text" name="exp_start_date" placeholder="DD-MM-YY" style="width:110px;" />
+              <span>to</span>
+              <input type="text" name="exp_end_date" placeholder="DD-MM-YY" style="width:110px;" />
+              <label style="font-size:11px;cursor:pointer;"><input type="checkbox" name="CurrentlyWorking" checked /> CurrentlyWorking</label>
+            </div>
+
+            <div></div><div></div>
+
+            <label>Job Description</label>
+            <div style="grid-column: span 3;">
+              <textarea name="exp_job_description" rows="2" maxlength="300" placeholder="Max 300 characters"></textarea>
+              <div style="font-size:10px;color:#64748b;text-align:right;">300</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. ORGANIZATION CHOICE (Matches Screenshot 4) -->
+    <div class="form-header-bar">Organization Choice</div>
+    <table class="form-table">
+      <tr>
+        <td class="label-col">1st Choice</td>
+        <td class="input-col"><input type="text" name="org_choice_1" id="org_choice_1" placeholder="e.g. Petrobangla HQ" /></td>
+      </tr>
+      <tr>
+        <td class="label-col">2nd Choice</td>
+        <td class="input-col"><input type="text" name="org_choice_2" id="org_choice_2" placeholder="e.g. Titas Gas T&D Co." /></td>
+      </tr>
+    </table>
+
+    <!-- 6. PHOTO & SIGNATURE UPLOAD (Teletalk BOGMC Official Upload Spec) -->
+    <div class="form-header-bar">Photo &amp; Signature Upload (ছবি এবং স্বাক্ষর আপলোড)</div>
+    <table class="form-table">
+      <tr>
+        <td class="label-col">Applicant Photograph (ছবি)</td>
+        <td class="input-col">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div>
+              <input type="file" name="photo" id="photo" accept="image/jpeg,image/jpg,image/png" />
+              <div style="font-size:11px;color:#475569;margin-top:4px;">
+                Photo must be 300 x 300 pixel (Width x Height) and file size not more than 100 KB (JPG/JPEG format).
+              </div>
+              <div id="photo_error" style="font-size:11px;color:#dc2626;margin-top:2px;"></div>
+            </div>
+            <img id="photo_preview" alt="Photo Preview" style="width:72px;height:72px;border:1px solid #cbd5e1;display:none;object-fit:cover;border-radius:4px;" />
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col">Applicant Signature (স্বাক্ষর)</td>
+        <td class="input-col">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div>
+              <input type="file" name="signature" id="signature" accept="image/jpeg,image/jpg,image/png" />
+              <div style="font-size:11px;color:#475569;margin-top:4px;">
+                Signature must be 300 x 80 pixel (Width x Height) and file size not more than 60 KB (JPG/JPEG format).
+              </div>
+              <div id="sig_error" style="font-size:11px;color:#dc2626;margin-top:2px;"></div>
+            </div>
+            <img id="sig_preview" alt="Signature Preview" style="width:120px;height:36px;border:1px solid #cbd5e1;display:none;object-fit:contain;border-radius:4px;background:#fff;" />
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <script>
+      (function () {
+        function bindTeletalkPreview(inputId, previewId, errId, maxKb) {
+          var inp = document.getElementById(inputId);
+          var img = document.getElementById(previewId);
+          var err = document.getElementById(errId);
+          if (!inp) return;
+          inp.addEventListener('change', function () {
+            if (err) err.textContent = '';
+            var file = inp.files && inp.files[0];
+            if (!file) return;
+            if (file.size > maxKb * 1024) {
+              if (err) err.textContent = 'File size exceeds ' + maxKb + ' KB limit.';
+              return;
+            }
+            if (typeof FileReader !== 'undefined' && img) {
+              var reader = new FileReader();
+              reader.onload = function (ev) {
+                img.src = ev.target.result;
+                img.style.display = 'inline-block';
+              };
+              reader.readAsDataURL(file);
+            }
+          });
+        }
+        bindTeletalkPreview('photo', 'photo_preview', 'photo_error', 100);
+        bindTeletalkPreview('signature', 'sig_preview', 'sig_error', 60);
+
+        function bindIdentityToggle(selId, inpId) {
+          var sel = document.getElementById(selId);
+          var inp = document.getElementById(inpId);
+          if (!sel || !inp) return;
+          sel.addEventListener('change', function () {
+            inp.style.display = sel.value === 'Yes' ? 'inline-block' : 'none';
+          });
+        }
+        bindIdentityToggle('nid', 'nid_no');
+        bindIdentityToggle('birth_reg', 'birth_reg_no');
+        bindIdentityToggle('passport', 'passport_no');
+      })();
+    </script>
+
+    <div class="submit-bar">
+      <button type="submit" class="btn-submit">Submit Application (Manual Only)</button>
+    </div>
+  </div>
+
+  <!-- JobFill BD In-Page Assistant for Mock Testing -->
+  <link rel="stylesheet" href="../content.css">
+  <script src="../content.js"></script>
+</body>
+</html>

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Official Privacy Policy for JobFill BD (Version 2.0.0) published by MR Software Studio — accurately distinguishing Microsoft Edge Store Local-Only release (Cloud Sync disabled) and Google Chrome optional client-side encrypted Supabase Cloud Sync, public job-source requests, and local document storage." />
+  <title>Privacy Policy — JobFill BD | MR Software Studio</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23065f46'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='Arial,sans-serif' font-size='13' font-weight='bold' fill='white'%3EMR%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f1f5f9;
+      --bg-brand-soft: #ecfdf5;
+      --bg-warn: #fffbeb;
+      --bg-info: #eff6ff;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #475569;
+      --brand-primary: #065f46;
+      --brand-accent: #047857;
+      --brand-border: #a7f3d0;
+      --warn-border: #f59e0b;
+      --warn-text: #78350f;
+      --info-border: #93c5fd;
+      --info-text: #1e3a8a;
+      --border-light: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --focus-ring: #047857;
+      --radius-lg: 14px;
+      --radius-md: 10px;
+      --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Bengali", Arial, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    a {
+      color: var(--brand-primary);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      font-weight: 500;
+    }
+
+    a:hover {
+      color: #064e3b;
+    }
+
+    a:focus-visible, button:focus-visible {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: -9999px;
+      top: 12px;
+      background: var(--brand-primary);
+      color: #ffffff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      z-index: 1000;
+      text-decoration: none;
+    }
+
+    .skip-link:focus {
+      left: 16px;
+    }
+
+    .topbar {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .topbar-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.25;
+    }
+
+    .brand-sub {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .product-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background-color: var(--bg-brand-soft);
+      color: var(--brand-primary);
+      border: 1px solid var(--brand-border);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .layout {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .toc-panel {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 20px;
+      min-width: 0;
+    }
+
+    .toc-title {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .toc-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .toc-list a {
+      display: block;
+      padding: 5px 8px;
+      font-size: 13.5px;
+      line-height: 1.4;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: 6px;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-list a:hover {
+      background-color: var(--bg-subtle);
+      color: var(--brand-primary);
+      border-left-color: var(--brand-accent);
+    }
+
+    .policy-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 36px 40px;
+      box-shadow: var(--shadow-sm);
+      min-width: 0;
+    }
+
+    .policy-header {
+      border-bottom: 1px solid var(--border-light);
+      padding-bottom: 22px;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+      line-height: 1.25;
+      color: var(--text-primary);
+      letter-spacing: -0.015em;
+    }
+
+    .meta-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 22px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .meta-item strong {
+      color: var(--text-primary);
+    }
+
+    .callout {
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      margin: 20px 0;
+      font-size: 15px;
+      border: 1px solid;
+    }
+
+    .callout-green {
+      background-color: var(--bg-brand-soft);
+      border-color: var(--brand-border);
+      color: #064e3b;
+    }
+
+    .callout-info {
+      background-color: var(--bg-info);
+      border-color: var(--info-border);
+      color: var(--info-text);
+    }
+
+    .callout-warn {
+      background-color: var(--bg-warn);
+      border-color: var(--warn-border);
+      color: var(--warn-text);
+    }
+
+    .callout-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    section {
+      padding-top: 8px;
+      margin-top: 28px;
+      scroll-margin-top: 20px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.32rem;
+      line-height: 1.35;
+      color: var(--brand-primary);
+      padding-left: 12px;
+      border-left: 4px solid var(--brand-accent);
+    }
+
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 1.04rem;
+      line-height: 1.4;
+      color: var(--text-primary);
+    }
+
+    p {
+      margin: 0 0 12px;
+      color: var(--text-secondary);
+    }
+
+    ul, ol {
+      margin: 8px 0 16px;
+      padding-left: 22px;
+      color: var(--text-secondary);
+    }
+
+    li {
+      margin-bottom: 7px;
+    }
+
+    li strong {
+      color: var(--text-primary);
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.875em;
+      background-color: var(--bg-subtle);
+      color: var(--text-primary);
+      padding: 2px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--border-light);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .table-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 14px 0 20px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14.5px;
+      min-width: 520px;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    th {
+      background-color: var(--bg-subtle);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    td {
+      color: var(--text-secondary);
+    }
+
+    .contact-box {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-top: 12px;
+    }
+
+    .contact-box p:last-child {
+      margin-bottom: 0;
+    }
+
+    .policy-footer {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 20px 36px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 20px;
+        padding: 20px 14px 40px;
+      }
+
+      .toc-panel {
+        position: static;
+        padding: 16px;
+      }
+
+      .toc-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 4px 12px;
+      }
+
+      .policy-card {
+        padding: 24px 20px;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .policy-card {
+        padding: 20px 16px;
+        border-radius: 12px;
+      }
+
+      .toc-list {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .topbar-inner {
+        padding: 12px 14px;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        color: #000000;
+        font-size: 12pt;
+      }
+
+      .toc-panel, .skip-link {
+        display: none;
+      }
+
+      .layout {
+        display: block;
+        padding: 0;
+      }
+
+      .policy-card {
+        border: none;
+        box-shadow: none;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to Privacy Policy</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">MR</div>
+        <div>
+          <div class="brand-name">MR Software Studio</div>
+          <div class="brand-sub">Official Privacy Policy &amp; Release Comparison</div>
+        </div>
+      </div>
+      <div class="product-pill">JobFill BD &middot; Version 2.0.0 &middot; Manifest V3</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc-panel" aria-label="Table of contents">
+      <h2 class="toc-title">Table of Contents</h2>
+      <ol class="toc-list">
+        <li><a href="#overview">1. Overview &amp; Browser Differences</a></li>
+        <li><a href="#local-storage">2. Local Storage Mechanisms</a></li>
+        <li><a href="#personal-profile">3. Personal Profile Information</a></li>
+        <li><a href="#education-employment">4. Education &amp; Employment Data</a></li>
+        <li><a href="#documents-media">5. Documents, Photos &amp; Signatures</a></li>
+        <li><a href="#autofill-access">6. Autofill &amp; Webpage Access</a></li>
+        <li><a href="#public-job-sources">7. Public Job Circular Requests</a></li>
+        <li><a href="#cloud-sync">8. Edge vs. Chrome Cloud Sync</a></li>
+        <li><a href="#third-party-transfers">9. Third-Party Services &amp; Data Transfers</a></li>
+        <li><a href="#encryption-security">10. Encryption &amp; Security</a></li>
+        <li><a href="#consent-opt-in">11. User Consent &amp; Opt-In/Out Controls</a></li>
+        <li><a href="#retention-deletion">12. Data Retention &amp; Deletion</a></li>
+        <li><a href="#backup-restore">13. Backup &amp; Restore</a></li>
+        <li><a href="#notifications">14. Notifications &amp; Reminders</a></li>
+        <li><a href="#permissions">15. Browser Permissions &amp; Purposes</a></li>
+        <li><a href="#user-rights">16. User Rights &amp; Recovery Notice</a></li>
+        <li><a href="#contact">17. Contact &amp; Official Policy URL</a></li>
+      </ol>
+    </nav>
+
+    <main id="main-content" class="policy-card">
+      <div class="policy-header">
+        <h1>Privacy Policy for JobFill BD</h1>
+        <div class="meta-grid">
+          <div class="meta-item"><strong>Product:</strong> JobFill BD (Browser Extension v2.0.0 &mdash; Manifest V3)</div>
+          <div class="meta-item"><strong>Publisher:</strong> MR Software Studio</div>
+          <div class="meta-item"><strong>Effective Date:</strong> November 11, 2026</div>
+          <div class="meta-item"><strong>Last Updated:</strong> November 11, 2026</div>
+          <div class="meta-item"><strong>Public URL:</strong> <code>https://mahfuzar148.github.io/jobfill-bd-privacy/</code></div>
+        </div>
+      </div>
+
+      <div class="callout callout-green">
+        <span class="callout-title">Release Comparison Summary (Microsoft Edge vs. Google Chrome)</span>
+        <strong>Microsoft Edge Store Release (<code>v2.0.0</code>) and Google Chrome Release do not have identical cloud data flows:</strong>
+        <ul>
+          <li><strong>Microsoft Edge Add-ons Store <code>v2.0.0</code> Release (Local-Only / Cloud Sync Disabled):</strong> Built with <code>__JOBFILL_CLOUD_SYNC_DISABLED__=true</code>. Optional Supabase authentication, profile/activity Cloud Sync, and shared Cloud Jobs reads are <strong>disabled at compile time and cannot be enabled</strong>. Personal profiles, documents, bookmarks, and autofill logs remain on your device inside local browser storage, while public job circular discovery performs unauthenticated read-only HTTP <code>GET</code> requests (<code>credentials: 'omit'</code>) with zero saved personal data.</li>
+          <li><strong>Google Chrome Release (Local-First by Default + Optional User-Configured Cloud Sync):</strong> Operates strictly <strong>Local-Only by default</strong> (<code>cloudSyncEnabled: false</code>, no account required). Where a Chrome/cloud-enabled build exposes optional Cloud Sync (<code>__JOBFILL_CLOUD_SYNC_DISABLED__=false</code>), it transmits data only if you explicitly enter your own Supabase Project URL and public Anon Key, sign up or sign in, and trigger Cloud Sync with a local Sync Passphrase &mdash; while <strong>uploaded documents, photos, signatures, and certificates remain strictly local-only in <code>v2.0.0</code></strong>.</li>
+        </ul>
+      </div>
+
+      <section id="overview">
+        <h2>1. Introduction, Scope &amp; Browser Distribution Scope</h2>
+        <p>
+          This Privacy Policy describes how <strong>MR Software Studio</strong> handles information inside the <strong>JobFill BD</strong> Manifest V3 browser extension (version <code>2.0.0</code>) across <strong>Microsoft Edge</strong> and <strong>Google Chrome</strong>. JobFill BD helps Bangladeshi job applicants organize application profiles, resize and validate photos and signatures locally, discover official public job circulars, track application deadlines, and fill supported recruitment web forms under explicit user review.
+        </p>
+        <p>
+          This public page at <code>https://mahfuzar148.github.io/jobfill-bd-privacy/</code> runs <strong>no external JavaScript</strong>, sets <strong>no cookies</strong>, embeds <strong>no external fonts or analytics trackers</strong>, and contains <strong>no data-collection forms</strong>.
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Capability / Data Flow</th>
+                <th>Microsoft Edge Store v2.0.0 Release</th>
+                <th>Google Chrome Release (Cloud-Enabled Configuration)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Default Operating Mode</strong></td>
+                <td>Strictly Local-Only (no account required).</td>
+                <td>Local-Only by default (<code>cloudSyncEnabled: false</code>, no account required).</td>
+              </tr>
+              <tr>
+                <td><strong>Optional Supabase Auth &amp; Cloud Sync</strong></td>
+                <td><strong>Disabled &amp; unreachable</strong> (<code>__JOBFILL_CLOUD_SYNC_DISABLED__=true</code>; cannot be enabled in Edge Store build).</td>
+                <td><strong>Available as explicit opt-in</strong> when compiled with Cloud Sync enabled (user enters own Supabase Project URL &amp; public Anon Key, signs in, and triggers sync).</td>
+              </tr>
+              <tr>
+                <td><strong>Client-Side E2EE for Synced Vault Blobs</strong></td>
+                <td>Not applicable (Cloud Sync is disabled). Local IndexedDB remains AES-256-GCM encrypted on device.</td>
+                <td>Only <code>profiles_bundle</code> and <code>activity_bundle</code> (bookmarks &amp; application tracker) are encrypted client-side via PBKDF2-SHA256 + AES-256-GCM before upload; Auth credentials and row metadata are <strong>not</strong> E2EE.</td>
+              </tr>
+              <tr>
+                <td><strong>Uploaded Documents, Photos, Signatures &amp; Certificates</strong></td>
+                <td>Strictly local in browser IndexedDB (<code>documents</code> store).</td>
+                <td><strong>Strictly local in browser IndexedDB</strong> in the audited <code>v2.0.0</code> release (excluded from remote Cloud Sync).</td>
+              </tr>
+              <tr>
+                <td><strong>Public Job Circular Requests</strong></td>
+                <td>Requires Internet access; unauthenticated read-only <code>GET</code> (<code>credentials: 'omit'</code>, zero PII).</td>
+                <td>Requires Internet access; unauthenticated read-only <code>GET</code> (<code>credentials: 'omit'</code>, zero PII); optional Shared Cloud Jobs DB read only if explicitly enabled.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="local-storage">
+        <h2>2. Data Collected &amp; Exact Local Storage Mechanisms</h2>
+        <p>
+          All application data in Local-Only mode (and by default in Chrome before any opt-in sync) is stored inside browser-isolated storage on your device:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Browser Storage Mechanism</th>
+                <th>Store / Key Names</th>
+                <th>What Is Stored</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Browser IndexedDB (<code>JobFillBD_SecureStorage</code>, Schema v8)</td>
+                <td><code>encrypted_vault</code>, <code>education_records</code>, <code>experience_records</code>, <code>documents</code></td>
+                <td>AES-256-GCM encrypted applicant profile vault blobs, individually encrypted academic and employment records, and encrypted photos, signatures, and certificates (plus a non-extractable Web Crypto <code>CryptoKey</code> when no Master Vault Password is enabled).</td>
+              </tr>
+              <tr>
+                <td>Browser IndexedDB (Circulars, Activity &amp; Local Logs)</td>
+                <td><code>jobs</code>, <code>govt_orgs</code>, <code>bookmarks</code>, <code>applications</code>, <code>notifications</code>, <code>search_index</code>, <code>sync_history</code>, <code>source_health</code>, <code>history</code>, <code>migration_logs</code>, <code>profiles</code>, <code>mappings</code></td>
+                <td>Cached public job circulars, source health results, job bookmarks, application tracker entries, notification history, and locally stored autofill logs (capped at 100 sessions, masking NID/passport/birth registration numbers to the last 4 characters and stripping URL query/hash strings).</td>
+              </tr>
+              <tr>
+                <td><code>chrome.storage.local</code></td>
+                <td><code>jobfill_security_settings</code>, <code>jobfill_active_profile_id</code>, <code>jobfill_general_settings</code>, <code>jobfill_adaptive_mapping_memory</code>, <code>jobfill_job_preferences_v1</code>, <code>jobfill_language</code>, <code>jobfill_theme</code>, <code>jobfill_onboarded</code> (plus <code>jobfill_cloud_config_v1</code> in Chrome cloud-enabled builds only)</td>
+                <td>Vault lock settings (PBKDF2 salt &amp; password verifier hash when enabled, auto-lock timeout, last backup timestamp), active profile ID, UI settings, structural CSS selector fingerprints (without saved input values), circular preferences, and in cloud-enabled Chrome builds only: optional user-entered Supabase URL, public Anon Key, authenticated email label, and sync toggle flags.</td>
+              </tr>
+              <tr>
+                <td><code>chrome.storage.session</code></td>
+                <td>Per-tab dismissed toolbar state</td>
+                <td>Ephemeral session flag remembering if you closed the floating assistant on an open tab; cleared when the tab or browser closes.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Runtime diagnostics (<code>diagnostics.ts</code>) retain an in-memory buffer of at most 50 operational counters and origin hostnames only (never full URLs, query parameters, passwords, or form inputs) and are never sent to external servers.
+        </p>
+      </section>
+
+      <section id="personal-profile">
+        <h2>3. Personal Profile Information</h2>
+        <p>If you choose to create local applicant profiles, you may save fields required for Bangladeshi public and private recruitment applications:</p>
+        <ul>
+          <li><strong>Identity &amp; Family Details:</strong> Full name (English/Bengali), father's and mother's names (English/Bengali), spouse's name (if applicable), date of birth, gender, nationality, marital status, and religion (where requested by application portals).</li>
+          <li><strong>Government Identifiers &amp; Quotas:</strong> National ID (NID), Birth Registration Number, Passport number and expiry date, quota category, freedom-fighter or disability quota/certificate details, and departmental/employment status.</li>
+          <li><strong>Contact &amp; Addresses:</strong> Mobile number, confirm mobile, email address, and present/permanent addresses (care of, village/road/house/flat, division, district, upazila, post office, post code).</li>
+          <li><strong>Recruitment &amp; Physical Attributes:</strong> Physical measurements (height, weight, chest), blood group, exam center, question version, cadre/non-cadre/organization choices, and referee contact details.</li>
+        </ul>
+      </section>
+
+      <section id="education-employment">
+        <h2>4. Education &amp; Employment Information</h2>
+        <ul>
+          <li><strong>Secondary &amp; Higher Secondary (SSC / HSC):</strong> Examination name, board, institution, roll number, registration number, group/subject, result type, GPA/scale, and passing year.</li>
+          <li><strong>Higher Education &amp; Additional Qualifications:</strong> Graduation and Masters degrees, major/subject, university/college, student ID/roll/registration/session, CGPA, course duration, appeared status, exam dates, and training/diploma/computer/language skills.</li>
+          <li><strong>Employment History:</strong> Employer category, organization name, designation, work address, start/end dates, current work status, salary, and job responsibilities.</li>
+        </ul>
+        <p>Normalized records written to <code>education_records</code> and <code>experience_records</code> are stored as AES-256-GCM ciphertexts inside browser IndexedDB.</p>
+      </section>
+
+      <section id="documents-media">
+        <h2>5. Documents, Photos &amp; Signatures</h2>
+        <ul>
+          <li><strong>Supported Categories:</strong> Applicant Photograph (<code>photo</code>), Applicant Signature (<code>signature</code>), National ID (<code>nid</code>), Birth Certificate (<code>birth_certificate</code>), Educational Certificate (<code>educational_certificate</code>), and Other files (<code>other</code>).</li>
+          <li><strong>Local Image Formatting:</strong> Photo resizing (e.g., 300&times;300 px) and signature resizing (e.g., 300&times;80 px) run entirely inside your browser via HTML5 Canvas, storing a processed copy while keeping your original file intact without uploading image bytes externally.</li>
+          <li><strong>Local-Only Scope Across Audited v2.0.0 Releases:</strong> Plaintext <code>dataUrl</code> payloads are omitted before saving; payloads are encrypted with AES-256-GCM in the local <code>documents</code> store and attached to a form file input only after explicit user approval (<code>GET_APPROVED_DOCUMENT_PAYLOAD</code>). <strong>Uploaded documents, photos, signatures, and certificates remain strictly local in the audited <code>v2.0.0</code> release and are excluded from Cloud Sync even in Chrome.</strong></li>
+        </ul>
+      </section>
+
+      <section id="autofill-access">
+        <h2>6. Autofill &amp; Active Webpage Access</h2>
+        <p>JobFill BD interacts with open webpages only to scan form inputs and assist with populating your application fields under your review:</p>
+        <ul>
+          <li><strong>Declared &amp; On-Demand Scope:</strong> Bundled content scripts target declared Bangladeshi recruitment domains (<code>*.teletalk.com.bd</code>, <code>*.gov.bd</code>, <code>*.bb.org.bd</code>, <code>*.org.bd</code>, <code>*.ac.bd</code>, <code>*.bdjobs.com</code>). Custom non-declared websites are accessed only after user interaction via <code>activeTab</code> or explicit per-site permission through <code>optional_host_permissions</code>.</li>
+          <li><strong>Hard Site Exclusions:</strong> Google Meet, Zoom, YouTube, Google Workspace/Accounts (Mail, Drive, Docs, Calendar, Login), and browser internal pages are excluded statically via 15 <code>exclude_matches</code> rules in <code>manifest.json</code> and dynamically in <code>site-policy.ts</code>. JobFill BD never hooks <code>getUserMedia</code>, <code>getDisplayMedia</code>, <code>RTCPeerConnection</code>, page <code>fetch</code>, or <code>XMLHttpRequest</code>.</li>
+          <li><strong>Human-in-the-Loop &amp; Unencrypted HTTP Safeguards:</strong> Form scanning runs deterministically inside your browser with zero calls to external AI services. Placing sensitive identifiers onto non-HTTPS (<code>http://</code>) pages prompts an explicit warning overlay first. JobFill BD <strong>never</strong> clicks "Final Submit" or payment buttons and <strong>never</strong> bypasses CAPTCHA or SMS/OTP gates.</li>
+        </ul>
+      </section>
+
+      <section id="public-job-sources">
+        <h2>7. Public Job Circular Source Requests</h2>
+        <p>Discovering new official job circulars and deadlines <strong>requires an active Internet connection</strong> on manual refresh or scheduled background alarms:</p>
+        <ul>
+          <li><strong>Read-Only GET Without Saved Personal Data:</strong> Job fetching uses <code>singlePublicGet()</code> with HTTP <code>GET</code> and <code>credentials: 'omit'</code>. It sends <strong>no</strong> saved profile details, NID, phone numbers, uploaded files, cookies, or authentication tokens.</li>
+          <li><strong>Configured Public Sources:</strong> Public circular adapters query Teletalk Alljobs (<code>alljobs.teletalk.com.bd</code>), Bangladesh National Portal &amp; listed ministry/university portals (<code>bangladesh.gov.bd</code>, <code>mopa.gov.bd</code>, <code>dshe.gov.bd</code>, <code>doict.gov.bd</code>, <code>dme.gov.bd</code>, <code>techedu.gov.bd</code>, <code>dghs.gov.bd</code>, <code>cabinet.gov.bd</code>, <code>mof.gov.bd</code>, <code>www.du.ac.bd</code>, <code>www.buet.ac.bd</code>, <code>petrobangla.org.bd</code>), BPSC (<code>bpsc.gov.bd</code>), Bangladesh Bank (<code>erecruitment.bb.org.bd</code>), NTRCA (<code>ntrca.gov.bd</code>), DPE (<code>dpe.gov.bd</code>), Bdjobs public JSON (<code>storage.googleapis.com</code>), Google News RSS (<code>news.google.com</code>), Remotive, Remote OK, Himalayas, Arbeitnow, and optional ReliefWeb API v2 (<code>api.reliefweb.int</code> &mdash; contacted only if you enter your own approved ReliefWeb <code>appname</code> parameter in Preferences, which is passed in the query string to ReliefWeb).</li>
+          <li><strong>Anti-Bot &amp; CAPTCHA Respect:</strong> Automated extraction stops immediately and enters cooldown backoff if any portal serves a CAPTCHA or anti-bot gate.</li>
+        </ul>
+      </section>
+
+      <section id="cloud-sync">
+        <h2>8. Edge Store Isolation vs. Chrome Optional Supabase Cloud Sync</h2>
+
+        <div class="callout callout-info">
+          <span class="callout-title">Microsoft Edge Add-ons Store v2.0.0: Cloud Sync Disabled &amp; Unreachable</span>
+          In the <strong>Microsoft Edge Store <code>v2.0.0</code> release</strong>, built with compile-time flag <code>__JOBFILL_CLOUD_SYNC_DISABLED__=true</code>, optional Supabase authentication, profile/activity Cloud Sync, and shared cloud job DB reads are <strong>completely disabled and compiled out</strong>. The Edge Store release cannot enable Cloud Sync, hides all cloud configuration UI, and sends zero signup, login, profile upload, or activity upload requests.
+        </div>
+
+        <h3>A. Chrome Optional Supabase Cloud Sync Configuration (Opt-In Only)</h3>
+        <p>
+          In Google Chrome / Cloud-Sync-enabled builds (where <code>__JOBFILL_CLOUD_SYNC_DISABLED__</code> is <code>false</code>), optional Cloud Sync remains <strong>off by default</strong> (<code>cloudSyncEnabled: false</code>) and operates solely if you explicitly enter your own Supabase Project URL (HTTPS) and public Anon Key inside <strong>Security &amp; Backup</strong> and enable it. Storing Supabase <code>service_role</code> keys inside extension configuration is rejected by code (<code>isSafePublicAnonKey</code>).
+        </p>
+
+        <h3>B. Exact Data Synchronized in Chrome When Opted In</h3>
+        <p>When Cloud Sync is explicitly enabled in a Cloud-Sync-enabled Chrome build and you trigger synchronization using your local <strong>Sync Passphrase</strong> (<code>uploadEncryptedVaultToCloud</code>):</p>
+        <ul>
+          <li><strong>Synced Scopes (<code>profiles_bundle</code> &amp; <code>activity_bundle</code> only):</strong>
+            <ul>
+              <li><code>profiles_bundle</code>: Your saved applicant profiles (names, family/address details, education and work experience fields stored inside your profile objects, contact details, IDs, quota/referee fields), serialized as JSON and encrypted client-side before upload.</li>
+              <li><code>activity_bundle</code>: Your job <code>bookmarks</code> (saved job ID and personal bookmark note) and job <code>applications</code> tracker records, serialized as JSON and encrypted client-side before upload.</li>
+            </ul>
+          </li>
+          <li><strong>Excluded From Cloud Sync:</strong> Uploaded documents, photos, signatures, and certificates (the local <code>documents</code> store / <code>documents_bundle</code>) remain <strong>strictly local-only on your device</strong> in <code>v2.0.0</code> and are not uploaded.</li>
+          <li><strong>Remote Tables Updated:</strong> Encrypted blobs are written via HTTPS <code>POST</code> to <code>/rest/v1/user_vault_blobs</code> (enforcing per-user isolation via PostgreSQL Row Level Security). Deletion calls target <code>/rest/v1/user_vault_blobs</code> and <code>/rest/v1/user_sync_devices</code>.</li>
+        </ul>
+
+        <h3>C. Client-Side AES-256-GCM Encryption &amp; Explicit Authentication Non-E2EE Boundary</h3>
+        <ul>
+          <li><strong>How Synced Vault Blobs Are Encrypted:</strong> Before leaving Chrome, <code>profiles_bundle</code> and <code>activity_bundle</code> are encrypted locally using Web Crypto <strong>AES-256-GCM</strong> (12-byte random IV) with a key derived via <strong>100,000 iterations of PBKDF2-SHA256</strong> (16-byte random salt) from your Sync Passphrase (minimum 6 characters). The code checks <code>assertValidCiphertextEnvelope</code> and refuses to upload plaintext bundles; your Sync Passphrase is never sent to Supabase, so Supabase servers cannot decrypt those ciphertext payloads.</li>
+          <li><strong>Authentication Information &amp; Metadata Are NOT End-to-End Encrypted:</strong> When you sign up, sign in, or sign out via Supabase Auth (<code>supabase-auth.ts</code> -> <code>/auth/v1/signup</code>, <code>/auth/v1/token?grant_type=password</code>, <code>/auth/v1/logout</code>), your <strong>email address and account password</strong> are sent over HTTPS TLS (transport-encrypted, <strong>not</strong> E2EE) directly to the configured Supabase Auth service so it can authenticate you and issue a session token. In addition, Supabase sees standard account/database metadata: your <code>authenticatedEmail</code> / user UUID, configured endpoint origin, Row Level Security user ID, <code>record_scope</code> (<code>profiles_bundle</code> or <code>activity_bundle</code>), <code>schema_version</code>, sync timestamps (<code>client_updated_at</code>, <code>updated_at</code>), device metadata if recorded, and standard HTTP connection metadata (such as IP address). Short-lived JWT access tokens stay in volatile memory while signed in and clear on sign-out.</li>
+        </ul>
+
+        <h3>D. Optional Chrome Shared Public Cloud Jobs Feed</h3>
+        <p>In Cloud-Sync-enabled Chrome builds, if you separately enable <em>Shared Public Cloud Jobs Feed</em> (<code>usePublicCloudJobsFeed</code>), <code>public-jobs-client.ts</code> issues unauthenticated read-only HTTP <code>GET</code> requests (<code>credentials: 'omit'</code>) to <code>/rest/v1/jobs</code> on your configured Supabase project without user auth tokens or personal profile data.</p>
+      </section>
+
+      <section id="third-party-transfers">
+        <h2>9. Third-Party Services &amp; Data Transfers</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>External Service / Recipient</th>
+                <th>When Contacted</th>
+                <th>Data Involved</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Public Job Circular Websites, RSS &amp; Public Job APIs</strong></td>
+                <td>Both Edge &amp; Chrome: during manual refresh or scheduled circular alarms (requires Internet access).</td>
+                <td>Unauthenticated HTTP <code>GET</code> (<code>credentials: 'omit'</code>), standard network request headers, and optional user-configured ReliefWeb <code>appname</code> parameter. Zero saved profile data or documents.</td>
+              </tr>
+              <tr>
+                <td><strong>Destination Recruitment Portals</strong></td>
+                <td>Both Edge &amp; Chrome: only when you explicitly apply autofill on an open tab and manually submit the form.</td>
+                <td>Only the form field values and approved document uploads that you review and choose to submit to that portal.</td>
+              </tr>
+              <tr>
+                <td><strong>Supabase Backend (User-Configured Project URL)</strong></td>
+                <td><strong>Microsoft Edge v2.0.0: Never</strong> (disabled &amp; compiled out).<br /><strong>Google Chrome (Cloud-enabled build):</strong> Only when you configure Supabase, sign in, and enable Cloud Sync or Public Cloud Jobs Feed.</td>
+                <td>In opted-in Chrome only: non-E2EE Auth credentials (email/password over HTTPS) + client-side AES-256-GCM encrypted <code>profiles_bundle</code> &amp; <code>activity_bundle</code> + sync timestamps/scope metadata; zero uploaded document files.</td>
+              </tr>
+              <tr>
+                <td><strong>Advertising, Analytics, Data Brokers &amp; External AI APIs</strong></td>
+                <td><strong>Never</strong> (either browser).</td>
+                <td><strong>None.</strong> Zero tracking pixels, crash telemetry, creditworthiness scoring, ad networks, or external AI transmissions exist.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="encryption-security">
+        <h2>10. Local Encryption &amp; Security Practices</h2>
+        <ul>
+          <li><strong>Local AES-256-GCM Vault:</strong> Profile vaults, normalized education/employment rows, and uploaded documents in IndexedDB are encrypted using Web Crypto AES-256-GCM with unique 12-byte random IVs. By default, encryption relies on a non-extractable device <code>CryptoKey</code> inside IndexedDB.</li>
+          <li><strong>Optional Master Vault Password:</strong> Enabling a Master Vault Password derives keys locally using 100,000 iterations of PBKDF2-SHA256 and a random 16-byte salt. Your plaintext password is never saved to storage; only a verification salt/hash is saved locally, while unlocked keys stay in transient memory until manual lock or inactivity timeout (default 15 minutes).</li>
+          <li><strong>Browser Hygiene:</strong> Extension pages enforce Manifest V3 Content Security Policy (<code>script-src 'self'; object-src 'self';</code>), use zero <code>eval()</code> or remote script execution, mask sensitive identifiers in local history logs, and strip URL query/hash strings before recording autofill sessions.</li>
+        </ul>
+      </section>
+
+      <section id="consent-opt-in">
+        <h2>11. User Consent, Operating Controls &amp; Cloud Opt-In / Opt-Out</h2>
+        <ul>
+          <li><strong>Local-Only Default:</strong> Both Edge v2.0.0 and Chrome operate locally out of the box without any account requirement.</li>
+          <li><strong>Active-Tab Consent &amp; HTTP Warnings:</strong> Custom third-party career sites require explicit user interaction and browser host permission grant. Unencrypted <code>http://</code> recruitment pages trigger an interactive warning overlay before placing sensitive identifiers.</li>
+          <li><strong>Chrome Cloud Sync Control &amp; Opt-Out:</strong> Where Cloud Sync exists in a Chrome build, users must supply explicit Supabase configuration and opt in manually; preview-before-merge/replace (<code>previewCloudVaultPull</code>) prevents silent overwrites, and users can sign out, disable Cloud Sync, or delete synced vault rows (<code>deleteAllPrivateCloudData()</code>) anytime. In Microsoft Edge Store v2.0.0, Cloud Sync cannot be enabled at all.</li>
+        </ul>
+      </section>
+
+      <section id="retention-deletion">
+        <h2>12. Data Retention &amp; Deletion</h2>
+        <ul>
+          <li><strong>Local Storage Retention:</strong> Profiles, documents, bookmarks, and application tracker entries remain inside your browser profile until deleted by you or upon uninstalling the extension. Autofill history caps at 100 sessions; runtime diagnostics hold at most 50 hostname-only records in memory.</li>
+          <li><strong>In-Extension Local Deletion:</strong> In <strong>Security &amp; Backup</strong>, <strong>Delete Local Private Vault Data</strong> (<code>deleteLocalUserData()</code>) deletes local profiles, education/employment rows, uploaded documents, vault keys, bookmarks, applications, notifications, and autofill logs while retaining cached public job listings. <strong>Purge All Profiles &amp; Data</strong> (<code>purgeAllData()</code>) removes every IndexedDB store and extension storage key completely.</li>
+          <li><strong>Chrome Cloud Vault Deletion Boundary:</strong> In Cloud-enabled Chrome builds, clicking <strong>Delete Cloud Data</strong> sends authenticated HTTP <code>DELETE</code> calls to remove <code>user_vault_blobs</code> and <code>user_sync_devices</code> rows from your configured Supabase project. Deleting the underlying Supabase Auth user account record itself requires your Supabase backend's optional <code>delete-account</code> Edge Function or direct deletion in your Supabase project dashboard.</li>
+          <li><strong>Uninstallation:</strong> Removing JobFill BD from Microsoft Edge or Google Chrome deletes browser-managed extension storage.</li>
+        </ul>
+      </section>
+
+      <section id="backup-restore">
+        <h2>13. Local Backup &amp; Restore</h2>
+        <ul>
+          <li><strong>Manual JSON Export:</strong> Export your applicant profiles locally via <code>exportProfileData()</code> as either a <strong>PBKDF2 + AES-256-GCM password-encrypted backup</strong> (recommended) or unencrypted JSON.</li>
+          <li><strong>Schema-Validated Restore:</strong> Restoring a backup (<code>importProfileData()</code>) validates schema offline in browser memory and prompts for your decryption passphrase when encrypted. Binary document uploads reside in IndexedDB rather than the JSON profile export file.</li>
+        </ul>
+      </section>
+
+      <section id="notifications">
+        <h2>14. Notifications &amp; Job Reminders</h2>
+        <ul>
+          <li><strong>MV3 Alarms &amp; Local Matching:</strong> Background alarms (<code>jobfill_daily_job_check</code>, default 9:00 AM <code>Asia/Dhaka</code>, and <code>jobfill_deadline_scheduler</code>) match cached public circulars against local preferences inside your browser and display notifications via <code>chrome.notifications</code>.</li>
+        </ul>
+      </section>
+
+      <section id="permissions">
+        <h2>15. Manifest V3 Browser Permissions &amp; Purposes</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Declared Permission</th>
+                <th>Purpose in JobFill BD v2.0.0</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>storage</code></td>
+                <td>Saves extension settings, Vault salt/verifier metadata, learned non-value CSS selector fingerprints, and optional Chrome Cloud Sync config locally.</td>
+              </tr>
+              <tr>
+                <td><code>activeTab</code> &amp; <code>scripting</code></td>
+                <td>Scans and populates form inputs on the active recruitment tab when triggered by you, respecting all Google Meet, Zoom, and Workspace exclusions.</td>
+              </tr>
+              <tr>
+                <td><code>alarms</code> &amp; <code>notifications</code></td>
+                <td>Runs scheduled daily public job circular checks and delivers optional deadline reminder alerts locally.</td>
+              </tr>
+              <tr>
+                <td><code>host_permissions</code> (Declared Bangladeshi &amp; Public Feed Domains)</td>
+                <td>Allows unauthenticated read-only HTTP <code>GET</code> public job circular fetches (zero PII) and autofill assistance on declared career domains. Broad <code>tabs</code> (&ldquo;Read your browsing history&rdquo;) permission and unused <code>.edu.bd</code> wildcards are omitted.</td>
+              </tr>
+              <tr>
+                <td><code>optional_host_permissions</code> (<code>https://*/*</code>, <code>http://*/*</code>)</td>
+                <td>Requests explicit one-time browser host access only if you trigger autofill on a custom career website outside declared domains.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="user-rights">
+        <h2>16. User Rights &amp; Zero-Knowledge Passphrase Notice</h2>
+        <ul>
+          <li><strong>Complete Control Over Your Data:</strong> View, update, switch between multiple applicant profiles, export local backups, lock or wipe your Vault, or manage optional Chrome Cloud Sync settings anytime inside the Dashboard.</li>
+        </ul>
+        <div class="callout callout-warn">
+          <span class="callout-title">Zero-Knowledge Passphrase Recovery Limitation</span>
+          If you enable a Master Vault Password, encrypted JSON backup passphrase, or Chrome Cloud Sync passphrase and lose both your passphrase and unencrypted backup files, neither JobFill BD nor MR Software Studio can recover your encrypted data.
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>17. Contact Information &amp; Official Policy URL</h2>
+        <div class="contact-box">
+          <p><strong>Publisher:</strong> MR Software Studio</p>
+          <p><strong>Product:</strong> JobFill BD (Browser Extension v2.0.0)</p>
+          <p><strong>Privacy &amp; Support Email:</strong> <a href="mailto:mahfuzar148@gmail.com">mahfuzar148@gmail.com</a></p>
+          <p><strong>Public HTTPS Privacy Policy:</strong> <code>https://mahfuzar148.github.io/jobfill-bd-privacy/</code></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="policy-footer">
+    <div>&copy; 2026 MR Software Studio &mdash; JobFill BD Privacy Policy (Edge Local-Only Release &amp; Chrome Cloud-Sync Parity Disclosure)</div>
+    <div>Effective &amp; Last Updated: November 11, 2026</div>
+  </footer>
+</body>
+</html>

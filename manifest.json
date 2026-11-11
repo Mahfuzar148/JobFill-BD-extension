@@ -1,0 +1,127 @@
+{
+  "manifest_version": 3,
+  "name": "JobFill BD",
+  "version": "2.0.0",
+  "description": "Smart job application autofill and job circular discovery assistant for Bangladesh.",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.teletalk.com.bd/*",
+    "http://*.teletalk.com.bd/*",
+    "https://*.gov.bd/*",
+    "http://*.gov.bd/*",
+    "https://*.bb.org.bd/*",
+    "https://*.org.bd/*",
+    "https://*.ac.bd/*",
+    "https://*.bdjobs.com/*",
+    "https://storage.googleapis.com/*",
+    "https://news.google.com/*",
+    "https://remotive.com/*",
+    "https://remoteok.com/*",
+    "https://himalayas.app/*",
+    "https://www.arbeitnow.com/*",
+    "https://api.reliefweb.int/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "JobFill BD: Auto Fill Job Application",
+    "default_popup": "popup.html"
+  },
+  "options_page": "dashboard.html",
+  "commands": {
+    "quick-autofill": {
+      "suggested_key": {
+        "default": "Alt+Shift+F"
+      },
+      "description": "Fill matched profile fields on the active job application form"
+    },
+    "open-review-modal": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Open JobFill BD field review modal on the active page"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.teletalk.com.bd/*",
+        "http://*.teletalk.com.bd/*",
+        "https://*.gov.bd/*",
+        "http://*.gov.bd/*",
+        "https://*.bb.org.bd/*",
+        "https://*.org.bd/*",
+        "https://*.ac.bd/*",
+            "https://*.bdjobs.com/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ],
+      "exclude_matches": [
+        "*://meet.google.com/*",
+        "*://*.meet.google.com/*",
+        "*://zoom.us/*",
+        "*://*.zoom.us/*",
+        "*://zoom.com/*",
+        "*://*.zoom.com/*",
+        "*://hangouts.google.com/*",
+        "*://talkgadget.google.com/*",
+        "*://workspace.google.com/*",
+        "*://accounts.google.com/*",
+        "*://mail.google.com/*",
+        "*://docs.google.com/*",
+        "*://drive.google.com/*",
+        "*://calendar.google.com/*",
+        "*://*.youtube.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/*",
+        "dashboard.html",
+        "popup.html",
+        "test-pages/*"
+      ],
+      "matches": [
+        "https://*.teletalk.com.bd/*",
+        "http://*.teletalk.com.bd/*",
+        "https://*.gov.bd/*",
+        "http://*.gov.bd/*",
+        "https://*.bb.org.bd/*",
+        "https://*.org.bd/*",
+        "https://*.ac.bd/*",
+            "https://*.bdjobs.com/*",
+        "http://127.0.0.1/*",
+        "http://localhost/*"
+      ]
+    }
+  ]
+}
