@@ -20,6 +20,7 @@ import { CareerCalendarPage } from './pages/CareerCalendarPage';
 import { ApplicationReadinessPage } from './pages/ApplicationReadinessPage';
 import { JobComparisonPage } from './pages/JobComparisonPage';
 import { OpportunitiesPage } from './pages/OpportunitiesPage';
+import { CareerPlannerPage } from './pages/CareerPlannerPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -74,6 +75,7 @@ const VALID_TABS: DashboardTab[] = [
   'calendar',
   'compare',
   'opportunities',
+  'career_planner',
   'govt_orgs',
   'portals',
   'notifications',
@@ -511,6 +513,13 @@ const DashboardContent: React.FC = () => {
                 setSelectedJobId(jobId);
                 setActiveTab('circulars');
               }}
+              showToast={showToast}
+            />
+          )}
+          {activeTab === 'career_planner' && (
+            <CareerPlannerPage
+              profile={currentProfile}
+              onNavigateTab={setActiveTab}
               showToast={showToast}
             />
           )}

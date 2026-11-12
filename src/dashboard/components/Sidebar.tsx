@@ -26,6 +26,7 @@ import {
   CheckSquare,
   Calendar,
   Scale,
+  Compass,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -38,6 +39,7 @@ export type DashboardTab =
   | 'calendar'
   | 'compare'
   | 'opportunities'
+  | 'career_planner'
   | 'govt_orgs'
   | 'portals'
   | 'notifications'
@@ -144,6 +146,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           labelEn: 'Scholarships & Internships',
           labelBn: 'বৃত্তি ও ইন্টার্নশিপ',
           icon: GraduationCap,
+        },
+        {
+          id: 'career_planner',
+          labelEn: 'Career Planner',
+          labelBn: 'ক্যারিয়ার প্ল্যানার',
+          icon: Compass,
         },
         {
           id: 'govt_orgs',

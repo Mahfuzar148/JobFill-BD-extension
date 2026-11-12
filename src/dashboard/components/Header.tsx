@@ -41,6 +41,7 @@ const TAB_BREADCRUMBS: Record<DashboardTab, { en: string; bn: string }> = {
   calendar: { en: 'Job Hub / Career Calendar', bn: 'জব হাব / ক্যারিয়ার ক্যালেন্ডার' },
   compare: { en: 'Job Hub / Job & Salary Comparison', bn: 'জব হাব / চাকরি ও বেতন তুলনা' },
   opportunities: { en: 'Career / Scholarships & Internships', bn: 'ক্যারিয়ার / বৃত্তি ও ইন্টার্নশিপ' },
+  career_planner: { en: 'Career / Planner & Skills Gap', bn: 'ক্যারিয়ার / প্ল্যানার ও স্কিল গ্যাপ' },
   govt_orgs: { en: 'Job Hub / Government Organizations', bn: 'জব হাব / সরকারি প্রতিষ্ঠান ডিরেক্টরি' },
   portals: { en: 'Job Hub / Official Job Portals', bn: 'জব হাব / অফিশিয়াল জব পোর্টাল' },
   notifications: { en: 'Job Hub / Notification Center', bn: 'জব হাব / নোটিফিকেশন সেন্টার' },
