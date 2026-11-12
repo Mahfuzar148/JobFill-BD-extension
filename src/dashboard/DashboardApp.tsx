@@ -21,6 +21,7 @@ import { ApplicationReadinessPage } from './pages/ApplicationReadinessPage';
 import { JobComparisonPage } from './pages/JobComparisonPage';
 import { OpportunitiesPage } from './pages/OpportunitiesPage';
 import { CareerPlannerPage } from './pages/CareerPlannerPage';
+import { ExamCenterPage } from './pages/ExamCenterPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -76,6 +77,7 @@ const VALID_TABS: DashboardTab[] = [
   'compare',
   'opportunities',
   'career_planner',
+  'exam_center',
   'govt_orgs',
   'portals',
   'notifications',
@@ -523,6 +525,7 @@ const DashboardContent: React.FC = () => {
               showToast={showToast}
             />
           )}
+          {activeTab === 'exam_center' && <ExamCenterPage showToast={showToast} />}
           {activeTab === 'govt_orgs' && (
             <GovtOrganizationsPage onDataChanged={refreshJobHubStats} />
           )}

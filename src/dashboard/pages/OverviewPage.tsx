@@ -324,6 +324,20 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateT
             <FileText className="w-3.5 h-3.5 text-indigo-600" />
             <span>ATS CV Builder (EN / বাংলা)</span>
           </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab(userMode === 'student' ? 'exam_center' : 'readiness')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold hover:bg-slate-200 cursor-pointer"
+          >
+            <span>{userMode === 'student' ? '📚 Exam & Vocabulary Prep' : '✅ Application Readiness'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab(userMode === 'student' ? 'opportunities' : 'calendar')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold hover:bg-slate-200 cursor-pointer"
+          >
+            <span>{userMode === 'student' ? '🎓 Scholarships & Internships' : '📅 Career & Exam Calendar'}</span>
+          </button>
         </div>
       </div>
 

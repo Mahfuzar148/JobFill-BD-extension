@@ -27,6 +27,7 @@ import {
   Calendar,
   Scale,
   Compass,
+  BookOpen,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -40,6 +41,7 @@ export type DashboardTab =
   | 'compare'
   | 'opportunities'
   | 'career_planner'
+  | 'exam_center'
   | 'govt_orgs'
   | 'portals'
   | 'notifications'
@@ -154,6 +156,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Compass,
         },
         {
+          id: 'exam_center',
+          labelEn: 'Exam & Study Center',
+          labelBn: 'পরীক্ষা ও প্রস্তুতি',
+          icon: BookOpen,
+        },
+        {
           id: 'govt_orgs',
           labelEn: 'Govt Organizations',
           labelBn: 'সরকারি প্রতিষ্ঠান',
@@ -231,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </h1>
           <p className="text-[10px] text-slate-400 leading-tight truncate">
-            Smart Bangladesh Job Assistant
+            Your Smart Career &amp; Job Application Assistant
           </p>
         </div>
       </div>
