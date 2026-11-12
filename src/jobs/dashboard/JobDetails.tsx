@@ -40,6 +40,10 @@ import {
   sanitizeCircularRefForDisplay,
   verifyJobUrl,
 } from '../services/source-verifier';
+import {
+  assessCircularScamSignals,
+  classifyOfficialSourceTier,
+} from '../services/scam-awareness';
 import { formatJobCategoryLabel } from '../services/source-health-state';
 import {
   buildApplicationSearchUrl,
@@ -542,6 +546,50 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             </div>
           </div>
         )}
+
+        {/* Official Source Provenance & Job Scam Awareness */}
+        {(() => {
+          const provenance = classifyOfficialSourceTier(job);
+          const scamReport = assessCircularScamSignals(job);
+          return (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-petro-600" />
+                  <span>Source Verification Tier: {provenance.tier}</span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                    scamReport.warningLevel === 'High Attention'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : scamReport.warningLevel === 'Moderate'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  Scam Signals: {scamReport.warningLevel}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 flex flex-wrap gap-3">
+                <span>Method: {provenance.verificationMethod}</span>
+                <span>Last Checked: {new Date(provenance.lastCheckedDate).toLocaleDateString('en-GB')}</span>
+                {provenance.verificationTimestamp && (
+                  <span>Verified At: {new Date(provenance.verificationTimestamp).toLocaleDateString('en-GB')}</span>
+                )}
+              </div>
+              {scamReport.reasons.length > 0 && (
+                <ul className="list-disc list-inside text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                  {scamReport.reasons.map((r) => (
+                    <li key={r.code}>
+                      <strong>{r.title}:</strong> {r.evidence}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="text-[10.5px] text-slate-400">{scamReport.cautionNotice}</div>
+            </div>
+          );
+        })()}
 
         {/* Description & Procedure */}
         <div className="space-y-4 text-xs leading-relaxed text-slate-700 dark:text-slate-300">

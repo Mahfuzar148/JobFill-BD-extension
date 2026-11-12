@@ -358,3 +358,38 @@ export function deduplicateAndMergeJobs(
     duplicateCount,
   };
 }
+
+export interface DuplicateClusterSummary {
+  primaryJob: NormalizedJobCircular;
+  relatedJobs: NormalizedJobCircular[];
+  alternateSourcesCount: number;
+}
+
+export function findDuplicateOrClusteredCirculars(
+  jobs: NormalizedJobCircular[]
+): DuplicateClusterSummary[] {
+  const byId = new Map(jobs.map((j) => [j.id, j]));
+  const relatedMap = new Map<string, NormalizedJobCircular[]>();
+
+  for (const job of jobs) {
+    if (job.possibleDuplicateOfId && byId.has(job.possibleDuplicateOfId)) {
+      const list = relatedMap.get(job.possibleDuplicateOfId) || [];
+      list.push(job);
+      relatedMap.set(job.possibleDuplicateOfId, list);
+    }
+  }
+
+  const out: DuplicateClusterSummary[] = [];
+  for (const job of jobs) {
+    const related = relatedMap.get(job.id) || [];
+    const altCount = job.alternateSources?.length || 1;
+    if (related.length > 0 || altCount > 1) {
+      out.push({
+        primaryJob: job,
+        relatedJobs: related,
+        alternateSourcesCount: altCount,
+      });
+    }
+  }
+  return out;
+}

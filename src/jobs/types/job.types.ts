@@ -227,6 +227,9 @@ export interface ApplicationTrackerRecord {
   teletalkUserId?: string;
   applicationRefId?: string;
   transactionId?: string;
+  applicationFeeAmount?: string;
+  paymentDate?: string;
+  paymentMethodNote?: string;
   feePaymentStatus?: FeePaymentStatus;
   feeDeadlineAt?: number | null;
   admitCardStatus?: AdmitCardStatus;

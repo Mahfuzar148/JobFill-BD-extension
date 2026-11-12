@@ -763,6 +763,29 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                       />
                     </div>
                     <div>
+                      <label className="block font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        Application Fee (BDT / Status)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. BDT 223 (Teletalk SMS)"
+                        value={draft.applicationFeeAmount || ''}
+                        onChange={(e) => setDraft({ ...draft, applicationFeeAmount: e.target.value })}
+                        className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                        Payment Date (Do not enter PIN/OTP/Password)
+                      </label>
+                      <input
+                        type="date"
+                        value={draft.paymentDate || ''}
+                        onChange={(e) => setDraft({ ...draft, paymentDate: e.target.value })}
+                        className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
                       <label className="block font-semibold text-slate-600 dark:text-slate-400 mb-1">Admit Card Status</label>
                       <select
                         value={draft.admitCardStatus || ''}

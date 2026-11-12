@@ -18,6 +18,8 @@ import { EligibilityCheckerPage } from './pages/EligibilityCheckerPage';
 import { CvBuilderPage } from './pages/CvBuilderPage';
 import { CareerCalendarPage } from './pages/CareerCalendarPage';
 import { ApplicationReadinessPage } from './pages/ApplicationReadinessPage';
+import { JobComparisonPage } from './pages/JobComparisonPage';
+import { OpportunitiesPage } from './pages/OpportunitiesPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -70,6 +72,8 @@ const VALID_TABS: DashboardTab[] = [
   'eligibility',
   'readiness',
   'calendar',
+  'compare',
+  'opportunities',
   'govt_orgs',
   'portals',
   'notifications',
@@ -492,6 +496,23 @@ const DashboardContent: React.FC = () => {
           )}
           {activeTab === 'calendar' && (
             <CareerCalendarPage profile={currentProfile} showToast={showToast} />
+          )}
+          {activeTab === 'compare' && (
+            <JobComparisonPage
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+            />
+          )}
+          {activeTab === 'opportunities' && (
+            <OpportunitiesPage
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+              showToast={showToast}
+            />
           )}
           {activeTab === 'govt_orgs' && (
             <GovtOrganizationsPage onDataChanged={refreshJobHubStats} />
