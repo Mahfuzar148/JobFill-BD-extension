@@ -170,18 +170,29 @@ export function createCvDraftFromProfile(
     details: ex.jobDescription || '',
   }));
 
-  const skills: string[] = [];
+  const cp = profile.careerProfile;
+  const skills: string[] = [...(cp?.skills || [])];
   const training: string[] = [];
   const certifications: string[] = [];
-  const languages: string[] = [];
+  const languages: string[] = (cp?.languages || []).map((l) =>
+    l.proficiency ? `${l.language} (${l.proficiency})` : l.language
+  );
+  const projects: CvProjectItem[] = (cp?.projects || []).map((p) => ({
+    name: p.title || '',
+    role: p.role || '',
+    details: [p.techOrFocus, p.summary].filter(Boolean).join(' — '),
+  }));
 
   for (const aq of profile.additionalQualifications || []) {
     const label = [aq.title, aq.institution ? `(${aq.institution})` : '', aq.year || ''].filter(Boolean).join(' ');
     if (!label) continue;
     if (aq.type === 'Training') training.push(label);
-    else if (aq.type === 'Language Skills') languages.push(label);
+    else if (aq.type === 'Language Skills' && !languages.includes(label)) languages.push(label);
     else if (aq.type === 'Diploma' || aq.type === 'Professional Degree') certifications.push(label);
-    else skills.push(label);
+    else if (!skills.includes(label)) skills.push(label);
+  }
+  for (const ach of cp?.achievements || []) {
+    if (ach && !certifications.includes(ach)) certifications.push(ach);
   }
 
   const references: CvReferenceItem[] = (profile.references || []).map((r) => ({
@@ -222,7 +233,7 @@ export function createCvDraftFromProfile(
     training,
     certifications,
     languages,
-    projects: [],
+    projects,
     references,
     visibleSections: { ...DEFAULT_CV_VISIBILITY },
     createdAt: now,

@@ -23,6 +23,8 @@ export interface StoredDocument {
   createdAt: string;
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
+  expiresAt?: string;
+  validityNotes?: string;
 }
 
 export async function saveDocument(doc: StoredDocument): Promise<DocumentMetadata> {

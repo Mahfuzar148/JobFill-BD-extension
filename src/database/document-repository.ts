@@ -35,6 +35,8 @@ export interface StoredDocumentItem {
   createdAt: string;
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
+  expiresAt?: string;
+  validityNotes?: string;
   isEncrypted?: boolean;
   encryptedPayload?: EncryptedPayload;
   nativeEncryptedPayload?: NativeKeyEncryptedPayload;
@@ -256,6 +258,8 @@ export class DocumentRepository {
       createdAt,
       isProcessedVariant: Boolean(doc.isProcessedVariant),
       parentDocumentId: doc.parentDocumentId,
+      expiresAt: doc.expiresAt,
+      validityNotes: doc.validityNotes,
       isEncrypted: true,
       encryptedPayload,
       nativeEncryptedPayload,
@@ -295,6 +299,8 @@ export class DocumentRepository {
       createdAt,
       isProcessedVariant: recordToPersist.isProcessedVariant,
       parentDocumentId: recordToPersist.parentDocumentId,
+      expiresAt: recordToPersist.expiresAt,
+      validityNotes: recordToPersist.validityNotes,
     };
   }
 
@@ -424,7 +430,50 @@ export class DocumentRepository {
       createdAt: r.createdAt,
       isProcessedVariant: r.isProcessedVariant,
       parentDocumentId: r.parentDocumentId,
+      expiresAt: r.expiresAt,
+      validityNotes: r.validityNotes,
     }));
+  }
+
+  /**
+   * Updates optional expiration metadata ONLY where applicable (e.g. licenses, training certificates).
+   * Rejects applying automatic expiration assumptions to academic certificates.
+   */
+  public static async updateDocumentValidity(
+    id: string,
+    expiresAt?: string,
+    validityNotes?: string
+  ): Promise<DocumentMetadata | null> {
+    const raw = await this.getRawRecordById(id);
+    if (!raw) return null;
+
+    const normType = normalizeDocumentCategory(raw.documentType || raw.type);
+    if (normType === 'educational_certificate' && expiresAt && expiresAt.trim().length > 0) {
+      throw new Error('Academic certificates do not expire and cannot be assigned an automatic expiry date.');
+    }
+
+    const updated: StoredDocumentItem = {
+      ...raw,
+      expiresAt: expiresAt?.trim() || undefined,
+      validityNotes: validityNotes?.trim() || undefined,
+    };
+    await this.putRawRecord(updated);
+    return {
+      documentId: updated.documentId || updated.id,
+      documentType: updated.documentType || updated.type,
+      profileId: updated.profileId,
+      title: updated.title,
+      fileName: updated.fileName,
+      mimeType: updated.mimeType,
+      fileSize: updated.fileSize,
+      width: updated.width || 0,
+      height: updated.height || 0,
+      createdAt: updated.createdAt,
+      isProcessedVariant: updated.isProcessedVariant,
+      parentDocumentId: updated.parentDocumentId,
+      expiresAt: updated.expiresAt,
+      validityNotes: updated.validityNotes,
+    };
   }
 
   /**

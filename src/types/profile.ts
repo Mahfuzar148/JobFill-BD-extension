@@ -216,6 +216,8 @@ export interface DocumentMetadata {
   createdAt: string;
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
+  expiresAt?: string; // Optional YYYY-MM-DD ONLY for applicable credentials (licenses/training)
+  validityNotes?: string;
 }
 
 export interface DocumentItem {
@@ -231,6 +233,48 @@ export interface DocumentItem {
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
   dataUrl?: string; // stored encrypted in IndexedDB, never persisted plaintext if encrypted
+  expiresAt?: string;
+  validityNotes?: string;
+}
+
+export interface StudentProjectItem {
+  id: string;
+  title: string;
+  role: string;
+  techOrFocus: string;
+  summary: string;
+}
+
+export interface StudentLanguageItem {
+  language: string;
+  proficiency: string;
+}
+
+export interface CareerGoalItem {
+  id: string;
+  title: string;
+  targetArea: string;
+  targetDate?: string;
+  progressPercent: number;
+  completed: boolean;
+  notes?: string;
+}
+
+export interface StudentCareerProfile {
+  educationLevel?: string;
+  departmentOrSubject?: string;
+  passingYear?: string;
+  gpaOrCgpa?: string;
+  skills: string[];
+  languages: StudentLanguageItem[];
+  projects: StudentProjectItem[];
+  achievements: string[];
+  careerInterests: string[];
+  preferredJobCategories: string[];
+  preferredLocations: string[];
+  internshipPreference: boolean;
+  expectedSalaryNote?: string;
+  careerGoals: CareerGoalItem[];
 }
 
 // --- Complete Profile Database Schema ---
@@ -253,6 +297,7 @@ export interface UserProfile {
   special: SpecialInfo;
   references: ReferencePerson[];
   documents: DocumentItem[];
+  careerProfile?: StudentCareerProfile;
 }
 
 // --- Security & Settings Schema ---

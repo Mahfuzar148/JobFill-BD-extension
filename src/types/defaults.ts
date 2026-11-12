@@ -163,6 +163,22 @@ export const createEmptyProfile = (name = 'Default Profile'): UserProfile => ({
     },
   ],
   documents: [],
+  careerProfile: {
+    educationLevel: '',
+    departmentOrSubject: '',
+    passingYear: '',
+    gpaOrCgpa: '',
+    skills: [],
+    languages: [],
+    projects: [],
+    achievements: [],
+    careerInterests: [],
+    preferredJobCategories: [],
+    preferredLocations: [],
+    internshipPreference: false,
+    expectedSalaryNote: '',
+    careerGoals: [],
+  },
 });
 
 export const sampleDemoProfile: UserProfile =

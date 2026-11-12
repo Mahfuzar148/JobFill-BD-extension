@@ -24,6 +24,7 @@ import {
   Globe,
   KeyRound,
   CheckSquare,
+  Calendar,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -32,6 +33,8 @@ export type DashboardTab =
   | 'search'
   | 'circulars'
   | 'eligibility'
+  | 'readiness'
+  | 'calendar'
   | 'govt_orgs'
   | 'portals'
   | 'notifications'
@@ -114,6 +117,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           labelEn: 'Eligibility Checker',
           labelBn: 'যোগ্যতা যাচাই',
           icon: CheckSquare,
+        },
+        {
+          id: 'readiness',
+          labelEn: 'Readiness Checker',
+          labelBn: 'আবেদন প্রস্তুতি',
+          icon: CheckCircle,
+        },
+        {
+          id: 'calendar',
+          labelEn: 'Career Calendar',
+          labelBn: 'ক্যারিয়ার ক্যালেন্ডার',
+          icon: Calendar,
         },
         {
           id: 'govt_orgs',

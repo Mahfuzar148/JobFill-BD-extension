@@ -27,6 +27,7 @@ import {
 } from '../../services/indexedDB';
 import { ImageProcessor } from '../../services/image-processor';
 import { DocumentValidator } from '../../validation/document-validator';
+import { DocumentRepository } from '../../database/document-repository';
 
 interface DocumentsPageProps {
   profile: UserProfile;
@@ -677,37 +678,89 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeP
                   <div className="text-[11px] text-slate-400 italic">No saved {cat.title.toLowerCase()} yet.</div>
                 ) : (
                   <div className="space-y-1.5">
-                    {catDocs.map((d) => (
-                      <div
-                        key={d.id}
-                        className="flex items-center justify-between bg-white border border-slate-200 px-2.5 py-1.5 rounded text-[11px]"
-                      >
-                        <div className="truncate pr-2">
-                          <div className="font-semibold text-slate-700 truncate">{d.fileName}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {d.mimeType} • {d.fileSizeKb} KB {d.width ? `• ${d.width}×${d.height}px` : ''}
+                    {catDocs.map((d) => {
+                      const canSetValidity = cat.type === 'other';
+                      const daysLeft = d.expiresAt
+                        ? Math.ceil((new Date(`${d.expiresAt}T23:59:59+06:00`).getTime() - Date.now()) / 86400000)
+                        : null;
+                      return (
+                        <div
+                          key={d.id}
+                          className="bg-white border border-slate-200 px-2.5 py-2 rounded text-[11px] space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="truncate pr-2">
+                              <div className="font-semibold text-slate-700 truncate">{d.fileName}</div>
+                              <div className="text-[10px] text-slate-400">
+                                {d.mimeType} • {d.fileSizeKb} KB {d.width ? `• ${d.width}×${d.height}px` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => downloadDataUrl(d.dataUrl, d.fileName)}
+                                className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
+                                title="Download"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDoc(d.id)}
+                                className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
+
+                          {canSetValidity ? (
+                            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+                              <label className="text-[10px] text-slate-500 font-semibold">
+                                Optional Expiry (License/Training):
+                              </label>
+                              <input
+                                type="date"
+                                value={d.expiresAt || ''}
+                                onChange={async (e) => {
+                                  const nextExpiry = e.target.value;
+                                  try {
+                                    await DocumentRepository.updateDocumentValidity(d.id, nextExpiry, d.validityNotes);
+                                    setSavedDocs((prev) =>
+                                      prev.map((item) =>
+                                        item.id === d.id ? { ...item, expiresAt: nextExpiry || undefined } : item
+                                      )
+                                    );
+                                    showToast(nextExpiry ? `✅ Expiry set to ${nextExpiry}` : '✅ Expiry cleared');
+                                  } catch (err: any) {
+                                    showToast(`⚠️ ${err?.message || 'Could not update validity'}`);
+                                  }
+                                }}
+                                className="text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50"
+                              />
+                              {daysLeft !== null && (
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    daysLeft < 0
+                                      ? 'bg-rose-100 text-rose-700'
+                                      : daysLeft <= 30
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-emerald-50 text-emerald-700'
+                                  }`}
+                                >
+                                  {daysLeft < 0 ? 'Expired' : daysLeft === 0 ? 'Expires Today' : `${daysLeft}d left`}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[9.5px] text-slate-400">
+                              Permanent record — academic &amp; identity documents do not expire automatically.
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => downloadDataUrl(d.dataUrl, d.fileName)}
-                            className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
-                            title="Download"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDoc(d.id)}
-                            className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

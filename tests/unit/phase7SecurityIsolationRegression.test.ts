@@ -24,10 +24,14 @@ describe('Phase 7 — Meet/Zoom Exclusion, Schema Non-Destructive Upgrade & Rout
     expect(excludes).toContain('*://*.zoom.us/*');
   });
 
-  it('2. Keeps IndexedDB schema upgrade additive (v9 with credentials & cv_documents, zero deleteObjectStore)', () => {
-    expect(DB_VERSION).toBe(9);
+  it('2. Keeps IndexedDB schema upgrade additive (v10 with credentials, cv, calendar, exam & vocab stores, zero deleteObjectStore)', () => {
+    expect(DB_VERSION).toBe(10);
     expect(STORES.CREDENTIALS).toBe('credential_vault');
     expect(STORES.CV_DOCUMENTS).toBe('cv_documents');
+    expect(STORES.CALENDAR_EVENTS).toBe('calendar_events');
+    expect(STORES.EXAM_ATTEMPTS).toBe('exam_attempts');
+    expect(STORES.VOCABULARY_ITEMS).toBe('vocabulary_items');
+    expect(STORES.STUDY_NOTES).toBe('study_notes');
     expect(STORES.PROFILES).toBe('profiles');
     expect(STORES.APPLICATIONS).toBe('applications');
 

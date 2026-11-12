@@ -4,7 +4,7 @@
 // Fully local, persistent, and sandboxed inside Chrome.
 
 export const DB_NAME = 'JobFillBD_SecureStorage';
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 export const STORES = {
   PROFILES: 'profiles',
@@ -13,6 +13,10 @@ export const STORES = {
   VAULT_STORE: 'encrypted_vault',
   CREDENTIALS: 'credential_vault',
   CV_DOCUMENTS: 'cv_documents',
+  CALENDAR_EVENTS: 'calendar_events',
+  EXAM_ATTEMPTS: 'exam_attempts',
+  VOCABULARY_ITEMS: 'vocabulary_items',
+  STUDY_NOTES: 'study_notes',
   DOCUMENTS: 'documents',
   MAPPINGS: 'mappings',
   HISTORY: 'history',
@@ -217,6 +221,36 @@ export class IndexedDBManager {
           const cvStore = db.createObjectStore(STORES.CV_DOCUMENTS, { keyPath: 'id' });
           cvStore.createIndex('profileId', 'profileId', { unique: false });
           cvStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 19. Unified Career Calendar Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.CALENDAR_EVENTS)) {
+          const calStore = db.createObjectStore(STORES.CALENDAR_EVENTS, { keyPath: 'id' });
+          calStore.createIndex('date', 'date', { unique: false });
+          calStore.createIndex('kind', 'kind', { unique: false });
+          calStore.createIndex('sourceRefId', 'sourceRefId', { unique: false });
+        }
+
+        // 20. Exam Practice Attempts & Analytics Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.EXAM_ATTEMPTS)) {
+          const examStore = db.createObjectStore(STORES.EXAM_ATTEMPTS, { keyPath: 'id' });
+          examStore.createIndex('subject', 'subject', { unique: false });
+          examStore.createIndex('completedAt', 'completedAt', { unique: false });
+        }
+
+        // 21. Vocabulary Builder & Spaced Repetition Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.VOCABULARY_ITEMS)) {
+          const vocabStore = db.createObjectStore(STORES.VOCABULARY_ITEMS, { keyPath: 'id' });
+          vocabStore.createIndex('word', 'word', { unique: false });
+          vocabStore.createIndex('nextReviewAt', 'nextReviewAt', { unique: false });
+          vocabStore.createIndex('saved', 'saved', { unique: false });
+        }
+
+        // 22. Study Notes, Career Goals & Interview Prep Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.STUDY_NOTES)) {
+          const noteStore = db.createObjectStore(STORES.STUDY_NOTES, { keyPath: 'id' });
+          noteStore.createIndex('kind', 'kind', { unique: false });
+          noteStore.createIndex('updatedAt', 'updatedAt', { unique: false });
         }
       };
 

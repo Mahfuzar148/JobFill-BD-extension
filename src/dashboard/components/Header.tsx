@@ -37,6 +37,8 @@ const TAB_BREADCRUMBS: Record<DashboardTab, { en: string; bn: string }> = {
   search: { en: 'Job Hub / Job Search Engine', bn: 'জব হাব / জব সার্চ ইঞ্জিন' },
   circulars: { en: 'Job Hub / Job Circulars', bn: 'জব হাব / চাকরির বিজ্ঞপ্তি' },
   eligibility: { en: 'Job Hub / Eligibility Checker', bn: 'জব হাব / যোগ্যতা যাচাই' },
+  readiness: { en: 'Job Hub / Application Readiness', bn: 'জব হাব / আবেদন প্রস্তুতি যাচাই' },
+  calendar: { en: 'Job Hub / Career Calendar', bn: 'জব হাব / ক্যারিয়ার ক্যালেন্ডার' },
   govt_orgs: { en: 'Job Hub / Government Organizations', bn: 'জব হাব / সরকারি প্রতিষ্ঠান ডিরেক্টরি' },
   portals: { en: 'Job Hub / Official Job Portals', bn: 'জব হাব / অফিশিয়াল জব পোর্টাল' },
   notifications: { en: 'Job Hub / Notification Center', bn: 'জব হাব / নোটিফিকেশন সেন্টার' },

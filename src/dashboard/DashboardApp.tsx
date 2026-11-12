@@ -16,6 +16,8 @@ import { DocumentsPage } from './pages/DocumentsPage';
 import { CredentialVaultPage } from './pages/CredentialVaultPage';
 import { EligibilityCheckerPage } from './pages/EligibilityCheckerPage';
 import { CvBuilderPage } from './pages/CvBuilderPage';
+import { CareerCalendarPage } from './pages/CareerCalendarPage';
+import { ApplicationReadinessPage } from './pages/ApplicationReadinessPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -66,6 +68,8 @@ const VALID_TABS: DashboardTab[] = [
   'search',
   'circulars',
   'eligibility',
+  'readiness',
+  'calendar',
   'govt_orgs',
   'portals',
   'notifications',
@@ -480,6 +484,15 @@ const DashboardContent: React.FC = () => {
               }}
             />
           )}
+          {activeTab === 'readiness' && (
+            <ApplicationReadinessPage
+              profile={currentProfile}
+              onNavigateTab={setActiveTab}
+            />
+          )}
+          {activeTab === 'calendar' && (
+            <CareerCalendarPage profile={currentProfile} showToast={showToast} />
+          )}
           {activeTab === 'govt_orgs' && (
             <GovtOrganizationsPage onDataChanged={refreshJobHubStats} />
           )}
@@ -567,6 +580,10 @@ const DashboardContent: React.FC = () => {
               profile={currentProfile}
               onChange={(quals) => {
                 setCurrentProfile((p) => ({ ...p, additionalQualifications: quals }));
+                setHasUnsavedChanges(true);
+              }}
+              onChangeCareerProfile={(careerProfile) => {
+                setCurrentProfile((p) => ({ ...p, careerProfile }));
                 setHasUnsavedChanges(true);
               }}
             />
