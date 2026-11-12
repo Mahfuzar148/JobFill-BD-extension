@@ -74,16 +74,18 @@ export function generateSaltHex(byteLength = 16): string {
 
 export async function deriveMasterVaultCryptoKey(
   password: string,
-  saltHex: string
+  saltHex: string,
+  iterations = PBKDF2_ITERATIONS
 ): Promise<CryptoKey> {
   const salt = hexToBytes(saltHex);
-  return deriveKey(password, salt);
+  return deriveKey(password, salt, iterations);
 }
 
 export async function encryptDataWithKey(
   plaintext: string,
   key: CryptoKey,
-  saltHex: string
+  saltHex: string,
+  iterations = PBKDF2_ITERATIONS
 ): Promise<EncryptedPayload> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encodedPlaintext = new TextEncoder().encode(plaintext);
@@ -95,7 +97,7 @@ export async function encryptDataWithKey(
   return {
     version: '1.0',
     algorithm: 'AES-GCM',
-    iterations: PBKDF2_ITERATIONS,
+    iterations,
     saltHex,
     ivHex: bytesToHex(iv),
     ciphertextHex: bytesToHex(new Uint8Array(ciphertextBuffer)),
@@ -144,7 +146,11 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(
+  password: string,
+  salt: Uint8Array,
+  iterations = PBKDF2_ITERATIONS
+): Promise<CryptoKey> {
   const enc = new TextEncoder();
   const passwordKey = await crypto.subtle.importKey(
     'raw',
@@ -158,7 +164,7 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
     {
       name: 'PBKDF2',
       salt: salt as any,
-      iterations: PBKDF2_ITERATIONS,
+      iterations,
       hash: 'SHA-256',
     },
     passwordKey,
@@ -168,10 +174,14 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
   );
 }
 
-export async function encryptData(plaintext: string, password: string): Promise<EncryptedPayload> {
+export async function encryptData(
+  plaintext: string,
+  password: string,
+  iterations = PBKDF2_ITERATIONS
+): Promise<EncryptedPayload> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
+  const key = await deriveKey(password, salt, iterations);
 
   const enc = new TextEncoder();
   const encodedPlaintext = enc.encode(plaintext);
@@ -188,7 +198,7 @@ export async function encryptData(plaintext: string, password: string): Promise<
   return {
     version: '1.0',
     algorithm: 'AES-GCM',
-    iterations: PBKDF2_ITERATIONS,
+    iterations,
     saltHex: bytesToHex(salt),
     ivHex: bytesToHex(iv),
     ciphertextHex: bytesToHex(new Uint8Array(ciphertextBuffer)),
@@ -196,15 +206,29 @@ export async function encryptData(plaintext: string, password: string): Promise<
 }
 
 export async function decryptData(payload: EncryptedPayload, password: string): Promise<string> {
-  if (payload.algorithm !== 'AES-GCM') {
-    throw new Error('Unsupported encryption algorithm: ' + payload.algorithm);
+  if (
+    !payload ||
+    payload.algorithm !== 'AES-GCM' ||
+    typeof payload.saltHex !== 'string' ||
+    payload.saltHex.length < 16 ||
+    payload.saltHex.length % 2 !== 0 ||
+    typeof payload.ivHex !== 'string' ||
+    payload.ivHex.length !== 24 ||
+    typeof payload.ciphertextHex !== 'string' ||
+    payload.ciphertextHex.length < 2
+  ) {
+    throw new Error('Invalid or corrupted encrypted payload.');
   }
 
   const salt = hexToBytes(payload.saltHex);
   const iv = hexToBytes(payload.ivHex);
   const ciphertext = hexToBytes(payload.ciphertextHex);
+  const iterations =
+    typeof payload.iterations === 'number' && payload.iterations >= 10000
+      ? payload.iterations
+      : PBKDF2_ITERATIONS;
 
-  const key = await deriveKey(password, salt);
+  const key = await deriveKey(password, salt, iterations);
 
   try {
     const decryptedBuffer = await crypto.subtle.decrypt(
@@ -218,14 +242,15 @@ export async function decryptData(payload: EncryptedPayload, password: string): 
 
     const dec = new TextDecoder();
     return dec.decode(decryptedBuffer);
-  } catch (err) {
+  } catch {
     throw new Error('Incorrect password or corrupted encrypted payload.');
   }
 }
 
 export async function hashPassword(
   password: string,
-  saltHex?: string
+  saltHex?: string,
+  iterations = PBKDF2_ITERATIONS
 ): Promise<{ hashHex: string; saltHex: string }> {
   const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
   const enc = new TextEncoder();
@@ -241,7 +266,7 @@ export async function hashPassword(
     {
       name: 'PBKDF2',
       salt: salt as any,
-      iterations: PBKDF2_ITERATIONS,
+      iterations,
       hash: 'SHA-256',
     },
     passwordKey,

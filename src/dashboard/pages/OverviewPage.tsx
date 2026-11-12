@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   AlertCircle,
@@ -9,11 +9,21 @@ import {
   Shield,
   Zap,
   Printer,
+  KeyRound,
+  CheckSquare,
+  Bell,
+  Bookmark,
+  Clock,
+  ClipboardList,
 } from 'lucide-react';
 import { UserProfile } from '../../types/profile';
 import { calculateProfileScore } from '../../services/storage';
 import { BioDataPrintModal } from '../components/BioDataPrintModal';
 import { useApp } from '../context/AppContext';
+import { JobRepository } from '../../jobs/database/job-repository';
+import { BookmarkRepository } from '../../jobs/database/bookmark-repository';
+import { ApplicationRepository } from '../../jobs/database/application-repository';
+import { computeRealDashboardStats, DashboardRealStats } from '../services/dashboard-stats';
 
 interface OverviewPageProps {
   profile: UserProfile;
@@ -21,9 +31,25 @@ interface OverviewPageProps {
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateTab }) => {
-  const { language } = useApp();
+  const { language, userMode, setUserMode } = useApp();
   const [showBioPrint, setShowBioPrint] = useState(false);
+  const [realStats, setRealStats] = useState<DashboardRealStats | null>(null);
   const score = calculateProfileScore(profile);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      JobRepository.getAllJobs().catch(() => []),
+      BookmarkRepository.getAll().catch(() => []),
+      ApplicationRepository.getAll().catch(() => []),
+    ]).then(([jobs, bookmarks, apps]) => {
+      if (!active) return;
+      setRealStats(computeRealDashboardStats(profile, jobs, bookmarks, apps));
+    });
+    return () => {
+      active = false;
+    };
+  }, [profile]);
 
   return (
     <div className="space-y-6">
@@ -138,6 +164,166 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateT
             <div className="text-lg font-bold text-slate-800">Photo &amp; Sign</div>
             <div className="text-xs text-slate-500">300×300 / 300×80 px</div>
           </div>
+        </div>
+      </div>
+
+      {/* Integrated Student & Job Seeker Real-Data Workspace Panel */}
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
+              <span>{userMode === 'student' ? '🎓' : '💼'}</span>
+              <span>
+                {userMode === 'student'
+                  ? language === 'bn'
+                    ? 'স্টুডেন্ট ও ফ্রেশ গ্র্যাজুয়েট মোড (Student Focus)'
+                    : 'Student & Fresh Graduate Workspace'
+                  : language === 'bn'
+                    ? 'চাকরিপ্রার্থী মোড (Job Seeker Focus)'
+                    : 'Job Seeker Career Workspace'}
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              {userMode === 'student'
+                ? 'Focused on academic records (SSC/HSC/University), internships, fresh grad jobs, eligibility check & ATS CV Builder.'
+                : 'Focused on Govt, Bank, Teaching, NGO, Experience Profile, Application Tracker & Local Credential Vault.'}
+            </p>
+          </div>
+          <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-[11px] font-bold shrink-0">
+            <button
+              type="button"
+              onClick={() => setUserMode('student')}
+              className={`px-3 py-1 rounded-lg cursor-pointer ${
+                userMode === 'student' ? 'bg-petro-600 text-white' : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              🎓 Student
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserMode('job_seeker')}
+              className={`px-3 py-1 rounded-lg cursor-pointer ${
+                userMode === 'job_seeker' ? 'bg-petro-600 text-white' : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              💼 Job Seeker
+            </button>
+          </div>
+        </div>
+
+        {/* 6 Real IndexedDB Counters (Never Fabricated) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('circulars')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Total Jobs</span>
+              <Briefcase className="w-3.5 h-3.5 text-petro-600" />
+            </div>
+            <div className="text-lg font-black text-slate-800 dark:text-white">
+              {realStats ? realStats.totalActiveJobs : '—'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('eligibility')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Eligible</span>
+              <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+            <div className="text-lg font-black text-emerald-700 dark:text-emerald-400">
+              {realStats ? realStats.matchingJobsCount : '—'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('circulars')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Bookmarked</span>
+              <Bookmark className="w-3.5 h-3.5 text-sky-600" />
+            </div>
+            <div className="text-lg font-black text-slate-800 dark:text-white">
+              {realStats ? realStats.bookmarkedJobsCount : '—'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('tracker')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Submitted</span>
+              <ClipboardList className="w-3.5 h-3.5 text-indigo-600" />
+            </div>
+            <div className="text-lg font-black text-slate-800 dark:text-white">
+              {realStats ? realStats.applicationsSubmittedCount : '—'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('circulars')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Closing ≤7d</span>
+              <Clock className="w-3.5 h-3.5 text-amber-600" />
+            </div>
+            <div className="text-lg font-black text-amber-700 dark:text-amber-400">
+              {realStats ? realStats.upcomingDeadlinesCount : '—'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('notifications')}
+            className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-left hover:border-petro-500 cursor-pointer"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span>Upcoming Exams</span>
+              <Bell className="w-3.5 h-3.5 text-rose-600" />
+            </div>
+            <div className="text-lg font-black text-rose-700 dark:text-rose-400">
+              {realStats ? realStats.upcomingExamsCount : '—'}
+            </div>
+          </button>
+        </div>
+
+        {/* Mode-Contextual Quick Shortcuts (all features remain accessible in both modes) */}
+        <div className="flex flex-wrap gap-2 pt-1 text-xs">
+          <button
+            type="button"
+            onClick={() => onNavigateTab(userMode === 'student' ? 'education' : 'credentials')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-petro-50 text-petro-800 border border-petro-200 font-bold hover:bg-petro-100 cursor-pointer"
+          >
+            {userMode === 'student' ? <GraduationCap className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
+            <span>{userMode === 'student' ? 'Academic Profile (SSC/HSC/Uni)' : 'Local Credential Vault'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('eligibility')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold hover:bg-slate-200 cursor-pointer"
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Check Job Eligibility</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab('cv_builder')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-semibold hover:bg-slate-200 cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>ATS CV Builder (EN / বাংলা)</span>
+          </button>
         </div>
       </div>
 

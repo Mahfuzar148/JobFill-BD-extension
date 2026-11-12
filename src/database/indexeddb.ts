@@ -4,13 +4,15 @@
 // Fully local, persistent, and sandboxed inside Chrome.
 
 export const DB_NAME = 'JobFillBD_SecureStorage';
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export const STORES = {
   PROFILES: 'profiles',
   EDUCATION_RECORDS: 'education_records',
   EXPERIENCE_RECORDS: 'experience_records',
   VAULT_STORE: 'encrypted_vault',
+  CREDENTIALS: 'credential_vault',
+  CV_DOCUMENTS: 'cv_documents',
   DOCUMENTS: 'documents',
   MAPPINGS: 'mappings',
   HISTORY: 'history',
@@ -200,6 +202,21 @@ export class IndexedDBManager {
         if (!db.objectStoreNames.contains(STORES.MIGRATION_LOGS)) {
           const migStore = db.createObjectStore(STORES.MIGRATION_LOGS, { keyPath: 'id' });
           migStore.createIndex('completedAt', 'completedAt', { unique: false });
+        }
+
+        // 17. Local-Only Credential Vault Store (v9 additive store — encrypted envelopes only)
+        if (!db.objectStoreNames.contains(STORES.CREDENTIALS)) {
+          const credStore = db.createObjectStore(STORES.CREDENTIALS, { keyPath: 'id' });
+          credStore.createIndex('origin', 'origin', { unique: false });
+          credStore.createIndex('portalName', 'portalName', { unique: false });
+          credStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 18. Local CV Builder Store (v9 additive store)
+        if (!db.objectStoreNames.contains(STORES.CV_DOCUMENTS)) {
+          const cvStore = db.createObjectStore(STORES.CV_DOCUMENTS, { keyPath: 'id' });
+          cvStore.createIndex('profileId', 'profileId', { unique: false });
+          cvStore.createIndex('updatedAt', 'updatedAt', { unique: false });
         }
       };
 

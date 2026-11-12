@@ -6,13 +6,14 @@ import { FillProgress } from './components/FillProgress';
 import { FillReport, FillReportData } from './components/FillReport';
 import { UserProfile } from '../types/profile';
 import { createEmptyProfile } from '../types/defaults';
-import { Shield, Lock, ExternalLink, Camera, Megaphone, Bell, Search, Building2, Globe } from 'lucide-react';
+import { Shield, Lock, ExternalLink, Camera, Megaphone, Bell, Search, Building2, Globe, KeyRound } from 'lucide-react';
 import { JobNotificationRepository } from '../jobs/database/notification-repository';
 import { JobRepository } from '../jobs/database/job-repository';
 import { DAY_MS } from '../jobs/services/deadline-parser';
 import { canRequestCustomPortalPermission, isExcludedSiteUrl } from '../security/site-policy';
 import { recordExtensionDiagnostic } from '../security/diagnostics';
 import { PermissionManager } from '../background/permission-manager';
+import { normalizeStrictOrigin } from '../credentials/origin-matcher';
 
 export const App: React.FC = () => {
   const [detection, setDetection] = useState<DetectionState>({ status: 'loading' });
@@ -39,6 +40,12 @@ export const App: React.FC = () => {
   const [fillReport, setFillReport] = useState<FillReportData | null>(null);
   const [unreadAlertsCount, setUnreadAlertsCount] = useState(0);
   const [closingSoonCount, setClosingSoonCount] = useState(0);
+  const [loginDetected, setLoginDetected] = useState(false);
+  const [credVaultState, setCredVaultState] = useState<'ok' | 'locked' | 'uninitialized'>('uninitialized');
+  const [matchingCreds, setMatchingCreds] = useState<
+    Array<{ id: string; portalName: string; origin: string; username?: string; userId?: string; applicantId?: string }>
+  >([]);
+  const [credFillStatus, setCredFillStatus] = useState('');
 
   useEffect(() => {
     loadProfiles();
@@ -232,6 +239,27 @@ export const App: React.FC = () => {
         setNeedsHostPermission(!hasPerm);
       }
 
+      // Check for visible HTTPS login forms & strict-origin credential vault entries
+      if (tab.url && normalizeStrictOrigin(tab.url)) {
+        try {
+          const loginRes = await chrome.tabs.sendMessage(tab.id, { action: 'DETECT_LOGIN_FORM' }).catch(() => null);
+          if (loginRes?.hasLoginForm || loginRes?.hasPasswordField) {
+            setLoginDetected(true);
+          }
+          chrome.runtime?.sendMessage?.(
+            { action: 'CRED_VAULT_FIND_FOR_TAB', payload: { url: tab.url } },
+            (credRes) => {
+              if (!chrome.runtime?.lastError && credRes) {
+                setCredVaultState(credRes.status === 'ok' ? 'ok' : credRes.status === 'locked' ? 'locked' : 'uninitialized');
+                setMatchingCreds(Array.isArray(credRes.matches) ? credRes.matches : []);
+              }
+            }
+          );
+        } catch {
+          // ignore login scan errors cleanly
+        }
+      }
+
       if (response && response.status === 'ok') {
         setIsToolbarDismissed(Boolean(response.toolbarDismissed));
         if (response.hasJobForm) {
@@ -363,6 +391,42 @@ export const App: React.FC = () => {
     } else {
       window.open(`dashboard.html${suffix}`, '_blank');
     }
+  };
+
+  const handleExplicitCredentialFill = (
+    credentialId: string,
+    fillMode: 'username_only' | 'password_only' | 'both'
+  ) => {
+    if (!activeTabId || !activeTabUrl || typeof chrome === 'undefined') return;
+    chrome.runtime.sendMessage(
+      {
+        action: 'CRED_VAULT_FILL_TAB',
+        payload: {
+          tabId: activeTabId,
+          tabUrl: activeTabUrl,
+          credentialId,
+          fillMode,
+          explicitUserInitiated: true,
+        },
+      },
+      (res) => {
+        if (chrome.runtime?.lastError) {
+          setCredFillStatus('Credential fill unavailable on this tab.');
+          return;
+        }
+        if (res?.status === 'ok') {
+          setCredFillStatus(
+            fillMode === 'username_only'
+              ? '✅ Username filled cleanly.'
+              : fillMode === 'password_only'
+                ? '✅ Password filled cleanly.'
+                : '✅ Login filled upon your action.'
+          );
+        } else {
+          setCredFillStatus(`⚠️ ${res?.error || res?.result?.reason || 'Origin/Vault blocked.'}`);
+        }
+      }
+    );
   };
 
   const handleToggleFloatingToolbar = async (show: boolean) => {
@@ -599,6 +663,79 @@ export const App: React.FC = () => {
             >
               Approve Upload
             </button>
+          </div>
+        )}
+
+        {/* Strict-Origin Credential Vault Login Helper (HTTPS Only) */}
+        {(matchingCreds.length > 0 || (loginDetected && normalizeStrictOrigin(activeTabUrl))) && (
+          <div className="bg-white border border-petro-200 rounded-xl p-2.5 space-y-2 text-xs shadow-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-extrabold text-slate-800">
+                <KeyRound className="w-3.5 h-3.5 text-petro-600" />
+                <span>Credential Vault (HTTPS)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenDashboard('credentials')}
+                className="text-[10.5px] font-bold text-petro-600 hover:underline cursor-pointer"
+              >
+                Manage Vault
+              </button>
+            </div>
+
+            {credVaultState === 'locked' ? (
+              <button
+                type="button"
+                onClick={() => handleOpenDashboard('credentials')}
+                className="w-full py-1.5 px-2.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer"
+              >
+                🔒 Unlock Credential Vault in Dashboard ({matchingCreds.length} saved)
+              </button>
+            ) : matchingCreds.length > 0 ? (
+              <div className="space-y-1.5">
+                {matchingCreds.slice(0, 2).map((cred) => (
+                  <div key={cred.id} className="bg-slate-50 border border-slate-200 rounded-lg p-2 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-slate-800 truncate">{cred.portalName}</span>
+                      <span className="font-mono text-[10px] text-slate-500 truncate">
+                        {cred.username || cred.userId || cred.applicantId}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleExplicitCredentialFill(cred.id, 'username_only')}
+                        className="flex-1 py-1 px-2 rounded bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-[10.5px] cursor-pointer"
+                      >
+                        Fill User ID
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExplicitCredentialFill(cred.id, 'password_only')}
+                        className="flex-1 py-1 px-2 rounded bg-petro-600 hover:bg-petro-700 text-white font-bold text-[10.5px] cursor-pointer"
+                      >
+                        Fill Password
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[10.5px] text-slate-500 flex items-center justify-between">
+                <span>Login form detected on HTTPS origin.</span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenDashboard('credentials')}
+                  className="font-bold text-petro-600 hover:underline cursor-pointer"
+                >
+                  + Save Manually
+                </button>
+              </div>
+            )}
+
+            {credFillStatus && (
+              <div className="text-[10.5px] font-semibold text-slate-700">{credFillStatus}</div>
+            )}
           </div>
         )}
 

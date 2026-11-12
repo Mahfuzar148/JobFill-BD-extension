@@ -13,6 +13,9 @@ import { EducationPage } from './pages/EducationPage';
 import { AdditionalQualPage } from './pages/AdditionalQualPage';
 import { ExperiencePage } from './pages/ExperiencePage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { CredentialVaultPage } from './pages/CredentialVaultPage';
+import { EligibilityCheckerPage } from './pages/EligibilityCheckerPage';
+import { CvBuilderPage } from './pages/CvBuilderPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -62,6 +65,7 @@ const VALID_TABS: DashboardTab[] = [
   'overview',
   'search',
   'circulars',
+  'eligibility',
   'govt_orgs',
   'portals',
   'notifications',
@@ -73,6 +77,8 @@ const VALID_TABS: DashboardTab[] = [
   'additional',
   'experience',
   'documents',
+  'cv_builder',
+  'credentials',
   'autofill',
   'mappings',
   'history',
@@ -465,6 +471,15 @@ const DashboardContent: React.FC = () => {
               onDataChanged={refreshJobHubStats}
             />
           )}
+          {activeTab === 'eligibility' && (
+            <EligibilityCheckerPage
+              profile={currentProfile}
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+            />
+          )}
           {activeTab === 'govt_orgs' && (
             <GovtOrganizationsPage onDataChanged={refreshJobHubStats} />
           )}
@@ -488,7 +503,18 @@ const DashboardContent: React.FC = () => {
               onUpdateRecord={async (rec) => {
                 await ApplicationRepository.upsert(rec);
                 await JobAlarmManager.scheduleFeePaymentReminder(rec);
-                if (['Applied', 'Exam Scheduled', 'Result Published', 'Rejected', 'Selected'].includes(rec.status)) {
+                if (
+                  [
+                    'Applied',
+                    'Payment Pending',
+                    'Payment Completed',
+                    'Admit Card Available',
+                    'Exam Scheduled',
+                    'Result Published',
+                    'Rejected',
+                    'Selected',
+                  ].includes(rec.status)
+                ) {
                   await NotificationScheduler.markJobAsApplied(rec.jobId, true);
                   await NotificationScheduler.runCycle();
                 }
@@ -505,6 +531,7 @@ const DashboardContent: React.FC = () => {
                 setSelectedJobId(jobId);
                 setActiveTab('circulars');
               }}
+              onRefreshRecords={refreshJobHubStats}
             />
           )}
 
@@ -566,6 +593,12 @@ const DashboardContent: React.FC = () => {
               }}
               showToast={showToast}
             />
+          )}
+          {activeTab === 'cv_builder' && (
+            <CvBuilderPage profile={currentProfile} showToast={showToast} />
+          )}
+          {activeTab === 'credentials' && (
+            <CredentialVaultPage showToast={showToast} />
           )}
 
           {/* Automation Engine */}

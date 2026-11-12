@@ -29,10 +29,12 @@ import { NormalizedJobCircular, ApplicationStatus } from '../types/job.types';
 import { formatDhakaDate, parseDeadlineDate } from '../services/deadline-parser';
 import {
   calculateAgeOnCutoffDate,
+  evaluateProfileEligibility,
   formatIsoCalendarDate,
   parseFlexibleDateString,
 } from '../services/eligibility-helper';
 import { getActiveProfile } from '../../services/storage';
+import type { UserProfile } from '../../types/profile';
 import {
   getDetailedVerificationBadges,
   sanitizeCircularRefForDisplay,
@@ -109,19 +111,18 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
   const [cutoffInput, setCutoffInput] = useState(() =>
     initialParsedCutoff ? formatIsoCalendarDate(initialParsedCutoff) : new Date().toISOString().slice(0, 10)
   );
+  const [loadedProfile, setLoadedProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    if (applicantDob) {
-      const parsed = parseFlexibleDateString(applicantDob);
-      if (parsed) setDobInput(formatIsoCalendarDate(parsed));
-      return;
-    }
     let mounted = true;
     getActiveProfile()
       .then((profile) => {
-        if (!mounted) return;
-        const parsed = parseFlexibleDateString(profile?.personal?.dob);
-        if (parsed) setDobInput(formatIsoCalendarDate(parsed));
+        if (!mounted || !profile) return;
+        setLoadedProfile(profile);
+        if (!applicantDob) {
+          const parsed = parseFlexibleDateString(profile.personal?.dob);
+          if (parsed) setDobInput(formatIsoCalendarDate(parsed));
+        }
       })
       .catch(() => {});
     return () => {
@@ -130,6 +131,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
   }, [applicantDob]);
 
   const ageCheck = calculateAgeOnCutoffDate(dobInput, cutoffInput);
+  const fullEligibility = loadedProfile ? evaluateProfileEligibility(loadedProfile, job) : null;
 
   const handleSaveManualDeadline = async () => {
     if (!onUpdateDeadline) return;
@@ -473,6 +475,44 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
                   : 'Set DOB in Profile or pick above'}
             </div>
           </div>
+
+          {fullEligibility && (
+            <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {bn ? 'সার্বিক প্রোফাইল যোগ্যতা:' : 'Profile Eligibility Summary:'}
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                    fullEligibility.overallStatus === 'ELIGIBLE'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      : fullEligibility.overallStatus === 'NOT_ELIGIBLE'
+                        ? 'bg-rose-100 text-rose-800 border-rose-200'
+                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {fullEligibility.overallStatus.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {fullEligibility.criteria.map((cr) => (
+                  <span
+                    key={cr.key}
+                    title={bn ? cr.reasonBn : cr.reasonEn}
+                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold border ${
+                      cr.status === 'Matched'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : cr.status === 'Failed'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {bn ? cr.labelBn : cr.labelEn}: {cr.status}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Manual Deadline Verification Helper when PDF/Source has unverified deadline */}

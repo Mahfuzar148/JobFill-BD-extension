@@ -23,6 +23,7 @@ import {
 } from '../security/site-policy';
 import { recordExtensionDiagnostic } from '../security/diagnostics';
 import { detectAccessRestrictionWithReason } from '../jobs/services/captcha-detector';
+import { LoginFormDetector } from '../credentials/login-detector';
 import {
   DocumentFieldDetector,
   DocumentUploadCoordinator,
@@ -2245,6 +2246,37 @@ if (
           await ensureAssistantUiInitialized(true);
           openReviewModal();
           sendResponse({ status: 'opened' });
+        } else if (message.action === 'DETECT_LOGIN_FORM') {
+          const loginScan = LoginFormDetector.scan(document);
+          sendResponse({
+            status: 'ok',
+            url: window.location?.href || '',
+            ...loginScan,
+          });
+        } else if (message.action === 'FILL_CREDENTIAL_LOGIN') {
+          if (isExcludedSiteUrl(window.location?.href)) {
+            sendResponse({ status: 'denied', ok: false, reason: 'Excluded site.' });
+            return;
+          }
+          const fillResult = LoginFormDetector.executeExplicitFill(
+            document,
+            window.location?.href || '',
+            {
+              expectedOrigin: String(message.payload?.expectedOrigin || ''),
+              username: message.payload?.username,
+              userId: message.payload?.userId,
+              applicantId: message.payload?.applicantId,
+              password: message.payload?.password,
+              fillMode: message.payload?.fillMode || 'username_only',
+              explicitUserInitiated: Boolean(message.explicitUserInitiated),
+            }
+          );
+          if (fillResult.ok) {
+            showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে।');
+          } else {
+            showToast(`⚠️ ${fillResult.reason}`);
+          }
+          sendResponse({ status: fillResult.ok ? 'ok' : 'error', ...fillResult });
         } else if (message.action === 'EXTRACT_OPEN_PORTAL_NOTICES') {
           const host = (window.location?.hostname || '').toLowerCase();
           if (host !== 'bb.org.bd' && !host.endsWith('.bb.org.bd')) {

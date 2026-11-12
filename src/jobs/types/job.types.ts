@@ -202,6 +202,9 @@ export type ApplicationStatus =
   | 'Saved'
   | 'Ready to Apply'
   | 'Applied'
+  | 'Payment Pending'
+  | 'Payment Completed'
+  | 'Admit Card Available'
   | 'Exam Scheduled'
   | 'Result Published'
   | 'Selected'
@@ -209,11 +212,13 @@ export type ApplicationStatus =
   | 'Expired';
 
 export type FeePaymentStatus = 'unpaid' | 'paid' | 'exempt' | 'expired';
+export type AdmitCardStatus = 'Not Published' | 'Available' | 'Downloaded';
 
 export interface ApplicationTrackerRecord {
   jobId: string;
   jobTitle: string;
   organization: string;
+  circularId?: string;
   applicationUrl?: string | null;
   circularUrl?: string;
   deadlineAt: number | null;
@@ -221,13 +226,16 @@ export interface ApplicationTrackerRecord {
   applicationDate?: string;
   teletalkUserId?: string;
   applicationRefId?: string;
+  transactionId?: string;
   feePaymentStatus?: FeePaymentStatus;
   feeDeadlineAt?: number | null;
+  admitCardStatus?: AdmitCardStatus;
   examRoll?: string;
   examVenue?: string;
   notes?: string;
   examDate?: string;
   admitCardUrl?: string;
+  resultSummary?: string;
   resultUrl?: string;
   createdAt: number;
   updatedAt: number;
@@ -264,7 +272,11 @@ export type NotificationCategoryType =
   | 'deadline_reminder'
   | 'deadline_changed'
   | 'urgent_deadline'
-  | 'expired_job';
+  | 'expired_job'
+  | 'exam_reminder'
+  | 'admit_card_alert'
+  | 'result_alert'
+  | 'saved_job_update';
 
 export interface JobNotificationRecord {
   id: string;
@@ -290,6 +302,10 @@ export type WorkModePreference = 'Any' | 'Remote' | 'On-Site';
 export interface JobPreferences {
   dailyDigestEnabled: boolean;
   deadlineRemindersEnabled: boolean;
+  examRemindersEnabled?: boolean;
+  admitResultAlertsEnabled?: boolean;
+  reminderLeadHours?: number[];
+  customReminderHours?: number | null;
   notificationHour: number; // 0-23 Asia/Dhaka, default 9
   notificationMinute: number; // 0-59 Asia/Dhaka, default 0
   stopRemindersWhenApplied: boolean;
@@ -313,6 +329,10 @@ export interface JobPreferences {
 export const DEFAULT_JOB_PREFERENCES: JobPreferences = {
   dailyDigestEnabled: true,
   deadlineRemindersEnabled: true,
+  examRemindersEnabled: true,
+  admitResultAlertsEnabled: true,
+  reminderLeadHours: [168, 48, 24],
+  customReminderHours: null,
   notificationHour: 9,
   notificationMinute: 0,
   stopRemindersWhenApplied: true,

@@ -18,12 +18,15 @@ const isStoreClean = isChromeStore || isEdgeStore;
 // Option A Local-Only First Public Release (v2.0.0): keep Cloud Sync disabled across
 // ALL first-release builds (dist/, Chrome Store, Edge Store) unless explicitly enabled in a future version.
 const isCloudSyncDisabled = process.env.JOBFILL_ENABLE_CLOUD_SYNC !== '1';
+const customOutArg = process.argv.find((a) => a.startsWith('--out-dir='))?.split('=')[1];
 
-const outDir = isChromeStore
-  ? path.resolve(__dirname, 'release', 'chrome', 'unpacked')
-  : isEdgeStore
-    ? path.resolve(__dirname, 'release', 'edge', 'unpacked')
-    : path.resolve(__dirname, 'dist');
+const outDir = customOutArg
+  ? path.resolve(__dirname, customOutArg)
+  : isChromeStore
+    ? path.resolve(__dirname, 'release', 'chrome', 'unpacked')
+    : isEdgeStore
+      ? path.resolve(__dirname, 'release', 'edge', 'unpacked')
+      : path.resolve(__dirname, 'dist');
 
 async function buildExtension() {
   console.log(

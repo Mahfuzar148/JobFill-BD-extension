@@ -210,8 +210,8 @@ export const BioDataPrintModal: React.FC<BioDataPrintModalProps> = ({
           <ShieldCheck className="w-4 h-4 shrink-0" />
           <span>
             {bn
-              ? '১০০% অফলাইন: আপনার লোকাল এনক্রিপ্টেড প্রোফাইল থেকে সরাসরি বায়ো-ডাটা তৈরি হয় এবং ব্রাউজার প্রিন্ট ডায়ালগ দিয়ে PDF সংরক্ষণ করা যায়।'
-              : '100% Offline Generation: Built locally from your Vault profile. Use "Save as PDF" in your browser print dialog.'}
+              ? 'অফলাইন লোকাল: আপনার লোকাল এনক্রিপ্টেড প্রোফাইল থেকে সরাসরি বায়ো-ডাটা তৈরি হয় এবং ব্রাউজার প্রিন্ট ডায়ালগ দিয়ে PDF সংরক্ষণ করা যায়।'
+              : 'Local Offline Generation: Built locally from your Vault profile. Use "Save as PDF" in your browser print dialog.'}
           </span>
         </div>
 

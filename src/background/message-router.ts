@@ -11,6 +11,8 @@ import { DocumentRepository } from '../database/document-repository';
 import { DocumentCategory } from '../types/profile';
 import { JobCheckService } from '../jobs/background/job-check-service';
 import { JobAlarmManager } from '../jobs/background/alarm-manager';
+import { CredentialVaultRepository } from '../credentials/credential-repository';
+import { isStrictOriginMatch } from '../credentials/origin-matcher';
 import {
   getActiveProfile,
   getAllProfiles,
@@ -44,7 +46,11 @@ export interface ExtensionMessage {
     | 'SYNC_VAULT_LOCK'
     | 'GET_EXTENSION_DIAGNOSTICS'
     | 'GET_TAB_TOOLBAR_STATE'
-    | 'SET_TAB_TOOLBAR_DISMISSED';
+    | 'SET_TAB_TOOLBAR_DISMISSED'
+    | 'CRED_VAULT_GET_STATUS'
+    | 'CRED_VAULT_FIND_FOR_TAB'
+    | 'CRED_VAULT_FILL_TAB'
+    | 'CRED_VAULT_SAVE_MANUAL';
   payload?: any;
 }
 
@@ -436,6 +442,133 @@ export class MessageRouter {
           await setTabToolbarDismissed(rawTabId, dismissed);
           sendResponse({ status: 'ok', tabId: rawTabId, dismissed });
         })();
+        return true;
+      }
+
+      case 'CRED_VAULT_GET_STATUS': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault status restricted to extension UI.' });
+            return;
+          }
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', vaultStatus });
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_FIND_FOR_TAB': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', matches: [] });
+            return;
+          }
+          const targetUrl = String(message.payload?.url || '');
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          if (!vaultStatus.initialized) {
+            sendResponse({ status: 'uninitialized', vaultStatus, matches: [] });
+            return;
+          }
+          if (!vaultStatus.unlocked) {
+            // When locked, return ONLY non-secret origin-matched portal summary names (zero passwords/usernames)
+            const summaries = await CredentialVaultRepository.listPortalSummaries();
+            const originMatched = summaries.filter((s) => isStrictOriginMatch(s.origin, targetUrl).matched);
+            sendResponse({
+              status: 'locked',
+              vaultStatus,
+              matches: originMatched.map((s) => ({
+                id: s.id,
+                portalName: s.portalName,
+                origin: s.origin,
+              })),
+            });
+            return;
+          }
+          const matches = await CredentialVaultRepository.findMatchingForPageUrl(targetUrl);
+          sendResponse({
+            status: 'ok',
+            vaultStatus,
+            matches: matches.map((m) => ({
+              id: m.id,
+              portalName: m.portalName,
+              origin: m.origin,
+              username: m.username,
+              userId: m.userId,
+              applicantId: m.applicantId,
+            })),
+          });
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_FILL_TAB': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential fill trigger restricted to extension UI.' });
+            return;
+          }
+          if (!message.payload?.explicitUserInitiated) {
+            sendResponse({ status: 'denied', error: 'Explicit user confirmation required.' });
+            return;
+          }
+          if (!CredentialVaultRepository.isUnlocked()) {
+            sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
+            return;
+          }
+          const tabId = Number(message.payload?.tabId);
+          const tabUrl = String(message.payload?.tabUrl || '');
+          const credentialId = String(message.payload?.credentialId || '');
+          const fillMode = message.payload?.fillMode || 'username_only';
+
+          const allCreds = await CredentialVaultRepository.listDecryptedCredentials();
+          const entry = allCreds.find((c) => c.id === credentialId);
+          if (!entry) {
+            sendResponse({ status: 'error', error: 'Credential not found.' });
+            return;
+          }
+          const originCheck = isStrictOriginMatch(entry.origin, tabUrl);
+          if (!originCheck.matched) {
+            sendResponse({ status: 'denied', error: originCheck.reason });
+            return;
+          }
+          const fillResponse = await chrome.tabs.sendMessage(tabId, {
+            action: 'FILL_CREDENTIAL_LOGIN',
+            explicitUserInitiated: true,
+            payload: {
+              expectedOrigin: entry.origin,
+              username: entry.username,
+              userId: entry.userId,
+              applicantId: entry.applicantId,
+              password: fillMode === 'username_only' ? undefined : entry.password,
+              fillMode,
+            },
+          });
+          sendResponse({ status: 'ok', result: fillResponse });
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message || 'Credential fill failed.' });
+        });
+        return true;
+      }
+
+      case 'CRED_VAULT_SAVE_MANUAL': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential saving restricted to extension UI.' });
+            return;
+          }
+          if (!CredentialVaultRepository.isUnlocked()) {
+            sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
+            return;
+          }
+          const saved = await CredentialVaultRepository.saveCredential(message.payload);
+          sendResponse({ status: 'ok', id: saved.id, origin: saved.origin });
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message || 'Could not save credential.' });
+        });
         return true;
       }
 

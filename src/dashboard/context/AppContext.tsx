@@ -13,6 +13,7 @@ import {
 
 export type Language = 'bn' | 'en';
 export type Theme = 'light' | 'dark';
+export type UserFocusMode = 'student' | 'job_seeker';
 
 export interface AppContextType {
   language: Language;
@@ -20,6 +21,8 @@ export interface AppContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  userMode: UserFocusMode;
+  setUserMode: (mode: UserFocusMode) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   profiles: UserProfile[];
@@ -87,6 +90,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return (localStorage.getItem('jobfill_theme') as Theme) || 'light';
   });
 
+  const [userMode, setUserModeState] = useState<UserFocusMode>(() => {
+    const saved = localStorage.getItem('jobfill_user_mode');
+    return saved === 'student' || saved === 'job_seeker' ? saved : 'job_seeker';
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
   const initialContextProfile: UserProfile = (typeof __JOBFILL_STORE_CLEAN__ !== 'undefined' && __JOBFILL_STORE_CLEAN__)
     ? createEmptyProfile('My Job Profile')
@@ -112,6 +120,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('jobfill_language', lang);
+  };
+
+  const setUserMode = (mode: UserFocusMode) => {
+    setUserModeState(mode);
+    localStorage.setItem('jobfill_user_mode', mode);
   };
 
   const setTheme = (t: Theme) => {
@@ -168,6 +181,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         setTheme,
         toggleTheme,
+        userMode,
+        setUserMode,
         searchQuery,
         setSearchQuery,
         profiles,

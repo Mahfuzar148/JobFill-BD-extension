@@ -22,6 +22,8 @@ import {
   Search,
   Building2,
   Globe,
+  KeyRound,
+  CheckSquare,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -29,10 +31,12 @@ export type DashboardTab =
   | 'overview'
   | 'search'
   | 'circulars'
+  | 'eligibility'
   | 'govt_orgs'
   | 'portals'
   | 'notifications'
   | 'tracker'
+  | 'cv_builder'
   | 'personal'
   | 'family'
   | 'address'
@@ -40,6 +44,7 @@ export type DashboardTab =
   | 'additional'
   | 'experience'
   | 'documents'
+  | 'credentials'
   | 'autofill'
   | 'mappings'
   | 'history'
@@ -77,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   unreadNotificationsCount = 0,
   closingSoonCount = 0,
 }) => {
-  const { language } = useApp();
+  const { language, userMode, setUserMode } = useApp();
 
   const navGroups: NavGroup[] = [
     {
@@ -103,6 +108,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           labelBn: 'জব সার্কুলার',
           icon: Megaphone,
           badge: closingSoonCount > 0 ? `${closingSoonCount} Soon` : 'New',
+        },
+        {
+          id: 'eligibility',
+          labelEn: 'Eligibility Checker',
+          labelBn: 'যোগ্যতা যাচাই',
+          icon: CheckSquare,
         },
         {
           id: 'govt_orgs',
@@ -142,6 +153,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'additional', labelEn: 'Skills & Training', labelBn: 'দক্ষতা ও প্রশিক্ষণ', icon: Award },
         { id: 'experience', labelEn: 'Job Experience', labelBn: 'চাকরির অভিজ্ঞতা', icon: Briefcase },
         { id: 'documents', labelEn: 'Documents & Photos', labelBn: 'ছবি ও সনদপত্র', icon: FileText },
+        { id: 'cv_builder', labelEn: 'CV Builder', labelBn: 'সিভি বিল্ডার', icon: FileText, badge: 'A4' },
+        { id: 'credentials', labelEn: 'Credential Vault', labelBn: 'ক্রেডেনশিয়াল ভল্ট', icon: KeyRound, badge: 'Local' },
       ],
     },
     {
@@ -183,6 +196,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Smart Bangladesh Job Assistant
           </p>
         </div>
+      </div>
+
+      {/* Student / Job Seeker Mode Switcher */}
+      <div className="mx-3 mt-2.5 p-1 bg-slate-900 rounded-xl border border-slate-800 grid grid-cols-2 gap-1 text-[10.5px] font-bold">
+        <button
+          type="button"
+          onClick={() => setUserMode('student')}
+          className={`py-1.5 px-2 rounded-lg transition cursor-pointer ${
+            userMode === 'student'
+              ? 'bg-petro-600 text-white shadow'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          🎓 {language === 'bn' ? 'স্টুডেন্ট' : 'Student'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setUserMode('job_seeker')}
+          className={`py-1.5 px-2 rounded-lg transition cursor-pointer ${
+            userMode === 'job_seeker'
+              ? 'bg-petro-600 text-white shadow'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          💼 {language === 'bn' ? 'চাকরিপ্রার্থী' : 'Job Seeker'}
+        </button>
       </div>
 
       {/* Profile Completion Meter */}
