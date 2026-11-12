@@ -93,6 +93,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   closingSoonCount = 0,
 }) => {
   const { language, userMode, setUserMode } = useApp();
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<number, boolean>>({});
+  const toggleGroup = (idx: number) =>
+    setCollapsedGroups((prev) => ({ ...prev, [idx]: !prev[idx] }));
 
   const navGroups: NavGroup[] = [
     {
@@ -299,14 +302,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation List */}
-      <nav className="flex-1 px-3 py-1 space-y-4 overflow-y-auto custom-scrollbar">
-        {navGroups.map((group, gIdx) => (
+      <nav className="flex-1 px-3 py-1 space-y-3 overflow-y-auto custom-scrollbar">
+        {navGroups.map((group, gIdx) => {
+          const isCollapsed = Boolean(collapsedGroups[gIdx]);
+          return (
           <div key={gIdx} className="space-y-1">
-            <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              {language === 'bn' ? group.groupBn : group.groupEn}
-            </div>
+            <button
+              type="button"
+              onClick={() => toggleGroup(gIdx)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <span>{language === 'bn' ? group.groupBn : group.groupEn}</span>
+              <span>{isCollapsed ? '▸' : '▾'}</span>
+            </button>
 
-            {group.items.map((item) => {
+            {!isCollapsed && group.items.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
@@ -344,7 +354,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer Local-First Notice */}
