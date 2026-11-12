@@ -153,7 +153,8 @@ describe('JobFill BD - Phase 11 Hybrid Architecture Security & Isolation Suite',
 
     await expect(BackupManager.importBackup(backupJson, 'WrongBackupKey')).rejects.toThrow();
     const tampered = JSON.parse(backupJson);
-    tampered.payload.ciphertextHex = 'ff' + tampered.payload.ciphertextHex.slice(2);
+    const flippedHex = tampered.payload.ciphertextHex.startsWith('ff') ? '00' : 'ff';
+    tampered.payload.ciphertextHex = flippedHex + tampered.payload.ciphertextHex.slice(2);
     await expect(importProfileData(JSON.stringify(tampered), backupPw)).rejects.toThrow();
 
     const importedCount = await importProfileData(backupJson, backupPw);
