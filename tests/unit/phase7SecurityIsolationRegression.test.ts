@@ -4,6 +4,7 @@ import path from 'path';
 import { isExcludedSiteUrl, isGoogleMeetUrl } from '../../src/security/site-policy';
 import { DB_VERSION, STORES } from '../../src/database/indexeddb';
 import { MessageRouter } from '../../src/background/message-router';
+import { normalizeLoadedProfile, calculateProfileScore } from '../../src/services/storage';
 
 describe('Phase 7 — Meet/Zoom Exclusion, Schema Non-Destructive Upgrade & Router Guard Regression', () => {
   it('1. Strictly preserves Google Meet, Zoom, Gmail, YouTube, and chrome:// exclusions', () => {
@@ -61,5 +62,21 @@ describe('Phase 7 — Meet/Zoom Exclusion, Schema Non-Destructive Upgrade & Rout
       });
       expect(response?.status).toBe('denied');
     }
+  });
+
+  it('4. Normalizes sparse legacy v8 profiles without throwing trim() errors on missing subfields', () => {
+    const sparseLegacy = {
+      id: 'legacy_v8_id',
+      profileName: 'Legacy User',
+      personal: { applicantNameEn: 'LEGACY USER', mobile: '01700000000' },
+      ssc: { gpa: '5.00' },
+    } as any;
+    const normalized = normalizeLoadedProfile(sparseLegacy);
+    expect(normalized.personal.applicantNameEn).toBe('LEGACY USER');
+    expect(normalized.jobExperiences).toEqual([]);
+    expect(normalized.careerProfile?.skills).toEqual([]);
+    const score = calculateProfileScore(sparseLegacy);
+    expect(score.percentage).toBeGreaterThan(0);
+    expect(score.filledFields).toBeGreaterThanOrEqual(2);
   });
 });

@@ -231,6 +231,52 @@ export async function saveSecuritySettings(settings: SecuritySettings): Promise<
 }
 
 // Profiles CRUD
+export function normalizeLoadedProfile(raw: any): UserProfile {
+  const base = createEmptyProfile(raw?.profileName || 'My Job Profile');
+  const rawAddr = raw?.address || {};
+  return {
+    ...base,
+    ...(raw || {}),
+    id: raw?.id || base.id,
+    profileName: raw?.profileName || base.profileName,
+    createdAt: raw?.createdAt || base.createdAt,
+    updatedAt: raw?.updatedAt || base.updatedAt,
+    personal: { ...base.personal, ...(raw?.personal || {}) },
+    address: {
+      ...base.address,
+      ...rawAddr,
+      present: { ...base.address.present, ...(rawAddr.present || {}) },
+      permanent: { ...base.address.permanent, ...(rawAddr.permanent || {}) },
+    },
+    ssc: { ...base.ssc, ...(raw?.ssc || {}) },
+    hsc: { ...base.hsc, ...(raw?.hsc || {}) },
+    graduation: { ...base.graduation, ...(raw?.graduation || {}) },
+    masters: { ...base.masters, ...(raw?.masters || {}) },
+    additionalQualifications: Array.isArray(raw?.additionalQualifications) ? raw.additionalQualifications : [],
+    jobExperiences: Array.isArray(raw?.jobExperiences) ? raw.jobExperiences : [],
+    special: { ...base.special, ...(raw?.special || {}) },
+    references: Array.isArray(raw?.references) ? raw.references : base.references,
+    documents: Array.isArray(raw?.documents) ? raw.documents : [],
+    careerProfile: {
+      ...(base.careerProfile || {}),
+      ...(raw?.careerProfile || {}),
+      skills: Array.isArray(raw?.careerProfile?.skills) ? raw.careerProfile.skills : [],
+      languages: Array.isArray(raw?.careerProfile?.languages) ? raw.careerProfile.languages : [],
+      projects: Array.isArray(raw?.careerProfile?.projects) ? raw.careerProfile.projects : [],
+      achievements: Array.isArray(raw?.careerProfile?.achievements) ? raw.careerProfile.achievements : [],
+      careerInterests: Array.isArray(raw?.careerProfile?.careerInterests) ? raw.careerProfile.careerInterests : [],
+      preferredJobCategories: Array.isArray(raw?.careerProfile?.preferredJobCategories)
+        ? raw.careerProfile.preferredJobCategories
+        : [],
+      preferredLocations: Array.isArray(raw?.careerProfile?.preferredLocations)
+        ? raw.careerProfile.preferredLocations
+        : [],
+      internshipPreference: Boolean(raw?.careerProfile?.internshipPreference),
+      careerGoals: Array.isArray(raw?.careerProfile?.careerGoals) ? raw.careerProfile.careerGoals : [],
+    },
+  };
+}
+
 export async function getAllProfiles(): Promise<UserProfile[]> {
   const security = await getSecuritySettings();
 
@@ -303,10 +349,13 @@ export async function getAllProfiles(): Promise<UserProfile[]> {
     profiles = defaultProfiles;
     await saveAllProfiles(profiles);
     await setActiveProfileId(defaultProfiles[0].id);
-  } else if (needsIdbMigration) {
-    await saveAllProfiles(profiles);
+  } else {
+    profiles = profiles.map(normalizeLoadedProfile);
+    if (needsIdbMigration) {
+      await saveAllProfiles(profiles);
+    }
   }
-  return profiles;
+  return profiles.map(normalizeLoadedProfile);
 }
 
 export async function saveAllProfiles(profiles: UserProfile[]): Promise<void> {
@@ -560,42 +609,44 @@ export function lockVault(skipSwBroadcast = false): void {
 }
 
 // Calculate Profile Completion Score (0 to 100%)
-export function calculateProfileScore(p: UserProfile): {
+export function calculateProfileScore(rawProfile: UserProfile): {
   percentage: number;
   totalFields: number;
   filledFields: number;
   missingKeyFields: string[];
 } {
+  const p = normalizeLoadedProfile(rawProfile);
+  const s = (v?: string | null) => String(v || '').trim();
   const checks: Array<{ name: string; filled: boolean; weight: number }> = [
-    { name: "Applicant's Name (English)", filled: !!p.personal.applicantNameEn.trim(), weight: 3 },
-    { name: "Applicant's Name (Bangla)", filled: !!p.personal.applicantNameBn.trim(), weight: 2 },
-    { name: "Father's Name (English)", filled: !!p.personal.fatherNameEn.trim(), weight: 2 },
-    { name: "Mother's Name (English)", filled: !!p.personal.motherNameEn.trim(), weight: 2 },
-    { name: 'Date of Birth', filled: !!p.personal.dob, weight: 3 },
-    { name: 'Gender', filled: !!p.personal.gender, weight: 2 },
-    { name: 'National ID / Smart Card', filled: !!p.personal.nid.trim() || !!p.personal.birthReg.trim(), weight: 3 },
-    { name: 'Birth Registration No.', filled: !!p.personal.birthReg.trim(), weight: 1 },
-    { name: 'Quota Category (কোটা)', filled: !!p.personal.quota.trim(), weight: 1 },
-    { name: 'Mobile Number', filled: !!p.personal.mobile.trim(), weight: 3 },
-    { name: 'Email Address', filled: !!p.personal.email.trim(), weight: 2 },
-    { name: 'Religion', filled: !!p.personal.religion, weight: 1 },
-    { name: 'Marital Status', filled: !!p.personal.maritalStatus, weight: 1 },
-    { name: 'Present Address: District', filled: !!p.address.present.district.trim(), weight: 2 },
-    { name: 'Present Address: Upazila/Thana', filled: !!p.address.present.upazila.trim(), weight: 2 },
-    { name: 'Present Address: Post Code', filled: !!p.address.present.postCode.trim(), weight: 1 },
-    { name: 'Present Address: Village/House', filled: !!p.address.present.village.trim(), weight: 2 },
-    { name: 'Permanent Address: District', filled: !!p.address.permanent.district.trim(), weight: 2 },
-    { name: 'SSC: Examination & Board', filled: !!p.ssc.examination && !!p.ssc.board, weight: 2 },
-    { name: 'SSC: Roll Number', filled: !!p.ssc.rollNumber.trim(), weight: 2 },
-    { name: 'SSC: Result (GPA)', filled: !!p.ssc.gpa.trim(), weight: 2 },
-    { name: 'SSC: Passing Year', filled: !!p.ssc.passingYear.trim(), weight: 1 },
-    { name: 'HSC: Examination & Board', filled: !!p.hsc.examination && !!p.hsc.board, weight: 2 },
-    { name: 'HSC: Roll Number', filled: !!p.hsc.rollNumber.trim(), weight: 2 },
-    { name: 'HSC: Result (GPA)', filled: !!p.hsc.gpa.trim(), weight: 2 },
-    { name: 'HSC: Passing Year', filled: !!p.hsc.passingYear.trim(), weight: 1 },
-    { name: 'Graduation: Degree & University', filled: !!p.graduation.subjectDegree.trim() && !!p.graduation.universityInstitute.trim(), weight: 3 },
-    { name: 'Graduation: Result (CGPA)', filled: !!p.graduation.gpa.trim() || p.graduation.appearedStatus, weight: 2 },
-    { name: 'Graduation: Passing Year', filled: !!p.graduation.passingYear.trim(), weight: 1 },
+    { name: "Applicant's Name (English)", filled: !!s(p.personal.applicantNameEn), weight: 3 },
+    { name: "Applicant's Name (Bangla)", filled: !!s(p.personal.applicantNameBn), weight: 2 },
+    { name: "Father's Name (English)", filled: !!s(p.personal.fatherNameEn), weight: 2 },
+    { name: "Mother's Name (English)", filled: !!s(p.personal.motherNameEn), weight: 2 },
+    { name: 'Date of Birth', filled: !!s(p.personal.dob), weight: 3 },
+    { name: 'Gender', filled: !!s(p.personal.gender), weight: 2 },
+    { name: 'National ID / Smart Card', filled: !!s(p.personal.nid) || !!s(p.personal.birthReg), weight: 3 },
+    { name: 'Birth Registration No.', filled: !!s(p.personal.birthReg), weight: 1 },
+    { name: 'Quota Category (কোটা)', filled: !!s(p.personal.quota), weight: 1 },
+    { name: 'Mobile Number', filled: !!s(p.personal.mobile), weight: 3 },
+    { name: 'Email Address', filled: !!s(p.personal.email), weight: 2 },
+    { name: 'Religion', filled: !!s(p.personal.religion), weight: 1 },
+    { name: 'Marital Status', filled: !!s(p.personal.maritalStatus), weight: 1 },
+    { name: 'Present Address: District', filled: !!s(p.address.present.district), weight: 2 },
+    { name: 'Present Address: Upazila/Thana', filled: !!s(p.address.present.upazila), weight: 2 },
+    { name: 'Present Address: Post Code', filled: !!s(p.address.present.postCode), weight: 1 },
+    { name: 'Present Address: Village/House', filled: !!s(p.address.present.village), weight: 2 },
+    { name: 'Permanent Address: District', filled: !!s(p.address.permanent.district), weight: 2 },
+    { name: 'SSC: Examination & Board', filled: !!s(p.ssc.examination) && !!s(p.ssc.board), weight: 2 },
+    { name: 'SSC: Roll Number', filled: !!s(p.ssc.rollNumber), weight: 2 },
+    { name: 'SSC: Result (GPA)', filled: !!s(p.ssc.gpa), weight: 2 },
+    { name: 'SSC: Passing Year', filled: !!s(p.ssc.passingYear), weight: 1 },
+    { name: 'HSC: Examination & Board', filled: !!s(p.hsc.examination) && !!s(p.hsc.board), weight: 2 },
+    { name: 'HSC: Roll Number', filled: !!s(p.hsc.rollNumber), weight: 2 },
+    { name: 'HSC: Result (GPA)', filled: !!s(p.hsc.gpa), weight: 2 },
+    { name: 'HSC: Passing Year', filled: !!s(p.hsc.passingYear), weight: 1 },
+    { name: 'Graduation: Degree & University', filled: !!s(p.graduation.subjectDegree) && !!s(p.graduation.universityInstitute), weight: 3 },
+    { name: 'Graduation: Result (CGPA)', filled: !!s(p.graduation.gpa) || !!p.graduation.appearedStatus, weight: 2 },
+    { name: 'Graduation: Passing Year', filled: !!s(p.graduation.passingYear), weight: 1 },
   ];
 
   let totalWeight = 0;

@@ -149,7 +149,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateT
               <Briefcase className="w-4 h-4" />
             </div>
             <div className="text-lg font-bold text-slate-800">
-              {profile.jobExperiences.length} Jobs
+              {(profile.jobExperiences || []).length} Jobs
             </div>
             <div className="text-xs text-slate-500">Employment Records</div>
           </div>
