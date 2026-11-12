@@ -50,7 +50,9 @@ export interface ExtensionMessage {
     | 'CRED_VAULT_GET_STATUS'
     | 'CRED_VAULT_FIND_FOR_TAB'
     | 'CRED_VAULT_FILL_TAB'
-    | 'CRED_VAULT_SAVE_MANUAL';
+    | 'CRED_VAULT_SAVE_MANUAL'
+    | 'CRED_VAULT_UNLOCK'
+    | 'CRED_VAULT_LOCK';
   payload?: any;
 }
 
@@ -569,6 +571,41 @@ export class MessageRouter {
         })().catch((err) => {
           sendResponse({ status: 'error', error: err?.message || 'Could not save credential.' });
         });
+        return true;
+      }
+
+      case 'CRED_VAULT_UNLOCK': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault unlock restricted to extension UI.' });
+            return;
+          }
+          const masterPassword = String(message.payload?.masterPassword || '');
+          const unlocked = await CredentialVaultRepository.unlockVault(masterPassword);
+          if (!unlocked) {
+            sendResponse({ status: 'invalid', ok: false, error: 'Incorrect master password.' });
+            return;
+          }
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', ok: true, vaultStatus });
+        })().catch((err) => {
+          sendResponse({ status: 'error', ok: false, error: err?.message || 'Unlock failed.' });
+        });
+        return true;
+      }
+
+      case 'CRED_VAULT_LOCK': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault lock restricted to extension UI.' });
+            return;
+          }
+          CredentialVaultRepository.lockVault();
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', vaultStatus });
+        })();
         return true;
       }
 

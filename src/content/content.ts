@@ -2277,6 +2277,17 @@ if (
             showToast(`⚠️ ${fillResult.reason}`);
           }
           sendResponse({ status: fillResult.ok ? 'ok' : 'error', ...fillResult });
+        } else if (message.action === 'CAPTURE_LOGIN_FORM') {
+          if (isExcludedSiteUrl(window.location?.href)) {
+            sendResponse({ status: 'denied', ok: false, reason: 'Excluded site.' });
+            return;
+          }
+          const captureRes = LoginFormDetector.readExplicitCaptureCandidate(
+            document,
+            window.location?.href || '',
+            Boolean(message.explicitUserInitiated)
+          );
+          sendResponse({ status: captureRes.ok ? 'ok' : 'error', ...captureRes });
         } else if (message.action === 'EXTRACT_OPEN_PORTAL_NOTICES') {
           const host = (window.location?.hostname || '').toLowerCase();
           if (host !== 'bb.org.bd' && !host.endsWith('.bb.org.bd')) {

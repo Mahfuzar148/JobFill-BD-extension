@@ -2,7 +2,7 @@
 // Enforces exact HTTPS origin verification, visibility/anti-deception checks,
 // explicit user-triggered fills only, and non-interference with browser password managers.
 
-import { isStrictOriginMatch } from './origin-matcher';
+import { isStrictOriginMatch, normalizeStrictOrigin } from './origin-matcher';
 import { VerificationEngine } from '../validation/verification-engine';
 
 export interface DetectedLoginForm {
@@ -198,6 +198,56 @@ export class LoginFormDetector {
       filledUsername,
       filledPassword,
       reason: 'Credential filled upon explicit user action.',
+    };
+  }
+
+  /**
+   * Explicitly reads non-empty username/password values from visible HTTPS login inputs
+   * ONLY when triggered directly by user confirmation (never called silently).
+   */
+  public static readExplicitCaptureCandidate(
+    doc: Document,
+    pageUrl: string,
+    explicitUserInitiated: boolean
+  ): {
+    ok: boolean;
+    origin?: string;
+    portalUrl?: string;
+    portalName?: string;
+    username?: string;
+    password?: string;
+    reason?: string;
+  } {
+    if (!explicitUserInitiated) {
+      return { ok: false, reason: 'Credential capture requires explicit user confirmation.' };
+    }
+    const strictOrigin = normalizeStrictOrigin(pageUrl);
+    if (!strictOrigin) {
+      return { ok: false, reason: 'Credential capture requires a valid HTTPS origin.' };
+    }
+
+    const detected = this.scan(doc);
+    const uEl = detected.usernameInputSelector
+      ? doc.querySelector<HTMLInputElement>(detected.usernameInputSelector)
+      : null;
+    const pEl = detected.passwordInputSelector
+      ? doc.querySelector<HTMLInputElement>(detected.passwordInputSelector)
+      : null;
+
+    const username = isLoginInputVisibleAndSafe(uEl) ? uEl.value.trim() : '';
+    const password = isLoginInputVisibleAndSafe(pEl) ? pEl.value : '';
+
+    if (!password) {
+      return { ok: false, reason: 'Type your password in the visible login field first before saving.' };
+    }
+
+    return {
+      ok: true,
+      origin: strictOrigin,
+      portalUrl: pageUrl,
+      portalName: (doc.title || new URL(strictOrigin).hostname).trim().slice(0, 60),
+      username,
+      password,
     };
   }
 }

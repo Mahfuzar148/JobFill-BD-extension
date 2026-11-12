@@ -45,6 +45,13 @@ export const App: React.FC = () => {
   const [matchingCreds, setMatchingCreds] = useState<
     Array<{ id: string; portalName: string; origin: string; username?: string; userId?: string; applicantId?: string }>
   >([]);
+  const [credUnlockInput, setCredUnlockInput] = useState('');
+  const [pendingCapture, setPendingCapture] = useState<{
+    portalName: string;
+    portalUrl: string;
+    username: string;
+    password: string;
+  } | null>(null);
   const [credFillStatus, setCredFillStatus] = useState('');
 
   useEffect(() => {
@@ -393,6 +400,85 @@ export const App: React.FC = () => {
     }
   };
 
+  const handlePopupUnlockCredVault = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!credUnlockInput || typeof chrome === 'undefined') return;
+    const pw = credUnlockInput;
+    chrome.runtime.sendMessage(
+      { action: 'CRED_VAULT_UNLOCK', payload: { masterPassword: pw } },
+      (res) => {
+        setCredUnlockInput('');
+        if (chrome.runtime?.lastError || !res?.ok) {
+          setCredFillStatus(`⚠️ ${res?.error || 'Incorrect Master Password'}`);
+          return;
+        }
+        setCredFillStatus('🔓 Vault unlocked cleanly.');
+        chrome.runtime.sendMessage(
+          { action: 'CRED_VAULT_FIND_FOR_TAB', payload: { url: activeTabUrl } },
+          (findRes) => {
+            if (!chrome.runtime?.lastError && findRes) {
+              setCredVaultState(findRes.status === 'ok' ? 'ok' : findRes.status === 'locked' ? 'locked' : 'uninitialized');
+              setMatchingCreds(Array.isArray(findRes.matches) ? findRes.matches : []);
+            }
+          }
+        );
+      }
+    );
+  };
+
+  const handleExplicitCapturePrompt = async () => {
+    if (!activeTabId || typeof chrome === 'undefined') return;
+    const res = await chrome.tabs
+      .sendMessage(activeTabId, { action: 'CAPTURE_LOGIN_FORM', explicitUserInitiated: true })
+      .catch(() => null);
+    if (!res?.ok) {
+      setCredFillStatus(`⚠️ ${res?.reason || 'Type login credentials on page first.'}`);
+      return;
+    }
+    setPendingCapture({
+      portalName: res.portalName || 'Job Portal',
+      portalUrl: res.portalUrl || activeTabUrl,
+      username: res.username || '',
+      password: res.password || '',
+    });
+    setCredFillStatus('');
+  };
+
+  const handleConfirmSaveCapturedLogin = () => {
+    if (!pendingCapture || typeof chrome === 'undefined') return;
+    const capture = pendingCapture;
+    chrome.runtime.sendMessage(
+      {
+        action: 'CRED_VAULT_SAVE_MANUAL',
+        payload: {
+          portalName: capture.portalName,
+          portalUrl: capture.portalUrl,
+          username: capture.username,
+          userId: '',
+          applicantId: '',
+          password: capture.password,
+          notes: 'Saved explicitly by user from login page',
+        },
+      },
+      (res) => {
+        setPendingCapture(null);
+        if (chrome.runtime?.lastError || res?.status !== 'ok') {
+          setCredFillStatus(`⚠️ ${res?.error || 'Unlock Credential Vault before saving.'}`);
+          return;
+        }
+        setCredFillStatus('✅ Credential encrypted & saved locally.');
+        chrome.runtime.sendMessage(
+          { action: 'CRED_VAULT_FIND_FOR_TAB', payload: { url: activeTabUrl } },
+          (findRes) => {
+            if (!chrome.runtime?.lastError && findRes) {
+              setMatchingCreds(Array.isArray(findRes.matches) ? findRes.matches : []);
+            }
+          }
+        );
+      }
+    );
+  };
+
   const handleExplicitCredentialFill = (
     credentialId: string,
     fillMode: 'username_only' | 'password_only' | 'both'
@@ -684,52 +770,98 @@ export const App: React.FC = () => {
             </div>
 
             {credVaultState === 'locked' ? (
-              <button
-                type="button"
-                onClick={() => handleOpenDashboard('credentials')}
-                className="w-full py-1.5 px-2.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer"
-              >
-                🔒 Unlock Credential Vault in Dashboard ({matchingCreds.length} saved)
-              </button>
-            ) : matchingCreds.length > 0 ? (
-              <div className="space-y-1.5">
-                {matchingCreds.slice(0, 2).map((cred) => (
-                  <div key={cred.id} className="bg-slate-50 border border-slate-200 rounded-lg p-2 space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-slate-800 truncate">{cred.portalName}</span>
-                      <span className="font-mono text-[10px] text-slate-500 truncate">
-                        {cred.username || cred.userId || cred.applicantId}
-                      </span>
+              <form onSubmit={handlePopupUnlockCredVault} className="space-y-1.5">
+                <div className="flex gap-1.5">
+                  <input
+                    type="password"
+                    value={credUnlockInput}
+                    onChange={(e) => setCredUnlockInput(e.target.value)}
+                    placeholder="Master Password..."
+                    className="flex-1 text-[11px] border border-amber-300 rounded-lg px-2 py-1 bg-white"
+                  />
+                  <button
+                    type="submit"
+                    className="py-1 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] cursor-pointer shrink-0"
+                  >
+                    🔓 Unlock
+                  </button>
+                </div>
+                {matchingCreds.length > 0 && (
+                  <div className="text-[10px] text-amber-800 font-semibold">
+                    {matchingCreds.length} saved credential(s) for this HTTPS origin.
+                  </div>
+                )}
+              </form>
+            ) : (
+              <div className="space-y-2">
+                {matchingCreds.length > 0 && (
+                  <div className="space-y-1.5">
+                    {matchingCreds.slice(0, 2).map((cred) => (
+                      <div key={cred.id} className="bg-slate-50 border border-slate-200 rounded-lg p-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-800 truncate">{cred.portalName}</span>
+                          <span className="font-mono text-[10px] text-slate-500 truncate">
+                            {cred.username || cred.userId || cred.applicantId}
+                          </span>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleExplicitCredentialFill(cred.id, 'username_only')}
+                            className="flex-1 py-1 px-2 rounded bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-[10.5px] cursor-pointer"
+                          >
+                            Fill User ID
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExplicitCredentialFill(cred.id, 'password_only')}
+                            className="flex-1 py-1 px-2 rounded bg-petro-600 hover:bg-petro-700 text-white font-bold text-[10.5px] cursor-pointer"
+                          >
+                            Fill Password
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {pendingCapture ? (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 space-y-1.5 text-[10.5px]">
+                    <div className="font-bold text-emerald-900">Confirm Save Login to Local Vault?</div>
+                    <div className="text-emerald-800 truncate">
+                      {pendingCapture.portalName} • {pendingCapture.username || 'Password detected'}
                     </div>
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        onClick={() => handleExplicitCredentialFill(cred.id, 'username_only')}
-                        className="flex-1 py-1 px-2 rounded bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-[10.5px] cursor-pointer"
+                        onClick={handleConfirmSaveCapturedLogin}
+                        className="flex-1 py-1 rounded bg-emerald-600 text-white font-bold cursor-pointer"
                       >
-                        Fill User ID
+                        Confirm Save
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleExplicitCredentialFill(cred.id, 'password_only')}
-                        className="flex-1 py-1 px-2 rounded bg-petro-600 hover:bg-petro-700 text-white font-bold text-[10.5px] cursor-pointer"
+                        onClick={() => setPendingCapture(null)}
+                        className="px-2.5 py-1 rounded bg-white border border-slate-300 text-slate-700 cursor-pointer"
                       >
-                        Fill Password
+                        Cancel
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-[10.5px] text-slate-500 flex items-center justify-between">
-                <span>Login form detected on HTTPS origin.</span>
-                <button
-                  type="button"
-                  onClick={() => handleOpenDashboard('credentials')}
-                  className="font-bold text-petro-600 hover:underline cursor-pointer"
-                >
-                  + Save Manually
-                </button>
+                ) : (
+                  loginDetected && (
+                    <div className="text-[10.5px] text-slate-500 flex items-center justify-between gap-2">
+                      <span>HTTPS login form detected.</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleExplicitCapturePrompt()}
+                        className="font-bold text-petro-600 hover:underline cursor-pointer shrink-0"
+                      >
+                        + Save Typed Login
+                      </button>
+                    </div>
+                  )
+                )}
               </div>
             )}
 

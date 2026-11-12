@@ -12,6 +12,7 @@ import {
   evaluatePasswordStrength,
 } from '../../src/credentials/password-generator';
 import { decryptData } from '../../src/utils/crypto';
+import { MessageRouter } from '../../src/background/message-router';
 
 describe('Phase 1 — Credential Vault Security & Functional Suite', () => {
   beforeEach(async () => {
@@ -243,5 +244,61 @@ describe('Phase 1 — Credential Vault Security & Functional Suite', () => {
     expect(syncCode).not.toContain('credential_vault');
     expect(syncCode).not.toContain('CredentialVaultRepository');
     expect(syncCode).not.toContain('jobfill_credential_vault');
+  });
+
+  it('8. Supports user-approved login capture (strictly HTTPS & explicit) and trusted IPC unlock/lock sync', async () => {
+    document.body.innerHTML = `
+      <form>
+        <input id="login_user" name="username" type="text" value="applicant_capture_99" />
+        <input id="login_pw" name="password" type="password" value="CapturedSecret#2026" />
+      </form>
+    `;
+
+    // Rejects implicit capture without explicit user trigger & rejects HTTP
+    expect(LoginFormDetector.readExplicitCaptureCandidate(document, 'https://bpsc.teletalk.com.bd', false).ok).toBe(false);
+    expect(LoginFormDetector.readExplicitCaptureCandidate(document, 'http://bpsc.teletalk.com.bd', true).ok).toBe(false);
+
+    const cap = LoginFormDetector.readExplicitCaptureCandidate(document, 'https://bpsc.teletalk.com.bd/apply', true);
+    expect(cap.ok).toBe(true);
+    expect(cap.origin).toBe('https://bpsc.teletalk.com.bd');
+    expect(cap.username).toBe('applicant_capture_99');
+    expect(cap.password).toBe('CapturedSecret#2026');
+
+    await CredentialVaultRepository.initializeVault('SyncMaster#2026', 10);
+    CredentialVaultRepository.lockVault();
+    expect(CredentialVaultRepository.isUnlocked()).toBe(false);
+
+    // Untrusted web page sender blocked from unlocking vault
+    const deniedUnlock: any = await new Promise((resolve) => {
+      MessageRouter.handleMessage(
+        { action: 'CRED_VAULT_UNLOCK', payload: { masterPassword: 'SyncMaster#2026' } },
+        { tab: { id: 42, url: 'https://evil-tab.example.com' } as any },
+        resolve
+      );
+    });
+    expect(deniedUnlock.status).toBe('denied');
+    expect(CredentialVaultRepository.isUnlocked()).toBe(false);
+
+    // Trusted extension Popup/Dashboard sender unlocks cleanly
+    const okUnlock: any = await new Promise((resolve) => {
+      MessageRouter.handleMessage(
+        { action: 'CRED_VAULT_UNLOCK', payload: { masterPassword: 'SyncMaster#2026' } },
+        { url: 'chrome-extension://test-ext-id/popup.html' } as any,
+        resolve
+      );
+    });
+    expect(okUnlock.status).toBe('ok');
+    expect(CredentialVaultRepository.isUnlocked()).toBe(true);
+
+    // Trusted lock sync clears session immediately
+    const okLock: any = await new Promise((resolve) => {
+      MessageRouter.handleMessage(
+        { action: 'CRED_VAULT_LOCK' },
+        { url: 'chrome-extension://test-ext-id/dashboard.html' } as any,
+        resolve
+      );
+    });
+    expect(okLock.status).toBe('ok');
+    expect(CredentialVaultRepository.isUnlocked()).toBe(false);
   });
 });

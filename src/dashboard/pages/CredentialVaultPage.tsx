@@ -160,7 +160,11 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
       return;
     }
     try {
-      await CredentialVaultRepository.initializeVault(masterPassInput, 10);
+      const pw = masterPassInput;
+      await CredentialVaultRepository.initializeVault(pw, 10);
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'CRED_VAULT_UNLOCK', payload: { masterPassword: pw } }, () => void chrome.runtime?.lastError);
+      }
       setMasterPassInput('');
       setMasterPassConfirm('');
       await refreshVaultState();
@@ -173,11 +177,15 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
   const handleUnlockVault = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
-    const ok = await CredentialVaultRepository.unlockVault(masterPassInput);
+    const pw = masterPassInput;
+    const ok = await CredentialVaultRepository.unlockVault(pw);
     setMasterPassInput('');
     if (!ok) {
       setAuthError(bn ? 'ভুল মাস্টার পাসওয়ার্ড অথবা ভল্ট যাচাই ব্যর্থ হয়েছে।' : 'Incorrect master password or corrupted vault verifier.');
       return;
+    }
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'CRED_VAULT_UNLOCK', payload: { masterPassword: pw } }, () => void chrome.runtime?.lastError);
     }
     await refreshVaultState();
     showToast(bn ? '🔓 ক্রেডেনশিয়াল ভল্ট আনলক হয়েছে' : '🔓 Credential Vault unlocked');
@@ -185,6 +193,9 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
 
   const handleLockNow = async () => {
     CredentialVaultRepository.lockVault();
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'CRED_VAULT_LOCK' }, () => void chrome.runtime?.lastError);
+    }
     clearInMemorySecrets();
     const st = await CredentialVaultRepository.getStatus();
     setStatus(st);
