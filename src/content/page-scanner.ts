@@ -60,7 +60,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
       },
       dateOfBirth: p.personal.dob || '',
       gender: p.personal.gender || '',
-      nationality: p.personal.nationality || 'Bangladeshi',
+      nationality: p.personal.nationality || '',
       religion: p.personal.religion || '',
       maritalStatus: p.personal.maritalStatus || '',
       spouseName: {
@@ -176,6 +176,8 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
       orgChoice1: p.special?.orgChoice1 || '',
       orgChoice2: p.special?.orgChoice2 || '',
     },
+    customFields: p.customFields || [],
+    special: (p.special as any) || {},
   };
 }
 
@@ -234,6 +236,36 @@ export class PageScanner {
           ambiguityReason = explanation.rejectionReason || 'Ambiguous matching candidates. Requires user clarification.';
         } else if (explanation.selectedCanonicalId) {
           matchedCanonicalId = explanation.selectedCanonicalId;
+        }
+      }
+
+      // Check 3: Learned Dynamic Custom Fields Matcher (Enables Future Autofill of Learned Fields)
+      if (!matchedCanonicalId && profile.customFields && profile.customFields.length > 0) {
+        const textToMatch = [
+          evidence.name,
+          evidence.id,
+          evidence.label,
+          evidence.placeholder,
+          evidence.ariaLabel,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        for (const cf of profile.customFields) {
+          if (cf.reuseInAutofill === false) continue;
+          const keyRaw = cf.fieldKey.replace(/^custom_/, '').replace(/_/g, ' ').toLowerCase();
+          const labelEn = cf.labelEn ? cf.labelEn.toLowerCase() : '';
+          const labelBn = cf.labelBn ? cf.labelBn.trim() : '';
+
+          if (
+            (keyRaw && textToMatch.includes(keyRaw)) ||
+            (labelEn && textToMatch.includes(labelEn)) ||
+            (labelBn && textToMatch.includes(labelBn))
+          ) {
+            matchedCanonicalId = cf.fieldKey;
+            break;
+          }
         }
       }
 

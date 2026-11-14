@@ -4,6 +4,7 @@
 // of Permanent Profile Information from Job-Specific Circular Declarations.
 
 import { z } from 'zod';
+import { CustomProfileField } from '../../types/profile';
 
 export type CanonicalDataType = 'string' | 'number' | 'date' | 'enum' | 'boolean' | 'attachment';
 export type FieldSource = 'manual' | 'document' | 'confirmed_mapping';
@@ -154,6 +155,8 @@ export interface MasterCanonicalProfile {
   education: EducationProfile;
   experiences: JobExperienceItem[];
   circularPreferences: CircularPreference;
+  customFields?: CustomProfileField[];
+  special?: Record<string, string>;
 }
 
 // Canonical Dot-Notation Identifier Dictionary Resolver
@@ -385,6 +388,19 @@ export function resolveCanonicalValue(profile: MasterCanonicalProfile, canonical
       return profile.circularPreferences.nonCadrePreference;
 
     default:
+      if (canonicalId.startsWith('custom_') || canonicalId.startsWith('custom.')) {
+        const cleanKey = canonicalId.replace(/^custom\./, 'custom_');
+        const cf = profile.customFields?.find(
+          (f) => f.fieldKey === canonicalId || f.fieldKey === cleanKey
+        );
+        if (cf) return cf.value;
+      }
+      if (canonicalId.startsWith('special.') && profile.special) {
+        const specKey = canonicalId.replace('special.', '');
+        if (profile.special[specKey] !== undefined) {
+          return profile.special[specKey];
+        }
+      }
       return '';
   }
 }

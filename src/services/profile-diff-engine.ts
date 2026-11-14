@@ -7,13 +7,22 @@
 // - Normalizes Bengali/English numerals, whitespace, and phone formats.
 // - Provides reversible Undo history for user-approved changes.
 
-import { UserProfile } from '../types/profile';
+import { UserProfile, CustomProfileField, CustomFieldCategory, CustomFieldDataType } from '../types/profile';
 import { ValueNormalizer } from '../intelligence/value-normalizer';
 import { toCanonicalProfile } from '../content/page-scanner';
 import { resolveCanonicalValue } from '../shared/types/canonical-schema';
 import { applyCanonicalProfileFieldUpdate, saveActiveProfile, getActiveProfile } from './storage';
 
-export type ProfileDestination = 'personal' | 'address' | 'education' | 'experience' | 'tracker' | 'vault';
+export type ProfileDestination =
+  | 'personal'
+  | 'family'
+  | 'address'
+  | 'education'
+  | 'experience'
+  | 'skills'
+  | 'tracker'
+  | 'vault'
+  | 'custom';
 
 export interface DetectedProfileDiffItem {
   id: string;
@@ -28,6 +37,11 @@ export interface DetectedProfileDiffItem {
   diffType: 'NEW' | 'CHANGED';
   selected: boolean;
   sectionContext?: string;
+  isSensitive?: boolean;
+  isCustomField?: boolean;
+  category?: CustomFieldCategory;
+  dataType?: CustomFieldDataType;
+  customFieldMeta?: Partial<CustomProfileField>;
 }
 
 export interface ProfileChangeHistoryRecord {
@@ -72,30 +86,79 @@ export const FIELD_METADATA_MAP: Record<
     categoryBn: 'ব্যক্তিগত তথ্য',
   },
   'family.father.name.english': {
-    destination: 'personal',
+    destination: 'family',
     labelEn: "Father's Name (English)",
     labelBn: 'পিতার নাম (ইংরেজি)',
-    categoryEn: 'Personal Profile',
-    categoryBn: 'ব্যক্তিগত তথ্য',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
   },
   'family.father.name.bangla': {
-    destination: 'personal',
+    destination: 'family',
     labelEn: "Father's Name (Bangla)",
     labelBn: 'পিতার নাম (বাংলা)',
-    categoryEn: 'Personal Profile',
-    categoryBn: 'ব্যক্তিগত তথ্য',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
   },
   'family.mother.name.english': {
-    destination: 'personal',
+    destination: 'family',
     labelEn: "Mother's Name (English)",
     labelBn: 'মাতার নাম (ইংরেজি)',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
+  },
+  'family.mother.name.bangla': {
+    destination: 'family',
+    labelEn: "Mother's Name (Bangla)",
+    labelBn: 'মাতার নাম (বাংলা)',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
+  },
+  'family.spouse.name.english': {
+    destination: 'family',
+    labelEn: "Spouse's Name (English)",
+    labelBn: 'স্বামী/স্ত্রীর নাম (ইংরেজি)',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
+  },
+  'family.spouse.name.bangla': {
+    destination: 'family',
+    labelEn: "Spouse's Name (Bangla)",
+    labelBn: 'স্বামী/স্ত্রীর নাম (বাংলা)',
+    categoryEn: 'Family Details',
+    categoryBn: 'পারিবারিক তথ্য',
+  },
+  'applicant.nationality': {
+    destination: 'personal',
+    labelEn: 'Nationality',
+    labelBn: 'জাতীয়তা',
     categoryEn: 'Personal Profile',
     categoryBn: 'ব্যক্তিগত তথ্য',
   },
-  'family.mother.name.bangla': {
+  'special.bloodGroup': {
     destination: 'personal',
-    labelEn: "Mother's Name (Bangla)",
-    labelBn: 'মাতার নাম (বাংলা)',
+    labelEn: 'Blood Group',
+    labelBn: 'রক্তের গ্রুপ',
+    categoryEn: 'Personal Profile',
+    categoryBn: 'ব্যক্তিগত তথ্য',
+  },
+  'special.heightCm': {
+    destination: 'personal',
+    labelEn: 'Height (cm)',
+    labelBn: 'উচ্চতা (সে.মি.)',
+    categoryEn: 'Personal Profile',
+    categoryBn: 'ব্যক্তিগত তথ্য',
+  },
+  'special.weightKg': {
+    destination: 'personal',
+    labelEn: 'Weight (kg)',
+    labelBn: 'ওজন (কেজি)',
+    categoryEn: 'Personal Profile',
+    categoryBn: 'ব্যক্তিগত তথ্য',
+  },
+  'special.examCentre': {
+    destination: 'personal',
+    labelEn: 'Exam Centre',
+    labelBn: 'পরীক্ষা কেন্দ্র',
     categoryEn: 'Personal Profile',
     categoryBn: 'ব্যক্তিগত তথ্য',
   },
@@ -547,6 +610,48 @@ export class ProfileDiffEngine {
       return meta;
     }
 
+    if (canonicalKey.startsWith('custom_') || canonicalKey.startsWith('custom.')) {
+      const clean = canonicalKey.replace(/^custom_/, '').replace(/^custom\./, '').replace(/_/g, ' ');
+      const title = clean.charAt(0).toUpperCase() + clean.slice(1);
+      return {
+        destination: 'custom',
+        labelEn: title,
+        labelBn: title,
+        categoryEn: 'Custom Profile Fields',
+        categoryBn: 'কাস্টম প্রোফাইল তথ্য',
+      };
+    }
+
+    if (canonicalKey.startsWith('family.')) {
+      return {
+        destination: 'family',
+        labelEn: canonicalKey.replace('family.', ''),
+        labelBn: 'পারিবারিক তথ্য',
+        categoryEn: 'Family Details',
+        categoryBn: 'পারিবারিক তথ্য',
+      };
+    }
+
+    if (canonicalKey.startsWith('skills.') || canonicalKey.startsWith('skill.')) {
+      return {
+        destination: 'skills',
+        labelEn: canonicalKey.replace('skills.', '').replace('skill.', ''),
+        labelBn: 'দক্ষতা',
+        categoryEn: 'Skills & Qualifications',
+        categoryBn: 'দক্ষতা ও যোগ্যতা',
+      };
+    }
+
+    if (canonicalKey.startsWith('special.')) {
+      return {
+        destination: 'personal',
+        labelEn: canonicalKey.replace('special.', ''),
+        labelBn: 'ব্যক্তিগত তথ্য',
+        categoryEn: 'Personal Profile',
+        categoryBn: 'ব্যক্তিগত তথ্য',
+      };
+    }
+
     if (canonicalKey.startsWith('address.')) {
       return {
         destination: 'address',
@@ -600,9 +705,75 @@ export class ProfileDiffEngine {
    * Retrieves the current saved string value of a canonical key from UserProfile.
    */
   public static getSavedValue(profile: UserProfile, canonicalKey: string): string {
+    if (canonicalKey.startsWith('custom_') || canonicalKey.startsWith('custom.')) {
+      const cleanKey = canonicalKey.replace(/^custom\./, 'custom_');
+      const found = profile.customFields?.find(
+        (f) => f.fieldKey === canonicalKey || f.fieldKey === cleanKey
+      );
+      return found ? found.value.trim() : '';
+    }
+    if (canonicalKey.startsWith('special.')) {
+      const specKey = canonicalKey.replace('special.', '');
+      const val = (profile.special as any)?.[specKey];
+      return val ? String(val).trim() : '';
+    }
     const canonical = toCanonicalProfile(profile);
     const resolved = resolveCanonicalValue(canonical, canonicalKey);
     return resolved ? String(resolved).trim() : '';
+  }
+
+  /**
+   * Checks whether a field contains sensitive Personally Identifiable Information (PII).
+   * Sensitive fields require explicit user review and NEVER auto-save silently.
+   */
+  public static isSensitiveField(canonicalKey: string): boolean {
+    const lower = canonicalKey.toLowerCase();
+    return (
+      lower.includes('mobile') ||
+      lower.includes('phone') ||
+      lower.includes('email') ||
+      lower.includes('nid') ||
+      lower.includes('nationalid') ||
+      lower.includes('birthreg') ||
+      lower.includes('passport') ||
+      lower.includes('dateofbirth') ||
+      lower.includes('dob') ||
+      lower.includes('father') ||
+      lower.includes('mother') ||
+      lower.includes('spouse') ||
+      lower.includes('address') ||
+      lower.includes('village') ||
+      lower.includes('district') ||
+      lower.includes('upazila') ||
+      lower.includes('postcode') ||
+      lower.includes('education') ||
+      lower.includes('ssc') ||
+      lower.includes('hsc') ||
+      lower.includes('graduation') ||
+      lower.includes('masters')
+    );
+  }
+
+  /**
+   * Determines if a detected diff item is safe for auto-saving when the user
+   * setting "Automatically Save Approved Safe Profile Changes" is enabled.
+   * Invariant: Sensitive PII NEVER auto-saves!
+   * Passwords, OTP, PIN, CAPTCHA NEVER enter profile or auto-save!
+   */
+  public static canAutoSave(item: DetectedProfileDiffItem, autoSaveEnabled: boolean): boolean {
+    if (!autoSaveEnabled) return false;
+    if (
+      item.destination === 'vault' ||
+      item.destination === 'tracker' ||
+      item.canonicalKey.includes('password') ||
+      item.canonicalKey.includes('security')
+    ) {
+      return false;
+    }
+    if (item.isSensitive || this.isSensitiveField(item.canonicalKey)) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -672,6 +843,12 @@ export class ProfileDiffEngine {
       label?: string;
       value: string;
       sectionContext?: string;
+      destination?: ProfileDestination;
+      isSensitive?: boolean;
+      isCustomField?: boolean;
+      category?: CustomFieldCategory;
+      dataType?: CustomFieldDataType;
+      customFieldMeta?: Partial<CustomProfileField>;
     }>,
     profile: UserProfile
   ): DetectedProfileDiffItem[] {
@@ -687,12 +864,15 @@ export class ProfileDiffEngine {
       const comparison = this.compareField(item.canonicalKey, item.value, profile);
       if (comparison.diffType === 'NEW' || comparison.diffType === 'CHANGED') {
         const meta = this.resolveDestination(item.canonicalKey);
+        const isSens = item.isSensitive !== undefined ? item.isSensitive : this.isSensitiveField(item.canonicalKey);
+        const isCustom = Boolean(item.isCustomField || item.canonicalKey.startsWith('custom_') || item.canonicalKey.startsWith('custom.'));
+
         diffs.push({
           id: `diff_${item.canonicalKey}_${Date.now()}`,
           canonicalKey: item.canonicalKey,
           fieldLabel: item.label || meta.labelEn,
           fieldLabelBn: meta.labelBn,
-          destination: meta.destination,
+          destination: item.destination || meta.destination,
           destinationLabel: meta.categoryEn,
           destinationLabelBn: meta.categoryBn,
           oldValue: comparison.oldValue,
@@ -700,6 +880,19 @@ export class ProfileDiffEngine {
           diffType: comparison.diffType,
           selected: true, // Selected by default for user convenience
           sectionContext: item.sectionContext,
+          isSensitive: isSens,
+          isCustomField: isCustom,
+          category: item.category,
+          dataType: item.dataType,
+          customFieldMeta: item.customFieldMeta || (isCustom ? {
+            fieldKey: item.canonicalKey,
+            labelEn: item.label || meta.labelEn,
+            labelBn: meta.labelBn,
+            value: comparison.normalizedNewValue,
+            category: item.category || 'other',
+            dataType: item.dataType || 'text',
+            reuseInAutofill: true,
+          } : undefined),
         });
       }
     }
@@ -728,7 +921,12 @@ export class ProfileDiffEngine {
       if (!item.selected || !item.canonicalKey || !item.newValue) continue;
 
       const previousValue = this.getSavedValue(profile, item.canonicalKey);
-      const ok = applyCanonicalProfileFieldUpdate(profile, item.canonicalKey, item.newValue);
+      const ok = applyCanonicalProfileFieldUpdate(
+        profile,
+        item.canonicalKey,
+        item.newValue,
+        item.customFieldMeta
+      );
 
       if (ok) {
         appliedCount += 1;
@@ -827,10 +1025,16 @@ export class ProfileDiffEngine {
     }
 
     const profile = activeProfile || (await getActiveProfile());
-    // Revert the profile field back to previousValue
-    const ok = applyCanonicalProfileFieldUpdate(profile, entry.fieldKey, entry.previousValue);
-    if (!ok) {
-      throw new Error(`Failed to restore previous value for ${entry.fieldKey}`);
+    // Revert the profile field back to previousValue (or remove if newly added custom field)
+    if (entry.fieldKey.startsWith('custom_') && !entry.previousValue) {
+      if (profile.customFields) {
+        profile.customFields = profile.customFields.filter((f) => f.fieldKey !== entry.fieldKey);
+      }
+    } else {
+      const ok = applyCanonicalProfileFieldUpdate(profile, entry.fieldKey, entry.previousValue);
+      if (!ok) {
+        throw new Error(`Failed to restore previous value for ${entry.fieldKey}`);
+      }
     }
 
     profile.updatedAt = new Date().toISOString();

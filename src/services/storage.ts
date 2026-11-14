@@ -1,4 +1,4 @@
-import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings } from '../types/profile';
+import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings, CustomProfileField } from '../types/profile';
 import { createEmptyProfile, sampleDemoProfile } from '../types/defaults';
 import {
   EncryptedPayload,
@@ -836,6 +836,7 @@ export const DEFAULT_GENERAL_SETTINGS: AppGeneralSettings = {
   enableBengaliConversion: true,
   enableSoundEffects: false,
   highlightFilledFields: true,
+  autoSaveSafeProfileChanges: false,
 };
 
 // Application History Storage Methods (IndexedDB primary when available, storage fallback)
@@ -865,6 +866,15 @@ export async function saveGeneralSettings(settings: Partial<AppGeneralSettings>)
   const current = await getGeneralSettings();
   const updated = { ...current, ...settings };
   await storageAdapter.set({ [STORAGE_KEY_GENERAL_SETTINGS]: updated });
+}
+
+export async function getAutoSaveSafeFieldsSetting(): Promise<boolean> {
+  const settings = await getGeneralSettings();
+  return Boolean(settings.autoSaveSafeProfileChanges);
+}
+
+export async function setAutoSaveSafeFieldsSetting(enabled: boolean): Promise<void> {
+  await saveGeneralSettings({ autoSaveSafeProfileChanges: enabled });
 }
 
 function ensureMasters(t: UserProfile): void {
@@ -917,12 +927,14 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'contact.email': (t, v) => { t.personal.email = v; },
   'address.present.careOf': (t, v) => { t.address.present.careOf = v; },
   'address.present.village': (t, v) => { t.address.present.village = v; },
+  'address.present.division': (t, v) => { t.address.present.division = v; },
   'address.present.district': (t, v) => { t.address.present.district = v; },
   'address.present.upazila': (t, v) => { t.address.present.upazila = v; },
   'address.present.postOffice': (t, v) => { t.address.present.postOffice = v; },
   'address.present.postCode': (t, v) => { t.address.present.postCode = v; },
   'address.permanent.careOf': (t, v) => { t.address.permanent.careOf = v; },
   'address.permanent.village': (t, v) => { t.address.permanent.village = v; },
+  'address.permanent.division': (t, v) => { t.address.permanent.division = v; },
   'address.permanent.district': (t, v) => { t.address.permanent.district = v; },
   'address.permanent.upazila': (t, v) => { t.address.permanent.upazila = v; },
   'address.permanent.postOffice': (t, v) => { t.address.permanent.postOffice = v; },
@@ -930,6 +942,7 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.ssc.examination': (t, v) => { t.ssc.examination = v; },
   'education.ssc.board': (t, v) => { t.ssc.board = v; },
   'education.ssc.roll': (t, v) => { t.ssc.rollNumber = v; },
+  'education.ssc.registration': (t, v) => { t.ssc.registrationNumber = v; },
   'education.ssc.group': (t, v) => { t.ssc.groupSubject = v; },
   'education.ssc.result': (t, v) => { t.ssc.resultType = v as any; },
   'education.ssc.gpa': (t, v) => { t.ssc.gpa = v; },
@@ -937,6 +950,7 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.hsc.examination': (t, v) => { t.hsc.examination = v; },
   'education.hsc.board': (t, v) => { t.hsc.board = v; },
   'education.hsc.roll': (t, v) => { t.hsc.rollNumber = v; },
+  'education.hsc.registration': (t, v) => { t.hsc.registrationNumber = v; },
   'education.hsc.group': (t, v) => { t.hsc.groupSubject = v; },
   'education.hsc.result': (t, v) => { t.hsc.resultType = v as any; },
   'education.hsc.gpa': (t, v) => { t.hsc.gpa = v; },
@@ -1007,16 +1021,72 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   },
   'circular.orgChoice1': (t, v) => { t.special.orgChoice1 = v; },
   'circular.orgChoice2': (t, v) => { t.special.orgChoice2 = v; },
+  'special.bloodGroup': (t, v) => { t.special.bloodGroup = v; },
+  'special.heightCm': (t, v) => { t.special.heightCm = v; },
+  'special.weightKg': (t, v) => { t.special.weightKg = v; },
+  'special.chestCm': (t, v) => { t.special.chestCm = v; },
+  'special.examCentre': (t, v) => { t.special.examCentre = v; },
+  'special.questionVersion': (t, v) => { t.special.questionVersion = v as any; },
+  'special.cadrePreference': (t, v) => { t.special.cadrePreference = v; },
+  'special.nonCadrePreference': (t, v) => { t.special.nonCadrePreference = v; },
+  'special.freedomFighterCertNo': (t, v) => { t.special.freedomFighterCertNo = v; },
 };
 
 export function applyCanonicalProfileFieldUpdate(
   target: UserProfile,
   canonicalKey: string,
-  newValue: string
+  newValue: string,
+  customFieldMeta?: Partial<CustomProfileField>
 ): boolean {
   const updater = CANONICAL_FIELD_UPDATER[canonicalKey];
-  if (!updater) return false;
-  updater(target, newValue);
-  return true;
+  if (updater) {
+    updater(target, newValue);
+    return true;
+  }
+
+  // Handle custom dynamic fields: custom_* or custom.* or any dynamic user-learned field
+  if (canonicalKey.startsWith('custom_') || canonicalKey.startsWith('custom.')) {
+    if (!target.customFields) {
+      target.customFields = [];
+    }
+    const cleanKey = canonicalKey.replace(/^custom\./, 'custom_');
+    const existingIndex = target.customFields.findIndex(
+      (f) => f.fieldKey === canonicalKey || f.fieldKey === cleanKey
+    );
+
+    const now = Date.now();
+    if (existingIndex >= 0) {
+      target.customFields[existingIndex].value = newValue;
+      target.customFields[existingIndex].updatedAt = now;
+      if (customFieldMeta?.labelEn) target.customFields[existingIndex].labelEn = customFieldMeta.labelEn;
+      if (customFieldMeta?.labelBn) target.customFields[existingIndex].labelBn = customFieldMeta.labelBn;
+      if (customFieldMeta?.category) target.customFields[existingIndex].category = customFieldMeta.category;
+      if (customFieldMeta?.dataType) target.customFields[existingIndex].dataType = customFieldMeta.dataType;
+      if (customFieldMeta?.reuseInAutofill !== undefined) {
+        target.customFields[existingIndex].reuseInAutofill = customFieldMeta.reuseInAutofill;
+      }
+    } else {
+      const rawName = cleanKey.replace(/^custom_/, '').replace(/_/g, ' ');
+      const labelEn = customFieldMeta?.labelEn || rawName.charAt(0).toUpperCase() + rawName.slice(1);
+      const labelBn = customFieldMeta?.labelBn || labelEn;
+      const newCustomField: CustomProfileField = {
+        id: customFieldMeta?.id || `cf_${now}_${Math.random().toString(36).substring(2, 7)}`,
+        fieldKey: cleanKey,
+        labelEn,
+        labelBn,
+        value: newValue,
+        category: customFieldMeta?.category || 'other',
+        dataType: customFieldMeta?.dataType || 'text',
+        description: customFieldMeta?.description,
+        reuseInAutofill: customFieldMeta?.reuseInAutofill !== false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      target.customFields.push(newCustomField);
+    }
+    return true;
+  }
+
+  return false;
 }
 

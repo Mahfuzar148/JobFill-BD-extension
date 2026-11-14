@@ -179,6 +179,7 @@ export const createEmptyProfile = (name = 'Default Profile'): UserProfile => ({
     expectedSalaryNote: '',
     careerGoals: [],
   },
+  customFields: [],
 });
 
 export const sampleDemoProfile: UserProfile =

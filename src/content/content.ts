@@ -2,7 +2,7 @@
 // Simplified Profile-First Autofill Architecture
 // FIELD NAME + SECTION CONTEXT -> MATCH PROFILE FIELD -> GET SAVED VALUE -> FILL WEBSITE FIELD -> VERIFY RESULT
 
-import { UserProfile, DocumentCategory, AutofillFieldAuditItem, AutofillFieldFillStatus } from '../types/profile';
+import { UserProfile, DocumentCategory, AutofillFieldAuditItem, AutofillFieldFillStatus, CustomFieldCategory, CustomFieldDataType } from '../types/profile';
 import { FieldCompletenessEntry } from '../types/field-status';
 import { createEmptyProfile } from '../types/defaults';
 import { PageScanner, PageScanResult, toCanonicalProfile } from './page-scanner';
@@ -16,7 +16,8 @@ import { MappingRepository } from '../database/mapping-repository';
 import { DocumentRepository } from '../database/document-repository';
 import { extractElementFingerprint } from '../intelligence/mapping-memory';
 import { DynamicDomObserver } from './dom-observer';
-import { addAutofillHistory, applyCanonicalProfileFieldUpdate } from '../services/storage';
+import { addAutofillHistory, applyCanonicalProfileFieldUpdate, getAutoSaveSafeFieldsSetting } from '../services/storage';
+import { FieldClassifier } from '../intelligence/field-classifier';
 import { sanitizeHistoryFieldRecord } from '../database/history-repository';
 import {
   isExcludedSiteUrl,
@@ -36,6 +37,7 @@ import {
 import {
   ProfileDiffEngine,
   DetectedProfileDiffItem,
+  ProfileDestination,
 } from '../services/profile-diff-engine';
 import {
   showProfileUpdatePill,
@@ -686,10 +688,12 @@ async function setupSmartLoginAutofill() {
   }
 }
 
+let isAutofillingActive = false;
 let profileDiffDebounceTimer: any = null;
 let currentDetectedDiffs: DetectedProfileDiffItem[] = [];
 
 async function evaluateLiveFormProfileDiffs(): Promise<void> {
+  if (isAutofillingActive) return;
   if (typeof window === 'undefined' || isExcludedSiteUrl(window.location?.href)) return;
   if (!currentProfile || isVaultLocked || currentProfile.id === 'locked_vault_session') return;
 
@@ -708,77 +712,85 @@ async function evaluateLiveFormProfileDiffs(): Promise<void> {
 
   if (inputs.length < 2) return;
 
-  const scannedItems: Array<{ canonicalKey?: string; label?: string; value: string; sectionContext?: string }> = [];
+  const scannedItems: Array<{
+    canonicalKey?: string;
+    label?: string;
+    value: string;
+    sectionContext?: string;
+    destination?: ProfileDestination;
+    isSensitive?: boolean;
+    isCustomField?: boolean;
+    category?: CustomFieldCategory;
+    dataType?: CustomFieldDataType;
+  }> = [];
 
   for (const input of inputs) {
     const val = input.value?.trim();
     if (!val) continue;
 
-    const existingPlanItem = currentScanResult?.planItems.find((p) => p.element === input);
-    let canonicalKey = existingPlanItem?.canonicalId;
-
-    if (!canonicalKey) {
-      const idOrName = (input.id || input.name || '').toLowerCase();
-      if (idOrName.includes('mobile') || idOrName.includes('phone')) {
-        canonicalKey = 'contact.mobile';
-      } else if (idOrName.includes('email')) {
-        canonicalKey = 'contact.email';
-      } else if (idOrName.includes('nid') || idOrName.includes('national_id') || idOrName.includes('nationalid')) {
-        canonicalKey = 'identity.nationalId';
-      } else if (idOrName.includes('birth_reg') || idOrName.includes('birthreg') || idOrName.includes('brn')) {
-        canonicalKey = 'identity.birthRegistration';
-      } else if (idOrName.includes('applicant_name') || idOrName.includes('applicantname')) {
-        canonicalKey = 'applicant.fullName.english';
-      } else if (idOrName.includes('father_name') || idOrName.includes('fathername')) {
-        canonicalKey = 'family.father.name.english';
-      } else if (idOrName.includes('mother_name') || idOrName.includes('mothername')) {
-        canonicalKey = 'family.mother.name.english';
-      } else if (
-        idOrName.includes('present_address') ||
-        idOrName.includes('presentaddress') ||
-        (idOrName.includes('village') && !idOrName.includes('perm'))
-      ) {
-        canonicalKey = 'address.present.village';
-      } else if (
-        idOrName.includes('permanent_address') ||
-        (idOrName.includes('village') && idOrName.includes('perm'))
-      ) {
-        canonicalKey = 'address.permanent.village';
-      } else if (idOrName.includes('ssc_year') || (idOrName.includes('year') && idOrName.includes('ssc'))) {
-        canonicalKey = 'education.ssc.passingYear';
-      } else if (idOrName.includes('hsc_year') || (idOrName.includes('year') && idOrName.includes('hsc'))) {
-        canonicalKey = 'education.hsc.passingYear';
-      } else if (
-        idOrName.includes('grad_year') ||
-        (idOrName.includes('year') &&
-          (idOrName.includes('grad') || idOrName.includes('honours') || idOrName.includes('degree')))
-      ) {
-        canonicalKey = 'education.graduation.passingYear';
-      }
+    const classification = FieldClassifier.classifyElement(input);
+    if (!classification.isSupported || classification.isBlockedSecurity) {
+      continue;
     }
 
-    if (canonicalKey) {
-      const label =
-        input.getAttribute('aria-label') ||
-        (input.labels && input.labels[0]?.textContent?.trim()) ||
-        input.getAttribute('placeholder') ||
-        input.name ||
-        canonicalKey;
-      scannedItems.push({
-        canonicalKey,
-        label,
-        value: val,
-      });
-    }
+    scannedItems.push({
+      canonicalKey: classification.canonicalKey,
+      label: classification.fieldLabelEn,
+      value: val,
+      destination: classification.destination as ProfileDestination,
+      isSensitive: classification.isSensitive,
+      isCustomField: classification.isCustomField,
+      category: classification.category,
+      dataType: classification.dataType,
+    });
   }
 
   const diffs = ProfileDiffEngine.detectFormDiffs(scannedItems, currentProfile);
-  currentDetectedDiffs = diffs;
 
-  if (diffs.length > 0) {
+  // Auto-Save Safe Profile Changes Check
+  let remainingDiffs = diffs;
+  try {
+    const autoSaveSafeEnabled = await getAutoSaveSafeFieldsSetting();
+    if (autoSaveSafeEnabled) {
+      const autoSavable = diffs.filter((d) => ProfileDiffEngine.canAutoSave(d, true));
+      if (autoSavable.length > 0) {
+        if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+          const res: any = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              {
+                action: 'PROFILE_UPDATE_APPROVE',
+                payload: { approvedItems: autoSavable, sourceOrigin: window.location.origin },
+              },
+              resolve
+            );
+          });
+          if (res?.updatedProfile) {
+            currentProfile = res.updatedProfile;
+          }
+        } else {
+          const res = await ProfileDiffEngine.applyApprovedDiffs(
+            currentProfile,
+            autoSavable,
+            window.location.origin
+          );
+          currentProfile = res.updatedProfile;
+        }
+        remainingDiffs = diffs.filter((d) => !autoSavable.includes(d));
+      }
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Auto-save check error:', err);
+  }
+
+  currentDetectedDiffs = remainingDiffs;
+
+  if (remainingDiffs.length > 0) {
     const lang = (localStorage.getItem('jobfill_language') === 'en' ? 'en' : 'bn') as 'bn' | 'en';
+    const newCount = remainingDiffs.filter((d) => d.diffType === 'NEW').length;
+    const changeCount = remainingDiffs.filter((d) => d.diffType === 'CHANGED').length;
+
     showProfileUpdatePill(
-      diffs.length,
+      remainingDiffs.length,
       () => {
         showProfileUpdateReviewModal({
           diffs: currentDetectedDiffs,
@@ -823,7 +835,8 @@ async function evaluateLiveFormProfileDiffs(): Promise<void> {
         });
       },
       () => {},
-      lang
+      lang,
+      { newCount, changeCount }
     );
   } else {
     removeProfileUpdatePill();
@@ -836,14 +849,17 @@ function setupProfileDiffObserver() {
   (window as any).__jobfillProfileDiffObserverAttached = true;
 
   const handleInputOrChange = () => {
+    if (isAutofillingActive) return;
     clearTimeout(profileDiffDebounceTimer);
     profileDiffDebounceTimer = setTimeout(() => {
+      if (isAutofillingActive) return;
       void evaluateLiveFormProfileDiffs();
-    }, 600);
+    }, 500);
   };
 
   document.addEventListener('input', handleInputOrChange, true);
   document.addEventListener('change', handleInputOrChange, true);
+  document.addEventListener('blur', handleInputOrChange, true);
 }
 
 // Load active profile from trusted MV3 Service Worker or fallback local cache
@@ -1046,9 +1062,11 @@ async function confirmInsecureHttpSensitiveFillIfNeeded(items: FillPlanItem[]): 
 }
 
 async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null> {
-  await loadProfile();
-  await loadSettings();
-  currentScanResult = await UniversalPageScanner.scanPage(currentProfile, document);
+  isAutofillingActive = true;
+  try {
+    await loadProfile();
+    await loadSettings();
+    currentScanResult = await UniversalPageScanner.scanPage(currentProfile, document);
 
   if (!currentScanResult || currentScanResult.planItems.length === 0) {
     lastCompletenessReport = [];
@@ -1183,6 +1201,11 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     imagesAttached,
     pendingDocsCount,
   };
+  } finally {
+    setTimeout(() => {
+      isAutofillingActive = false;
+    }, 800);
+  }
 }
 
 async function recordAutofillHistoryEntry(summary: TwoPassExecutionSummary): Promise<void> {

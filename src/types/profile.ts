@@ -284,6 +284,31 @@ export interface StudentCareerProfile {
   careerGoals: CareerGoalItem[];
 }
 
+export type CustomFieldCategory =
+  | 'personal'
+  | 'family'
+  | 'address'
+  | 'education'
+  | 'experience'
+  | 'skills'
+  | 'other';
+
+export type CustomFieldDataType = 'text' | 'number' | 'date' | 'select' | 'boolean';
+
+export interface CustomProfileField {
+  id: string;
+  fieldKey: string;
+  labelEn: string;
+  labelBn: string;
+  value: string;
+  category: CustomFieldCategory;
+  dataType: CustomFieldDataType;
+  description?: string;
+  reuseInAutofill: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // --- Complete Profile Database Schema ---
 export interface UserProfile {
   id: string;
@@ -305,6 +330,7 @@ export interface UserProfile {
   references: ReferencePerson[];
   documents: DocumentItem[];
   careerProfile?: StudentCareerProfile;
+  customFields?: CustomProfileField[];
 }
 
 // --- Security & Settings Schema ---
@@ -421,5 +447,6 @@ export interface AppGeneralSettings {
   enableBengaliConversion: boolean;
   enableSoundEffects: boolean;
   highlightFilledFields: boolean;
+  autoSaveSafeProfileChanges?: boolean; // Default false. Safe non-PII only; Sensitive PII always requires user review.
 }
 
