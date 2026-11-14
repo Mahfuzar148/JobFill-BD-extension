@@ -227,6 +227,22 @@ export function expandQueryTerms(rawToken: string): string[] {
 
 export function buildJobSearchIndexEntry(job: NormalizedJobCircular): SearchIndexEntry {
   const orgAliases = getOrganizationSearchAliases(job);
+  const gradeTokens: string[] = [];
+  if (job.gradeNumber) {
+    gradeTokens.push(
+      `grade ${job.gradeNumber}`,
+      `grade-${job.gradeNumber}`,
+      `${job.gradeNumber}th grade`,
+      `${job.gradeNumber}th`,
+      `গ্রেড ${job.gradeNumber}`,
+      `গ্রেড-${job.gradeNumber}`,
+      `${job.gradeNumber}ম গ্রেড`,
+      `${job.gradeNumber}তম গ্রেড`
+    );
+  }
+  if (job.gradeLabel) gradeTokens.push(job.gradeLabel);
+  if (job.gradeOriginalText) gradeTokens.push(job.gradeOriginalText);
+
   const parts = [
     job.jobTitle,
     job.titleBn || '',
@@ -235,6 +251,7 @@ export function buildJobSearchIndexEntry(job: NormalizedJobCircular): SearchInde
     job.organizationBn || '',
     job.organizationShortName || '',
     ...orgAliases,
+    ...gradeTokens,
     job.sourceId,
     job.sourceId.replace(/[_-]+/g, ' '),
     job.sourceName,

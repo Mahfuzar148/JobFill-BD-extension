@@ -24,6 +24,7 @@ import {
   Lock,
   AlertTriangle,
   Calculator,
+  Award,
 } from 'lucide-react';
 import { NormalizedJobCircular, ApplicationStatus } from '../types/job.types';
 import { formatDhakaDate, parseDeadlineDate } from '../services/deadline-parser';
@@ -244,6 +245,17 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700">
                 {job.sourceName}
               </span>
+              {job.gradeNumber ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700">
+                  <Award className="w-3 h-3 text-amber-600" />
+                  {job.gradeLabel || `Grade ${job.gradeNumber}`}
+                </span>
+              ) : job.category === 'Government' ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+                  <Award className="w-3 h-3 text-slate-400" />
+                  {bn ? 'গ্রেড উল্লেখ নেই' : 'Grade Not Specified'}
+                </span>
+              ) : null}
               {cleanMemo && (
                 <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">
                   {cleanMemo}
@@ -385,10 +397,40 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
         </div>
 
         {/* Key Metadata Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" /> {bn ? 'শিক্ষাগত যোগ্যতা' : 'Educational Qualification'}</div>
-            <div className="font-bold text-slate-800 dark:text-slate-100">{job.qualification || 'Any Qualification'}</div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.qualification || 'Any Qualification'}
+              {job.minGpa ? ` (Min GPA: ${job.minGpa})` : job.minCgpa ? ` (Min CGPA: ${job.minCgpa})` : ''}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              {bn ? 'সরকারি বেতন গ্রেড' : 'Govt Pay Grade'}
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.gradeNumber ? (
+                <span className="text-amber-700 dark:text-amber-400">
+                  {job.gradeLabel || `Grade ${job.gradeNumber}`}
+                </span>
+              ) : job.category === 'Private' || job.gradeVerificationStatus === 'NOT_APPLICABLE' ? (
+                <span className="text-slate-500 font-medium">
+                  {bn ? 'প্রযোজ্য নয় (বেসরকারি)' : 'Not Applicable (Private)'}
+                </span>
+              ) : (
+                <span className="text-slate-500 font-medium">
+                  {bn ? 'গ্রেড উল্লেখ নেই' : 'Grade Not Specified'}
+                </span>
+              )}
+            </div>
+            {job.gradeOriginalText && (
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                {bn ? 'চিহ্নিত: ' : 'From: '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">"{job.gradeOriginalText}"</span>
+              </div>
+            )}
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {bn ? 'কর্মস্থল / স্থান' : 'Location'}</div>
@@ -400,6 +442,13 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               {job.salary || (bn ? 'অফিশিয়াল বিজ্ঞপ্তি দেখুন' : 'Per Official Circular')}
               {job.vacancies ? ` • ${job.vacancies} Posts` : ''}
             </div>
+            {(job.salaryMin || job.salaryMax) && (
+              <div className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                {job.salaryMin ? `৳${job.salaryMin.toLocaleString()}` : ''}
+                {job.salaryMin && job.salaryMax ? ' - ' : ''}
+                {job.salaryMax ? `৳${job.salaryMax.toLocaleString()}` : ''}
+              </div>
+            )}
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {bn ? 'প্রকাশ ও আবেদন শুরু' : 'Published & Start Date'}</div>
@@ -420,7 +469,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
                 : bn ? 'শেষ তারিখ যাচাইকৃত নয়' : 'Deadline Not Verified'}
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 sm:col-span-2">
             <div className="text-slate-400 font-semibold mb-0.5">{bn ? 'অভিজ্ঞতা / বয়স / ফি' : 'Experience / Age / Fee'}</div>
             <div className="font-bold text-slate-800 dark:text-slate-100">
               {[job.experience, job.ageRequirement, job.applicationFee].filter(Boolean).join(' • ') || (bn ? 'বিজ্ঞপ্তিতে উল্লিখিত' : 'See official circular')}

@@ -136,8 +136,26 @@ export const ArbeitnowAdapter: JobSourceAdapter = {
       };
     }
 
-    const res = await safePublicGet(ARBEITNOW_API_URL, 'application/json,*/*', signal);
-    if (!res.ok) {
+    const maxPages = 3;
+    const collectedRaw: RawSourceJobItem[] = [];
+    let lastError: string | undefined;
+
+    for (let p = 1; p <= maxPages; p++) {
+      if (signal?.aborted) break;
+      const pageUrl = p === 1 ? ARBEITNOW_API_URL : `${ARBEITNOW_API_URL}?page=${p}`;
+      const res = await safePublicGet(pageUrl, 'application/json,*/*', signal);
+      if (!res.ok) {
+        if (p === 1) {
+          lastError = res.blockedReason || `HTTP ${res.status}`;
+        }
+        break;
+      }
+      const pageItems = parseArbeitnowApiJson(res.body, 25);
+      if (pageItems.length === 0) break;
+      collectedRaw.push(...pageItems);
+    }
+
+    if (collectedRaw.length === 0 && lastError) {
       const outcome: SourceFetchOutcome = {
         sourceId: this.sourceId,
         sourceName: this.sourceName,
@@ -147,16 +165,15 @@ export const ArbeitnowAdapter: JobSourceAdapter = {
         success: false,
         jobs: [],
         checkedAt,
-        accessNotes: res.blockedReason || 'Arbeitnow public REST API unavailable.',
+        accessNotes: lastError || 'Arbeitnow public REST API unavailable.',
         directPortalUrl: ARBEITNOW_HOME_URL,
-        error: res.blockedReason,
+        error: lastError,
       };
       outcome.connectionStatus = deriveSourceConnectionStatus(outcome);
       return outcome;
     }
 
-    const rawItems = parseArbeitnowApiJson(res.body);
-    const jobs = rawItems.map((raw) => this.parseJob(raw, checkedAt)).filter((j) => this.validateJob(j).isValid);
+    const jobs = collectedRaw.map((raw) => this.parseJob(raw, checkedAt)).filter((j) => this.validateJob(j).isValid);
 
     const outcome: SourceFetchOutcome = {
       sourceId: this.sourceId,
@@ -167,7 +184,7 @@ export const ArbeitnowAdapter: JobSourceAdapter = {
       success: true,
       jobs,
       checkedAt,
-      accessNotes: `Fetched ${jobs.length} remote international opening(s) via Arbeitnow REST API.`,
+      accessNotes: `Fetched ${jobs.length} remote international opening(s) across pagination pages via Arbeitnow REST API.`,
       directPortalUrl: ARBEITNOW_HOME_URL,
     };
     outcome.connectionStatus = deriveSourceConnectionStatus(outcome);

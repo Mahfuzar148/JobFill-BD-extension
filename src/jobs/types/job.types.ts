@@ -54,6 +54,27 @@ export type SourceVerificationStatus =
   | 'user_submitted'
   | 'unverified';
 
+export type GovernmentJobGrade =
+  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+  | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
+
+export type GradeVerificationStatus =
+  | 'OFFICIAL_MATCH'
+  | 'TEXT_EXTRACTED_UNVERIFIED'
+  | 'AMBIGUOUS'
+  | 'NOT_SPECIFIED'
+  | 'NOT_APPLICABLE';
+
+export type JobGradeCategory =
+  | 'All'
+  | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10'
+  | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20'
+  | 'Non-Grade'
+  | 'Contractual'
+  | 'Not Specified'
+  | 'Needs Verification'
+  | 'Private Salary-Based';
+
 export type JobCircularStatus = 'active' | 'closing_soon' | 'expired';
 
 export type FieldVerificationState = 'verified' | 'partial' | 'unverified';
@@ -108,7 +129,15 @@ export interface NormalizedJobCircular {
   employmentType: JobEmploymentType;
   vacancies?: number | null;
   salary?: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  gradeNumber?: GovernmentJobGrade | null;
+  gradeLabel?: string;
+  gradeOriginalText?: string;
+  gradeVerificationStatus?: GradeVerificationStatus;
   qualification: EducationRequirement | string;
+  minGpa?: number | null;
+  minCgpa?: number | null;
   experience?: string;
   ageRequirement?: string;
   location: JobLocation | string;
@@ -188,6 +217,11 @@ export interface JobSearchFilters {
   sortBy: JobSortOption;
   bookmarkedOnly?: boolean;
   statFilter?: DashboardStatFilter;
+  selectedGrades?: string[]; // e.g. ['9', '10', '11'] or ['Not Specified']
+  minGpa?: number | null;
+  minSalary?: number | null;
+  maxSalary?: number | null;
+  statusTab?: 'all' | 'active' | 'newly_discovered' | 'closing_soon' | 'expired' | 'visited' | 'bookmarked' | 'applied';
 }
 
 export interface BookmarkRecord {

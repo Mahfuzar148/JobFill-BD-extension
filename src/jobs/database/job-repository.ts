@@ -18,6 +18,7 @@ import { refreshJobStatus } from '../services/job-validator';
 import { buildSearchIndexEntries, SEARCH_INDEX_SCHEMA_VERSION } from '../services/search-engine';
 import { migrateLegacyCircularRecord } from '../services/application-link-detector';
 import { computeJobFieldVerification } from '../services/job-normalizer';
+import { JobGradeExtractor } from '../services/grade-extractor';
 
 const FALLBACK_PREFIX = 'jobfill_idb_fallback_';
 const KEY_JOB_PREFERENCES = 'jobfill_job_preferences_v1';
@@ -294,13 +295,43 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
   const needsUpgrade =
     !job.fieldVerification ||
     !job.timezone ||
-    typeof job.sourceLastVerifiedAt !== 'number';
+    typeof job.sourceLastVerifiedAt !== 'number' ||
+    job.gradeVerificationStatus === undefined;
   if (!needsUpgrade) return job;
+
+  let gradeInfo = {
+    gradeNumber: job.gradeNumber ?? null,
+    gradeLabel: job.gradeLabel ?? '',
+    gradeOriginalText: job.gradeOriginalText,
+    gradeVerificationStatus: job.gradeVerificationStatus ?? 'NOT_SPECIFIED',
+  };
+
+  if (job.gradeVerificationStatus === undefined) {
+    const extracted = JobGradeExtractor.extractJobGrade({
+      jobTitle: job.jobTitle,
+      position: job.position,
+      description: job.description,
+      salaryText: job.salary,
+      category: job.category,
+      sourceVerification: job.sourceVerification,
+    });
+    gradeInfo = {
+      gradeNumber: extracted.gradeNumber,
+      gradeLabel: extracted.gradeLabel,
+      gradeOriginalText: extracted.gradeOriginalText,
+      gradeVerificationStatus: extracted.gradeVerificationStatus,
+    };
+  }
+
   return {
     ...job,
     timezone: job.timezone || job.deadlineTimezone || 'Asia/Dhaka',
     sourceLastVerifiedAt: job.sourceLastVerifiedAt ?? job.sourceLastCheckedAt,
     fieldVerification: job.fieldVerification || computeJobFieldVerification(job),
+    gradeNumber: gradeInfo.gradeNumber,
+    gradeLabel: gradeInfo.gradeLabel,
+    gradeOriginalText: gradeInfo.gradeOriginalText,
+    gradeVerificationStatus: gradeInfo.gradeVerificationStatus,
   };
 }
 

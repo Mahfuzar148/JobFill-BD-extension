@@ -15,7 +15,7 @@ import { validateJobCircular } from '../services/job-validator';
 import { JobRepository } from '../database/job-repository';
 import { stripHtmlTags } from './official-website.adapter';
 
-const REMOTIVE_API_URL = 'https://remotive.com/api/remote-jobs?limit=20';
+const REMOTIVE_API_URL = 'https://remotive.com/api/remote-jobs?limit=50';
 const REMOTIVE_HOME_URL = 'https://remotive.com/remote-jobs';
 
 interface RemotiveApiJob {

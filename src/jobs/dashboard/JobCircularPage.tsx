@@ -117,6 +117,7 @@ import {
 } from './AddJobCircularModal';
 import { runOpenTabPortalSyncWithFeedback } from '../services/open-tab-portal-sync';
 import { MissingApplicationUrlModal } from './MissingApplicationUrlModal';
+import { MissingCircularDiagnosticModal } from './MissingCircularDiagnosticModal';
 import { JobCheckService } from '../background/job-check-service';
 
 import { Globe as PortalGlobeIcon, X as PortalModalCloseIcon } from 'lucide-react';
@@ -173,6 +174,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   const [manualPrefill, setManualPrefill] = useState<ManualJobCircularPrefill | null>(null);
   const [showSourcesPanel, setShowSourcesPanel] = useState(false);
   const [showPortalsModal, setShowPortalsModal] = useState(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -1239,7 +1241,12 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
       ) : (
         <>
           {/* Search & Filters */}
-          <JobFilters filters={filters} onChange={setFilters} language={language} />
+          <JobFilters
+            filters={filters}
+            onChange={setFilters}
+            language={language}
+            onOpenDiagnostic={() => setShowDiagnosticModal(true)}
+          />
 
       {/* Active Filter Indicator + Clear Filter Bar + Preference Toggle */}
       <div className="flex items-center justify-between flex-wrap gap-2 text-xs px-1">
@@ -1527,6 +1534,40 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         job={missingAppJob}
         language={language}
         onClose={() => setMissingAppJob(null)}
+      />
+
+      <MissingCircularDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        allJobs={jobs}
+        activeFilters={filters}
+        language={language}
+        onClearFiltersAndView={(job) => {
+          setShowDiagnosticModal(false);
+          setFilters(DEFAULT_JOB_FILTERS);
+          setSelectedJob(job);
+        }}
+        onSwitchTabExpired={(job) => {
+          setShowDiagnosticModal(false);
+          setFilters({ ...DEFAULT_JOB_FILTERS, statFilter: 'expired' });
+          setSelectedJob(job);
+        }}
+        onFetchLatest={async () => {
+          setShowDiagnosticModal(false);
+          await handleSyncSources();
+        }}
+        onOpenAddManualModal={(prefillUrl) => {
+          setShowDiagnosticModal(false);
+          if (prefillUrl) {
+            setManualPrefill({
+              organization: '',
+              importUrl: prefillUrl,
+              category: 'Government',
+              notes: `Prefill from Diagnostic: ${prefillUrl}`,
+            });
+          }
+          setShowAddModal(true);
+        }}
       />
     </div>
   );

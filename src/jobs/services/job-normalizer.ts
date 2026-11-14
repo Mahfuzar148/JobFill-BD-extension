@@ -16,6 +16,7 @@ import { RawSourceJobItem } from '../types/source.types';
 import { parseDeadlineDate } from './deadline-parser';
 import { refreshJobStatus } from './job-validator';
 import { isCircularDocumentUrl } from './application-link-detector';
+import { JobGradeExtractor } from './grade-extractor';
 
 const DHAKA_DIVISIONS: JobLocation[] = [
   'Dhaka',
@@ -165,6 +166,41 @@ export function buildJobOriginalValues(raw: RawSourceJobItem): JobOriginalValues
   };
 }
 
+export function extractMinGpaOrCgpa(text?: string): { minGpa: number | null; minCgpa: number | null } {
+  if (!text) return { minGpa: null, minCgpa: null };
+  const cleaned = text.replace(/[০-৯]/g, (ch) => String('০১২৩৪৫৬৭৮৯'.indexOf(ch)));
+  let minGpa: number | null = null;
+  let minCgpa: number | null = null;
+
+  const gpaMatch = cleaned.match(/(?:\bGPA|জিপিএ)\s*[:\-=]?\s*([1-5](?:\.\d{1,2})?)/i);
+  if (gpaMatch) {
+    const val = parseFloat(gpaMatch[1]);
+    if (val >= 1.0 && val <= 5.0) minGpa = val;
+  }
+
+  const cgpaMatch = cleaned.match(/(?:\bCGPA|সিজিপিএ)\s*[:\-=]?\s*([1-4](?:\.\d{1,2})?)/i);
+  if (cgpaMatch) {
+    const val = parseFloat(cgpaMatch[1]);
+    if (val >= 1.0 && val <= 4.0) minCgpa = val;
+  }
+
+  return { minGpa, minCgpa };
+}
+
+export function parseSalaryRangeNumbers(salaryStr?: string): { min: number | null; max: number | null } {
+  if (!salaryStr) return { min: null, max: null };
+  const cleaned = salaryStr
+    .replace(/[০-৯]/g, (ch) => String('০১২৩৪৫৬৭৮৯'.indexOf(ch)))
+    .replace(/,/g, '');
+  const matches = cleaned.match(/\b(\d{4,7})\b/g);
+  if (!matches || matches.length === 0) return { min: null, max: null };
+
+  const nums = matches.map((m) => parseInt(m, 10)).filter((n) => n >= 5000 && n <= 500000);
+  if (nums.length === 0) return { min: null, max: null };
+  if (nums.length === 1) return { min: nums[0], max: nums[0] };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
 export function normalizeJobRecord(
   raw: RawSourceJobItem,
   meta: {
@@ -196,6 +232,19 @@ export function normalizeJobRecord(
   const parsedStart = parseDeadlineDate(raw.applicationStartText);
   const parsedDeadline = parseDeadlineDate(raw.deadlineText);
 
+  const category = normalizeCategory(raw.category, `${org} ${title}`);
+  const gradeResult = JobGradeExtractor.extractJobGrade({
+    jobTitle: title,
+    position,
+    description: raw.description,
+    salaryText: raw.salary,
+    category,
+    sourceVerification: meta.verificationLevel,
+  });
+
+  const salaryRange = parseSalaryRangeNumbers(raw.salary);
+  const gpaInfo = extractMinGpaOrCgpa(`${raw.qualification || ''} ${raw.description || ''}`);
+
   const primaryRefUrl = appUrl || circularUrl || sourceUrl || orgUrl || '';
   const fingerprintHash = computeFingerprintHash(org, position, raw.circularNumber, primaryRefUrl);
   const stableHash = raw.externalId
@@ -226,11 +275,19 @@ export function normalizeJobRecord(
     titleBn: raw.titleBn?.trim() || null,
     position,
     circularNumber: raw.circularNumber?.trim() || undefined,
-    category: normalizeCategory(raw.category, `${org} ${title}`),
+    category,
     employmentType: normalizeEmploymentType(raw.employmentType),
     vacancies: typeof raw.vacancies === 'number' && raw.vacancies > 0 ? raw.vacancies : null,
     salary: raw.salary?.trim() || undefined,
+    salaryMin: salaryRange.min,
+    salaryMax: salaryRange.max,
+    gradeNumber: gradeResult.gradeNumber,
+    gradeLabel: gradeResult.gradeLabel,
+    gradeOriginalText: gradeResult.gradeOriginalText,
+    gradeVerificationStatus: gradeResult.gradeVerificationStatus,
     qualification: normalizeQualification(raw.qualification),
+    minGpa: gpaInfo.minGpa,
+    minCgpa: gpaInfo.minCgpa,
     experience: raw.experience?.trim() || undefined,
     ageRequirement: raw.ageRequirement?.trim() || undefined,
     location: normalizeLocation(raw.location),
@@ -278,4 +335,31 @@ export function normalizeJobRecord(
 
   circular.fieldVerification = computeJobFieldVerification(circular);
   return refreshJobStatus(circular, now);
+}
+
+export class JobNormalizer {
+  public static normalize(raw: any, now: number = Date.now()): NormalizedJobCircular {
+    const meta = {
+      sourceId: raw.sourceId || 'manual',
+      sourceName: raw.sourceName || 'Official Source',
+      verificationLevel: raw.sourceVerification || 'official_verified',
+      checkedAt: now,
+      isManual: raw.isManual || false,
+    };
+    const rawItem: RawSourceJobItem = {
+      jobTitle: raw.title || raw.jobTitle || 'Job Circular',
+      position: raw.position || raw.title || raw.jobTitle,
+      organization: raw.organization || 'Official Portal',
+      category: raw.category || 'Government',
+      location: raw.location || 'All Bangladesh',
+      salary: raw.salary,
+      qualification: raw.qualification,
+      deadlineText: raw.deadline || raw.deadlineText,
+      circularUrl: raw.circularUrl || raw.url,
+      applicationUrl: raw.applicationUrl || raw.url,
+      description: raw.description,
+      requirements: raw.requirements,
+    };
+    return normalizeJobRecord(rawItem, meta);
+  }
 }

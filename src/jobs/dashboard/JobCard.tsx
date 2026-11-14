@@ -21,6 +21,7 @@ import {
   Share2,
   EyeOff,
   AlertTriangle,
+  Award,
 } from 'lucide-react';
 import { NormalizedJobCircular, ApplicationStatus } from '../types/job.types';
 import { formatDhakaDate } from '../services/deadline-parser';
@@ -29,6 +30,7 @@ import { formatApplicationStatusLabel, formatJobCategoryLabel } from '../service
 import { classifyApplicationDestination, isCircularDocumentUrl } from '../services/application-link-detector';
 import { DeadlineCountdown } from './DeadlineCountdown';
 import { BookmarkButton } from './BookmarkButton';
+import { GRADE_LABELS } from '../services/grade-extractor';
 
 interface JobCardProps {
   job: NormalizedJobCircular;
@@ -115,6 +117,17 @@ export const JobCard: React.FC<JobCardProps> = ({
               {job.sourceName}
               {altSourceCount > 0 ? ` (+${altSourceCount})` : ''}
             </span>
+
+            {job.gradeNumber ? (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+                <Award className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                <span>{GRADE_LABELS[job.gradeNumber]?.[bn ? 'bn' : 'en'] || `${job.gradeNumber}th Grade`}</span>
+              </span>
+            ) : job.gradeLabel && job.gradeVerificationStatus !== 'NOT_SPECIFIED' && job.gradeVerificationStatus !== 'NOT_APPLICABLE' ? (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300">
+                <span>{job.gradeLabel}</span>
+              </span>
+            ) : null}
 
             {appCls.isLoginRequired && (
               <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800">

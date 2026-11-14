@@ -1,7 +1,19 @@
-// JobFill BD - Job Search, Filter, & Sort Controls + Pure Filtering Engine
+// JobFill BD - Advanced Job Search, Government Grade Filter, GPA & Pure Filtering Engine
 
-import React from 'react';
-import { Search, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Search,
+  SlidersHorizontal,
+  RotateCcw,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  X,
+  HelpCircle,
+  Award,
+  DollarSign,
+  GraduationCap,
+} from 'lucide-react';
 import {
   JobSearchFilters,
   JobCategory,
@@ -13,6 +25,7 @@ import {
   NormalizedJobCircular,
   DashboardStatFilter,
   ApplicationTrackerRecord,
+  GovernmentJobGrade,
 } from '../types/job.types';
 import { DAY_MS, isTimestampInCurrentDhakaWeek } from '../services/deadline-parser';
 import {
@@ -23,6 +36,7 @@ import {
   getOrganizationSearchAliases,
   normalizeSearchText,
 } from '../services/search-engine';
+import { JobGradeExtractor, GRADE_LABELS } from '../services/grade-extractor';
 
 export const JOB_CATEGORIES: JobCategory[] = [
   'Government',
@@ -70,6 +84,19 @@ export const JOB_LOCATIONS: JobLocation[] = [
   'Other',
 ];
 
+export const ALL_GOVT_GRADES: GovernmentJobGrade[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+];
+
+export const SPECIAL_GRADE_CATEGORIES = [
+  { id: 'Not Specified', labelEn: 'Grade Not Specified', labelBn: 'গ্রেড উল্লেখ নেই' },
+  { id: 'Non-Grade', labelEn: 'Non-Grade', labelBn: 'নন-গ্রেড' },
+  { id: 'Contractual', labelEn: 'Contractual', labelBn: 'চুক্তিভিত্তিক' },
+  { id: 'Private Salary-Based', labelEn: 'Private Salary-Based', labelBn: 'বেসরকারি বেতনভিত্তিক' },
+  { id: 'Needs Verification', labelEn: 'Needs Verification', labelBn: 'যাচাই প্রয়োজন' },
+];
+
 export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   query: '',
   category: 'All',
@@ -80,6 +107,10 @@ export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   sortBy: 'latest_published',
   bookmarkedOnly: false,
   statFilter: 'total',
+  selectedGrades: [],
+  minGpa: null,
+  minSalary: null,
+  maxSalary: null,
 };
 
 export function isJobMatchingStatFilter(
@@ -91,7 +122,6 @@ export function isJobMatchingStatFilter(
 ): boolean {
   switch (statFilter || 'total') {
     case 'new_this_week':
-      // Strictly use verified publishedAt within current Asia/Dhaka calendar week
       return isTimestampInCurrentDhakaWeek(job.publishedAt, now);
     case 'closing_soon':
       return Boolean(
@@ -128,13 +158,45 @@ export function filterAndSortJobs(
   const q = filters.query.trim().toLowerCase();
 
   const filtered = jobs.filter((job) => {
+    // 1. Dashboard Stat Filter
     if (!isJobMatchingStatFilter(job, filters.statFilter, bookmarkedIds, applicationsByJobId, now)) {
       return false;
     }
 
+    // 2. Status Tab Filter (All, Active, Expired, Newly Discovered, Closing Soon)
+    if (filters.statusTab && filters.statusTab !== 'all') {
+      const isExpired =
+        job.status === 'expired' ||
+        (job.deadlineVerified && typeof job.deadlineAt === 'number' && job.deadlineAt <= now);
+
+      if (filters.statusTab === 'active' && isExpired) return false;
+      if (filters.statusTab === 'expired' && !isExpired) return false;
+      if (filters.statusTab === 'closing_soon') {
+        const isClosingSoon =
+          job.deadlineVerified &&
+          typeof job.deadlineAt === 'number' &&
+          job.deadlineAt > now &&
+          job.deadlineAt - now <= 7 * DAY_MS;
+        if (!isClosingSoon) return false;
+      }
+      if (filters.statusTab === 'newly_discovered') {
+        if (now - job.firstDiscoveredAt > 7 * DAY_MS) return false;
+      }
+      if (filters.statusTab === 'bookmarked' && !bookmarkedIds.has(job.id)) return false;
+      if (filters.statusTab === 'applied') {
+        const status = applicationsByJobId?.get(job.id)?.status;
+        if (status !== 'Applied' && status !== 'Ready to Apply') return false;
+      }
+    }
+
+    // 3. Bookmarked only checkbox
     if (filters.bookmarkedOnly && !bookmarkedIds.has(job.id)) return false;
 
+    // 4. Text Query matching (English & Bengali aliases + Grades)
     if (q) {
+      const gradeAlias = job.gradeNumber
+        ? `grade ${job.gradeNumber} grade-${job.gradeNumber} ${job.gradeNumber}th ${job.gradeNumber}ম গ্রেড-${job.gradeNumber}`
+        : '';
       const rawFields = [
         job.organization,
         job.organizationBn || '',
@@ -146,6 +208,8 @@ export function filterAndSortJobs(
         job.titleBn || '',
         job.position,
         job.circularNumber || '',
+        job.gradeLabel || '',
+        gradeAlias,
         String(job.qualification || ''),
         String(job.location || ''),
         job.category,
@@ -159,11 +223,43 @@ export function filterAndSortJobs(
       }
     }
 
+    // 5. Category, Employment, Education, Location, Deadline dropdowns
     if (filters.category !== 'All' && !matchesSearchCategory(job, filters.category)) return false;
     if (filters.employmentType !== 'All' && job.employmentType !== filters.employmentType) return false;
     if (!matchesJobEducation(job, filters.education)) return false;
     if (!matchesJobLocation(job, filters.location)) return false;
     if (!matchesJobDeadline(job, filters.deadline, now)) return false;
+
+    // 6. Government Job Grade Filter (multi-select)
+    if (filters.selectedGrades && filters.selectedGrades.length > 0 && !filters.selectedGrades.includes('All')) {
+      if (!JobGradeExtractor.matchesGradeFilter(job, filters.selectedGrades)) {
+        return false;
+      }
+    }
+
+    // 7. Academic Minimum GPA / CGPA Filter (Applicant Eligibility)
+    if (typeof filters.minGpa === 'number' && filters.minGpa > 0) {
+      if (typeof job.minGpa === 'number' && job.minGpa > filters.minGpa) {
+        return false;
+      }
+      if (typeof job.minCgpa === 'number' && job.minCgpa > filters.minGpa) {
+        return false;
+      }
+    }
+
+    // 8. Salary Range Filter
+    if (typeof filters.minSalary === 'number' && filters.minSalary > 0) {
+      const minSal = job.salaryMin ?? job.salaryMax;
+      if (minSal !== null && minSal !== undefined && minSal < filters.minSalary) {
+        return false;
+      }
+    }
+    if (typeof filters.maxSalary === 'number' && filters.maxSalary > 0) {
+      const minSal = job.salaryMin ?? job.salaryMax;
+      if (minSal !== null && minSal !== undefined && minSal > filters.maxSalary) {
+        return false;
+      }
+    }
 
     return true;
   });
@@ -200,18 +296,107 @@ interface JobFiltersProps {
   filters: JobSearchFilters;
   onChange: (updated: JobSearchFilters) => void;
   language?: 'bn' | 'en';
+  onOpenDiagnostic?: () => void;
+  totalMatchingCount?: number;
 }
 
-export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, language = 'en' }) => {
+export const JobFilters: React.FC<JobFiltersProps> = ({
+  filters,
+  onChange,
+  language = 'en',
+  onOpenDiagnostic,
+  totalMatchingCount,
+}) => {
   const bn = language === 'bn';
+  const [showGradePanel, setShowGradePanel] = useState(false);
+  const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
 
   const update = <K extends keyof JobSearchFilters>(key: K, val: JobSearchFilters[K]) => {
     onChange({ ...filters, [key]: val });
   };
 
+  const selectedGrades = filters.selectedGrades || [];
+  const activeGradeCount = selectedGrades.filter((g) => g !== 'All').length;
+
+  const toggleGradeSelection = (gradeId: string) => {
+    let next: string[];
+    if (selectedGrades.includes(gradeId)) {
+      next = selectedGrades.filter((g) => g !== gradeId);
+    } else {
+      next = [...selectedGrades.filter((g) => g !== 'All'), gradeId];
+    }
+    update('selectedGrades', next);
+  };
+
+  const selectGradeRange = (start: number, end: number) => {
+    const rangeItems: string[] = [];
+    for (let i = start; i <= end; i++) {
+      rangeItems.push(String(i));
+    }
+    const set = new Set([...selectedGrades, ...rangeItems]);
+    update('selectedGrades', Array.from(set));
+  };
+
+  const clearAllGrades = () => {
+    update('selectedGrades', []);
+  };
+
+  // Determine active filter chips
+  const activeChips: Array<{ id: string; label: string; onRemove: () => void }> = [];
+
+  if (filters.category !== 'All') {
+    activeChips.push({
+      id: 'category',
+      label: `${bn ? 'ক্যাটাগরি' : 'Category'}: ${filters.category}`,
+      onRemove: () => update('category', 'All'),
+    });
+  }
+  if (filters.education !== 'All') {
+    activeChips.push({
+      id: 'education',
+      label: `${bn ? 'যোগ্যতা' : 'Education'}: ${filters.education}`,
+      onRemove: () => update('education', 'All'),
+    });
+  }
+  if (filters.location !== 'All') {
+    activeChips.push({
+      id: 'location',
+      label: `${bn ? 'স্থান' : 'Location'}: ${filters.location}`,
+      onRemove: () => update('location', 'All'),
+    });
+  }
+  if (filters.deadline !== 'all') {
+    activeChips.push({
+      id: 'deadline',
+      label: `${bn ? 'সময়সীমা' : 'Deadline'}: ${filters.deadline}`,
+      onRemove: () => update('deadline', 'all'),
+    });
+  }
+  if (selectedGrades.length > 0) {
+    activeChips.push({
+      id: 'grades',
+      label: `${bn ? 'গ্রেড' : 'Grades'} (${selectedGrades.length})`,
+      onRemove: clearAllGrades,
+    });
+  }
+  if (typeof filters.minGpa === 'number' && filters.minGpa > 0) {
+    activeChips.push({
+      id: 'minGpa',
+      label: `GPA ≥ ${filters.minGpa}`,
+      onRemove: () => update('minGpa', null),
+    });
+  }
+  if (typeof filters.minSalary === 'number' && filters.minSalary > 0) {
+    activeChips.push({
+      id: 'minSalary',
+      label: `≥ ৳${filters.minSalary.toLocaleString()}`,
+      onRemove: () => update('minSalary', null),
+    });
+  }
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
-      {/* Search + Sort Row */}
+      {/* Search + Sort + Diagnostic Row */}
       <div className="flex flex-col md:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
@@ -221,14 +406,14 @@ export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, langu
             onChange={(e) => update('query', e.target.value)}
             placeholder={
               bn
-                ? 'প্রতিষ্ঠান, পদ, সার্কুলার নং, যোগ্যতা বা জেলা দিয়ে খুঁজুন...'
-                : 'Search organization, job title, position, circular no, qualification, location...'
+                ? 'প্রতিষ্ঠান, পদ, ৯ম গ্রেড, বিসিএস, যোগ্যতা বা জেলা দিয়ে খুঁজুন...'
+                : 'Search organization, 9th Grade, job title, position, qualification, location...'
             }
             className="w-full text-xs pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 focus:outline-none focus:border-petro-600"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={filters.sortBy}
             onChange={(e) => update('sortBy', e.target.value as JobSortOption)}
@@ -242,6 +427,18 @@ export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, langu
             <option value="recently_updated">{bn ? 'সাম্প্রতিক আপডেট' : 'Most Recently Updated'}</option>
           </select>
 
+          {onOpenDiagnostic && (
+            <button
+              type="button"
+              onClick={onOpenDiagnostic}
+              title={bn ? 'কোনো বিজ্ঞপ্তি খুঁজে পাচ্ছেন না? ডায়াগনস্টিক দেখুন' : 'Missing a Job Circular? Run Diagnostic'}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 cursor-pointer transition-colors"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>{bn ? 'সার্কুলার মিসিং?' : 'Missing Circular?'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => onChange(DEFAULT_JOB_FILTERS)}
@@ -254,7 +451,7 @@ export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, langu
         </div>
       </div>
 
-      {/* Filter Dropdowns */}
+      {/* Main Standard Filter Dropdowns */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
         <select
           value={filters.category}
@@ -320,6 +517,217 @@ export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, langu
         </select>
       </div>
 
+      {/* Filter Expansion Bar: Government Job Grade & Advanced GPA / Salary */}
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowGradePanel(!showGradePanel)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              showGradePanel || activeGradeCount > 0
+                ? 'bg-petro-50 dark:bg-petro-950/60 text-petro-700 dark:text-petro-300 border border-petro-200 dark:border-petro-800'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 text-petro-600" />
+            <span>{bn ? 'সরকারি বেতন গ্রেড ফিল্টার' : 'Job Grade Filter (1st-20th)'}</span>
+            {activeGradeCount > 0 && (
+              <span className="bg-petro-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                {activeGradeCount}
+              </span>
+            )}
+            {showGradePanel ? <ChevronUp className="w-3.5 h-3.5 ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAdvancedPanel(!showAdvancedPanel)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              showAdvancedPanel || filters.minGpa || filters.minSalary
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{bn ? 'জিপিএ ও বেতন ফিল্টার' : 'GPA & Salary Filters'}</span>
+            {showAdvancedPanel ? <ChevronUp className="w-3.5 h-3.5 ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5" />}
+          </button>
+        </div>
+
+        {typeof totalMatchingCount === 'number' && (
+          <span className="text-[11px] text-slate-500 font-semibold">
+            {bn ? `${totalMatchingCount}টি সার্কুলার পাওয়া গেছে` : `${totalMatchingCount} circulars matched`}
+          </span>
+        )}
+      </div>
+
+      {/* Government Job Grade Selection Panel */}
+      {showGradePanel && (
+        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-petro-100 dark:border-petro-950 rounded-xl p-3.5 space-y-3 animate-fadeIn">
+          <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-200 dark:border-slate-700">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Award className="w-4 h-4 text-petro-600" />
+              <span>{bn ? 'বাংলাদেশ সরকারি চাকরির বেতন গ্রেড (১ম হতে ২০তম গ্রেড)' : 'Government Pay Grades (1st to 20th Grade)'}</span>
+            </span>
+
+            {/* Quick Range Selection Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+              <button
+                type="button"
+                onClick={() => selectGradeRange(1, 9)}
+                className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
+              >
+                {bn ? '১ম–৯ম গ্রেড' : '1st–9th (Officer/Cadre)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => selectGradeRange(10, 15)}
+                className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
+              >
+                {bn ? '১০ম–১৫তম গ্রেড' : '10th–15th (Mid Grades)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => selectGradeRange(16, 20)}
+                className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
+              >
+                {bn ? '১৬তম–২০তম গ্রেড' : '16th–20th (Entry/Staff)'}
+              </button>
+              {activeGradeCount > 0 && (
+                <button
+                  type="button"
+                  onClick={clearAllGrades}
+                  className="px-2 py-0.5 rounded-md text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 font-bold cursor-pointer"
+                >
+                  {bn ? 'গ্রেড মুছুন' : 'Clear Grades'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 1st through 20th Grade Chip Grid */}
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-10 gap-1.5">
+            {ALL_GOVT_GRADES.map((g) => {
+              const gStr = String(g);
+              const isSelected = selectedGrades.includes(gStr);
+              const meta = GRADE_LABELS[g];
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => toggleGradeSelection(gStr)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold text-center transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-petro-600 text-white shadow-xs border border-petro-700'
+                      : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-petro-400'
+                  }`}
+                >
+                  <div>{meta.en}</div>
+                  <div className="text-[10px] font-normal opacity-90">{meta.bn}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Other Categories Row */}
+          <div className="pt-2 flex items-center gap-1.5 flex-wrap border-t border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-semibold text-slate-500 mr-1">
+              {bn ? 'অন্যান্য ধরন:' : 'Other Categories:'}
+            </span>
+            {SPECIAL_GRADE_CATEGORIES.map((cat) => {
+              const isSelected = selectedGrades.includes(cat.id);
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => toggleGradeSelection(cat.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border border-slate-900'
+                      : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100'
+                  }`}
+                >
+                  {bn ? cat.labelBn : cat.labelEn}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* GPA & Salary Filter Panel */}
+      {showAdvancedPanel && (
+        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-indigo-100 dark:border-indigo-950 rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fadeIn">
+          <div>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{bn ? 'আমার জিপিএ / সিজিপিএ (যোগ্যতা যাচাই)' : 'My GPA / CGPA (Eligibility)'}</span>
+            </label>
+            <select
+              value={filters.minGpa ? String(filters.minGpa) : ''}
+              onChange={(e) => update('minGpa', e.target.value ? parseFloat(e.target.value) : null)}
+              className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+            >
+              <option value="">{bn ? 'যে কোনো জিপিএ (Any GPA/CGPA)' : 'Any GPA / CGPA'}</option>
+              <option value="2.0">{bn ? 'আমার জিপিএ ২.০০ (GPA 2.00)' : 'My GPA 2.00'}</option>
+              <option value="2.5">{bn ? 'আমার জিপিএ ২.৫০ (GPA 2.50)' : 'My GPA 2.50'}</option>
+              <option value="3.0">{bn ? 'আমার জিপিএ ৩.০০ (GPA 3.00)' : 'My GPA 3.00'}</option>
+              <option value="3.5">{bn ? 'আমার জিপিএ ৩.৫০ (GPA 3.50)' : 'My GPA 3.50'}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{bn ? 'নূন্যতম বেতন (Minimum Monthly Salary)' : 'Minimum Monthly Salary'}</span>
+            </label>
+            <select
+              value={filters.minSalary ? String(filters.minSalary) : ''}
+              onChange={(e) => update('minSalary', e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+            >
+              <option value="">{bn ? 'যে কোনো বেতন (Any Salary)' : 'Any Salary'}</option>
+              <option value="15000">৳১৫,০০০+ (15,000+ BDT)</option>
+              <option value="22000">৳২২,০০০+ (9th Grade equivalent / 22,000+ BDT)</option>
+              <option value="35000">৳৩৫,০০০+ (35,000+ BDT)</option>
+              <option value="50000">৳৫০,০০০+ (50,000+ BDT)</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* Active Filter Chips Row */}
+      {activeChips.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800/80">
+          <span className="text-[11px] font-bold text-slate-500 mr-1">
+            {bn ? 'সক্রিয় ফিল্টার:' : 'Active Filters:'}
+          </span>
+          {activeChips.map((chip) => (
+            <span
+              key={chip.id}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-petro-50 dark:bg-petro-950/60 text-petro-700 dark:text-petro-300 border border-petro-200 dark:border-petro-800"
+            >
+              <span>{chip.label}</span>
+              <button
+                type="button"
+                onClick={chip.onRemove}
+                title={bn ? 'ফিল্টারটি মুছুন' : 'Remove filter'}
+                className="hover:text-petro-900 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => onChange(DEFAULT_JOB_FILTERS)}
+            className="text-[11px] font-bold text-rose-600 hover:underline ml-1 cursor-pointer"
+          >
+            {bn ? 'সব ফিল্টার মুছুন' : 'Clear All'}
+          </button>
+        </div>
+      )}
+
       {/* Bookmarked Only toggle */}
       <div className="flex items-center justify-between pt-1 text-xs">
         <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-slate-600 dark:text-slate-300">
@@ -333,7 +741,7 @@ export const JobFilters: React.FC<JobFiltersProps> = ({ filters, onChange, langu
         </label>
         <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
           <SlidersHorizontal className="w-3 h-3" />
-          <span>{bn ? 'রিয়েল-টাইম ফিল্টারিং' : 'Real-time local filtering'}</span>
+          <span>{bn ? 'রিয়েল-টাইম লোকাল ফিল্টারিং' : 'Real-time local filtering'}</span>
         </span>
       </div>
     </div>
