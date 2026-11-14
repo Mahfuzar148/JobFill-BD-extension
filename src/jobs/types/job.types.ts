@@ -1,6 +1,9 @@
 // JobFill BD - Normalized Job Circular & Notification System Types
 // Local-first, Asia/Dhaka timezone aware, zero fabricated deadlines.
 
+import type { EmployerType, WorkMode, ExperienceLevel } from '../taxonomy/job-taxonomy';
+export type { EmployerType, WorkMode, ExperienceLevel } from '../taxonomy/job-taxonomy';
+
 export type JobCategory =
   | 'Government'
   | 'Private'
@@ -126,6 +129,19 @@ export interface NormalizedJobCircular {
   position: string;
   circularNumber?: string;
   category: JobCategory;
+  taxonomyCategoryId?: string;
+  taxonomyCategoryNameEn?: string;
+  taxonomyCategoryNameBn?: string;
+  taxonomySubcategoryId?: string;
+  taxonomySubcategoryNameEn?: string;
+  taxonomySubcategoryNameBn?: string;
+  industry?: string;
+  employerType?: EmployerType;
+  workMode?: WorkMode;
+  experienceLevel?: ExperienceLevel;
+  classificationConfidence?: number;
+  classificationMethod?: 'RULE_BASED' | 'ORGANIZATION_MAPPING' | 'SOURCE_DEFAULT' | 'UNCLASSIFIED';
+  isUnclassified?: boolean;
   employmentType: JobEmploymentType;
   vacancies?: number | null;
   salary?: string;
@@ -222,6 +238,14 @@ export interface JobSearchFilters {
   minSalary?: number | null;
   maxSalary?: number | null;
   statusTab?: 'all' | 'active' | 'newly_discovered' | 'closing_soon' | 'expired' | 'visited' | 'bookmarked' | 'applied';
+  taxonomyCategory?: string | 'All';
+  taxonomySubcategory?: string | 'All';
+  industry?: string | 'All';
+  employerType?: EmployerType | 'All';
+  workMode?: WorkMode | 'All';
+  experienceLevel?: ExperienceLevel | 'All';
+  searchMode?: 'all_categories' | 'smart_filter' | 'saved_jobs' | 'online_federated' | 'local_saved';
+  includeUnclassified?: boolean;
 }
 
 export interface BookmarkRecord {

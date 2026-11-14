@@ -17,6 +17,7 @@ import { parseDeadlineDate } from './deadline-parser';
 import { refreshJobStatus } from './job-validator';
 import { isCircularDocumentUrl } from './application-link-detector';
 import { JobGradeExtractor } from './grade-extractor';
+import { JobTaxonomyClassifier } from './taxonomy-classifier';
 
 const DHAKA_DIVISIONS: JobLocation[] = [
   'Dhaka',
@@ -334,6 +335,7 @@ export function normalizeJobRecord(
   };
 
   circular.fieldVerification = computeJobFieldVerification(circular);
+  JobTaxonomyClassifier.enrichJobWithTaxonomy(circular);
   return refreshJobStatus(circular, now);
 }
 

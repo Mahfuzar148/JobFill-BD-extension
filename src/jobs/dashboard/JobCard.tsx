@@ -129,6 +129,27 @@ export const JobCard: React.FC<JobCardProps> = ({
               </span>
             ) : null}
 
+            {job.taxonomyCategoryNameEn && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800">
+                <span>{bn ? job.taxonomyCategoryNameBn || job.taxonomyCategoryNameEn : job.taxonomyCategoryNameEn}</span>
+                {job.taxonomySubcategoryNameEn && (
+                  <span className="text-[9.5px] opacity-75">› {bn ? job.taxonomySubcategoryNameBn || job.taxonomySubcategoryNameEn : job.taxonomySubcategoryNameEn}</span>
+                )}
+              </span>
+            )}
+
+            {job.workMode && job.workMode !== 'Unspecified' && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-200 dark:bg-cyan-950/50 dark:text-cyan-300 dark:border-cyan-800">
+                <span>{job.workMode === 'Remote' ? (bn ? 'রিমোট' : 'Remote') : job.workMode === 'Hybrid' ? (bn ? 'হাইব্রিড' : 'Hybrid') : (bn ? 'অন-সাইট' : 'On-Site')}</span>
+              </span>
+            )}
+
+            {job.employerType && job.employerType !== 'Other' && (
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800">
+                <span>{job.employerType}</span>
+              </span>
+            )}
+
             {appCls.isLoginRequired && (
               <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800">
                 <Lock className="w-2.5 h-2.5 shrink-0" />

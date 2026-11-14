@@ -19,6 +19,7 @@ import { buildSearchIndexEntries, SEARCH_INDEX_SCHEMA_VERSION } from '../service
 import { migrateLegacyCircularRecord } from '../services/application-link-detector';
 import { computeJobFieldVerification } from '../services/job-normalizer';
 import { JobGradeExtractor } from '../services/grade-extractor';
+import { JobTaxonomyClassifier } from '../services/taxonomy-classifier';
 
 const FALLBACK_PREFIX = 'jobfill_idb_fallback_';
 const KEY_JOB_PREFERENCES = 'jobfill_job_preferences_v1';
@@ -296,7 +297,8 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
     !job.fieldVerification ||
     !job.timezone ||
     typeof job.sourceLastVerifiedAt !== 'number' ||
-    job.gradeVerificationStatus === undefined;
+    job.gradeVerificationStatus === undefined ||
+    job.taxonomyCategoryId === undefined;
   if (!needsUpgrade) return job;
 
   let gradeInfo = {
@@ -323,7 +325,7 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
     };
   }
 
-  return {
+  const upgraded: NormalizedJobCircular = {
     ...job,
     timezone: job.timezone || job.deadlineTimezone || 'Asia/Dhaka',
     sourceLastVerifiedAt: job.sourceLastVerifiedAt ?? job.sourceLastCheckedAt,
@@ -333,6 +335,12 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
     gradeOriginalText: gradeInfo.gradeOriginalText,
     gradeVerificationStatus: gradeInfo.gradeVerificationStatus,
   };
+
+  if (upgraded.taxonomyCategoryId === undefined) {
+    JobTaxonomyClassifier.enrichJobWithTaxonomy(upgraded);
+  }
+
+  return upgraded;
 }
 
 export class JobRepository {

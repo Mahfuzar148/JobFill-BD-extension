@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   Calculator,
   Award,
+  Briefcase,
 } from 'lucide-react';
 import { NormalizedJobCircular, ApplicationStatus } from '../types/job.types';
 import { formatDhakaDate, parseDeadlineDate } from '../services/deadline-parser';
@@ -473,6 +474,55 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             <div className="text-slate-400 font-semibold mb-0.5">{bn ? 'অভিজ্ঞতা / বয়স / ফি' : 'Experience / Age / Fee'}</div>
             <div className="font-bold text-slate-800 dark:text-slate-100">
               {[job.experience, job.ageRequirement, job.applicationFee].filter(Boolean).join(' • ') || (bn ? 'বিজ্ঞপ্তিতে উল্লিখিত' : 'See official circular')}
+            </div>
+          </div>
+        </div>
+
+        {/* Universal Job Taxonomy, Industry, Employer Type & Work Mode */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Briefcase className="w-3.5 h-3.5 text-petro-600" />
+              <span>{bn ? 'সার্বজনীন পেশাগত ক্যাটাগরি' : 'Universal Job Taxonomy'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {bn ? job.taxonomyCategoryNameBn || job.taxonomyCategoryNameEn || job.category : job.taxonomyCategoryNameEn || job.category}
+              {job.taxonomySubcategoryNameEn && (
+                <span className="text-slate-500 font-normal">
+                  {' › '}{bn ? job.taxonomySubcategoryNameBn || job.taxonomySubcategoryNameEn : job.taxonomySubcategoryNameEn}
+                </span>
+              )}
+            </div>
+            {job.isUnclassified ? (
+              <span className="text-[10px] text-amber-600 font-medium">({bn ? 'অনির্দিষ্ট / যাচাই প্রয়োজন' : 'Unclassified'})</span>
+            ) : job.classificationConfidence ? (
+              <span className="text-[10px] text-slate-400">({bn ? 'নিশ্চয়তা' : 'Confidence'}: {job.classificationConfidence}%)</span>
+            ) : null}
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{bn ? 'নিয়োগকর্তার ধরন ও শিল্প' : 'Employer Type & Industry'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.employerType || (bn ? 'উল্লিখিত নেই' : 'Not specified')}
+              {job.industry && job.industry !== 'General' && (
+                <span className="text-slate-500 font-normal"> • {job.industry}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Globe className="w-3.5 h-3.5 text-cyan-600" />
+              <span>{bn ? 'কাজের মোড ও অভিজ্ঞতা' : 'Work Mode & Experience'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.workMode || 'On-Site'} • {job.employmentType || 'Full Time'}
+              {job.experienceLevel && job.experienceLevel !== 'Not Specified' && (
+                <span className="text-slate-500 font-normal"> ({job.experienceLevel})</span>
+              )}
             </div>
           </div>
         </div>

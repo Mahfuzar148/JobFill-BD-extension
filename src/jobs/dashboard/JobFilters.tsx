@@ -13,6 +13,9 @@ import {
   Award,
   DollarSign,
   GraduationCap,
+  Briefcase,
+  Globe,
+  Building2,
 } from 'lucide-react';
 import {
   JobSearchFilters,
@@ -26,7 +29,11 @@ import {
   DashboardStatFilter,
   ApplicationTrackerRecord,
   GovernmentJobGrade,
+  EmployerType,
+  WorkMode,
+  ExperienceLevel,
 } from '../types/job.types';
+import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
 import { DAY_MS, isTimestampInCurrentDhakaWeek } from '../services/deadline-parser';
 import {
   matchesSearchCategory,
@@ -97,6 +104,35 @@ export const SPECIAL_GRADE_CATEGORIES = [
   { id: 'Needs Verification', labelEn: 'Needs Verification', labelBn: 'যাচাই প্রয়োজন' },
 ];
 
+export const EMPLOYER_TYPES: EmployerType[] = [
+  'Government Ministry',
+  'Directorate / Department',
+  'Autonomous Organization',
+  'Public University',
+  'Central Bank',
+  'Commercial Bank',
+  'Specialized Bank',
+  'NBFI',
+  'NGO / INGO',
+  'Multinational',
+  'Private Enterprise',
+  'Other',
+];
+
+export const WORK_MODES: WorkMode[] = [
+  'On-Site',
+  'Remote',
+  'Hybrid',
+];
+
+export const EXPERIENCE_LEVELS: ExperienceLevel[] = [
+  'Fresh Graduate / Entry-Level',
+  'Mid-Level (1-4 years)',
+  'Senior Level (5+ years)',
+  'Leadership / Executive',
+  'Not Specified',
+];
+
 export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   query: '',
   category: 'All',
@@ -111,6 +147,14 @@ export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   minGpa: null,
   minSalary: null,
   maxSalary: null,
+  taxonomyCategory: 'All',
+  taxonomySubcategory: 'All',
+  industry: 'All',
+  employerType: 'All',
+  workMode: 'All',
+  experienceLevel: 'All',
+  searchMode: 'smart_filter',
+  includeUnclassified: true,
 };
 
 export function isJobMatchingStatFilter(
@@ -230,14 +274,41 @@ export function filterAndSortJobs(
     if (!matchesJobLocation(job, filters.location)) return false;
     if (!matchesJobDeadline(job, filters.deadline, now)) return false;
 
-    // 6. Government Job Grade Filter (multi-select)
+    // 6. Universal Job Taxonomy Category and Subcategory
+    if (filters.taxonomyCategory && filters.taxonomyCategory !== 'All') {
+      const matchCat = job.taxonomyCategoryId === filters.taxonomyCategory;
+      const allowUnclassified = Boolean(filters.includeUnclassified && job.isUnclassified);
+      if (!matchCat && !allowUnclassified) return false;
+    }
+    if (filters.taxonomySubcategory && filters.taxonomySubcategory !== 'All') {
+      const matchSub = job.taxonomySubcategoryId === filters.taxonomySubcategory;
+      const allowUnclassified = Boolean(filters.includeUnclassified && job.isUnclassified);
+      if (!matchSub && !allowUnclassified) return false;
+    }
+
+    // 7. Employer Type Filter
+    if (filters.employerType && filters.employerType !== 'All') {
+      if (job.employerType !== filters.employerType) return false;
+    }
+
+    // 8. Work Mode Filter (Remote, Hybrid, On-Site)
+    if (filters.workMode && filters.workMode !== 'All') {
+      if (job.workMode !== filters.workMode) return false;
+    }
+
+    // 9. Experience Level Filter
+    if (filters.experienceLevel && filters.experienceLevel !== 'All') {
+      if (job.experienceLevel !== filters.experienceLevel) return false;
+    }
+
+    // 10. Government Job Grade Filter (multi-select)
     if (filters.selectedGrades && filters.selectedGrades.length > 0 && !filters.selectedGrades.includes('All')) {
       if (!JobGradeExtractor.matchesGradeFilter(job, filters.selectedGrades)) {
         return false;
       }
     }
 
-    // 7. Academic Minimum GPA / CGPA Filter (Applicant Eligibility)
+    // 11. Academic Minimum GPA / CGPA Filter (Applicant Eligibility)
     if (typeof filters.minGpa === 'number' && filters.minGpa > 0) {
       if (typeof job.minGpa === 'number' && job.minGpa > filters.minGpa) {
         return false;
@@ -298,6 +369,8 @@ interface JobFiltersProps {
   language?: 'bn' | 'en';
   onOpenDiagnostic?: () => void;
   totalMatchingCount?: number;
+  onSearchOnline?: () => void;
+  isSearchingOnline?: boolean;
 }
 
 export const JobFilters: React.FC<JobFiltersProps> = ({
@@ -306,6 +379,8 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
   language = 'en',
   onOpenDiagnostic,
   totalMatchingCount,
+  onSearchOnline,
+  isSearchingOnline = false,
 }) => {
   const bn = language === 'bn';
   const [showGradePanel, setShowGradePanel] = useState(false);
@@ -344,6 +419,43 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
   // Determine active filter chips
   const activeChips: Array<{ id: string; label: string; onRemove: () => void }> = [];
 
+  if (filters.taxonomyCategory && filters.taxonomyCategory !== 'All') {
+    const cat = JobTaxonomyRegistry.getById(filters.taxonomyCategory);
+    activeChips.push({
+      id: 'taxonomyCategory',
+      label: `${bn ? 'পেশা' : 'Category'}: ${cat ? (bn ? cat.labelBn : cat.labelEn) : filters.taxonomyCategory}`,
+      onRemove: () => onChange({ ...filters, taxonomyCategory: 'All', taxonomySubcategory: 'All' }),
+    });
+  }
+  if (filters.taxonomySubcategory && filters.taxonomySubcategory !== 'All' && filters.taxonomyCategory) {
+    const sub = JobTaxonomyRegistry.getSubcategoryById(filters.taxonomyCategory, filters.taxonomySubcategory);
+    activeChips.push({
+      id: 'taxonomySubcategory',
+      label: `${bn ? 'উপ-পেশা' : 'Sub'}: ${sub ? (bn ? sub.labelBn : sub.labelEn) : filters.taxonomySubcategory}`,
+      onRemove: () => update('taxonomySubcategory', 'All'),
+    });
+  }
+  if (filters.employerType && filters.employerType !== 'All') {
+    activeChips.push({
+      id: 'employerType',
+      label: `${bn ? 'নিয়োগকারী' : 'Employer'}: ${filters.employerType}`,
+      onRemove: () => update('employerType', 'All'),
+    });
+  }
+  if (filters.workMode && filters.workMode !== 'All') {
+    activeChips.push({
+      id: 'workMode',
+      label: `${bn ? 'মোড' : 'Mode'}: ${filters.workMode}`,
+      onRemove: () => update('workMode', 'All'),
+    });
+  }
+  if (filters.experienceLevel && filters.experienceLevel !== 'All') {
+    activeChips.push({
+      id: 'experienceLevel',
+      label: `${bn ? 'অভিজ্ঞতা' : 'Exp'}: ${filters.experienceLevel}`,
+      onRemove: () => update('experienceLevel', 'All'),
+    });
+  }
   if (filters.category !== 'All') {
     activeChips.push({
       id: 'category',
@@ -414,6 +526,19 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {onSearchOnline && (
+            <button
+              type="button"
+              onClick={onSearchOnline}
+              disabled={isSearchingOnline}
+              title={bn ? 'সব সোর্স থেকে নতুন চাকরির লাইভ অনলাইন সার্চ চালান' : 'Run live federated search across all configured portals'}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-xs disabled:opacity-50"
+            >
+              <Search className={`w-3.5 h-3.5 ${isSearchingOnline ? 'animate-spin' : ''}`} />
+              <span>{isSearchingOnline ? (bn ? 'সার্চ হচ্ছে...' : 'Searching...') : (bn ? 'লাইভ অনলাইন সার্চ' : 'Search Online')}</span>
+            </button>
+          )}
+
           <select
             value={filters.sortBy}
             onChange={(e) => update('sortBy', e.target.value as JobSortOption)}
@@ -452,18 +577,57 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
       </div>
 
       {/* Main Standard Filter Dropdowns */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {/* Universal 20 Category Selector (A through T) */}
         <select
-          value={filters.category}
-          onChange={(e) => update('category', e.target.value as any)}
-          aria-label="Job Category"
-          className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+          value={filters.taxonomyCategory || 'All'}
+          onChange={(e) => {
+            const nextCat = e.target.value;
+            onChange({
+              ...filters,
+              taxonomyCategory: nextCat,
+              taxonomySubcategory: 'All',
+            });
+          }}
+          aria-label="Universal Job Category (A-T)"
+          className="text-xs bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-2 text-emerald-900 dark:text-emerald-200 font-semibold"
         >
-          <option value="All">{bn ? 'সব ক্যাটাগরি' : 'All Categories'}</option>
-          {JOB_CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c}</option>
+          <option value="All">{bn ? 'সব পেশা ও খাত (A-T সার্বজনীন)' : 'All 20 Categories (A-T)'}</option>
+          {JobTaxonomyRegistry.getAll().map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code}. {bn ? c.labelBn : c.labelEn}
+            </option>
           ))}
         </select>
+
+        {/* Dynamic Subcategory Selector or Standard Category */}
+        {filters.taxonomyCategory && filters.taxonomyCategory !== 'All' ? (
+          <select
+            value={filters.taxonomySubcategory || 'All'}
+            onChange={(e) => update('taxonomySubcategory', e.target.value)}
+            aria-label="Job Subcategory"
+            className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-lg px-2.5 py-2 text-emerald-900 dark:text-emerald-200 font-medium"
+          >
+            <option value="All">{bn ? 'সব সাব-ক্যাটাগরি' : 'All Subcategories'}</option>
+            {JobTaxonomyRegistry.getSubcategories(filters.taxonomyCategory).map((sub) => (
+              <option key={sub.id} value={sub.id}>
+                {bn ? sub.labelBn : sub.labelEn}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            value={filters.category}
+            onChange={(e) => update('category', e.target.value as any)}
+            aria-label="Job Category"
+            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+          >
+            <option value="All">{bn ? 'সব সাধারণ বিভাগ' : 'All Standard Categories'}</option>
+            {JOB_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
 
         <select
           value={filters.education}
@@ -655,43 +819,108 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
         </div>
       )}
 
-      {/* GPA & Salary Filter Panel */}
+      {/* Advanced Taxonomy, Work Mode, Employer, GPA & Salary Filter Panel */}
       {showAdvancedPanel && (
-        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-indigo-100 dark:border-indigo-950 rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fadeIn">
-          <div>
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
-              <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
-              <span>{bn ? 'আমার জিপিএ / সিজিপিএ (যোগ্যতা যাচাই)' : 'My GPA / CGPA (Eligibility)'}</span>
-            </label>
-            <select
-              value={filters.minGpa ? String(filters.minGpa) : ''}
-              onChange={(e) => update('minGpa', e.target.value ? parseFloat(e.target.value) : null)}
-              className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
-            >
-              <option value="">{bn ? 'যে কোনো জিপিএ (Any GPA/CGPA)' : 'Any GPA / CGPA'}</option>
-              <option value="2.0">{bn ? 'আমার জিপিএ ২.০০ (GPA 2.00)' : 'My GPA 2.00'}</option>
-              <option value="2.5">{bn ? 'আমার জিপিএ ২.৫০ (GPA 2.50)' : 'My GPA 2.50'}</option>
-              <option value="3.0">{bn ? 'আমার জিপিএ ৩.০০ (GPA 3.00)' : 'My GPA 3.00'}</option>
-              <option value="3.5">{bn ? 'আমার জিপিএ ৩.৫০ (GPA 3.50)' : 'My GPA 3.50'}</option>
-            </select>
-          </div>
+        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-indigo-100 dark:border-indigo-950 rounded-xl p-3.5 space-y-3 animate-fadeIn">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{bn ? 'আমার জিপিএ / সিজিপিএ (যোগ্যতা যাচাই)' : 'My GPA / CGPA (Eligibility)'}</span>
+              </label>
+              <select
+                value={filters.minGpa ? String(filters.minGpa) : ''}
+                onChange={(e) => update('minGpa', e.target.value ? parseFloat(e.target.value) : null)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="">{bn ? 'যে কোনো জিপিএ (Any GPA/CGPA)' : 'Any GPA / CGPA'}</option>
+                <option value="2.0">{bn ? 'আমার জিপিএ ২.০০ (GPA 2.00)' : 'My GPA 2.00'}</option>
+                <option value="2.5">{bn ? 'আমার জিপিএ ২.৫০ (GPA 2.50)' : 'My GPA 2.50'}</option>
+                <option value="3.0">{bn ? 'আমার জিপিএ ৩.০০ (GPA 3.00)' : 'My GPA 3.00'}</option>
+                <option value="3.5">{bn ? 'আমার জিপিএ ৩.৫০ (GPA 3.50)' : 'My GPA 3.50'}</option>
+              </select>
+            </div>
 
-          <div>
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{bn ? 'নূন্যতম বেতন (Minimum Monthly Salary)' : 'Minimum Monthly Salary'}</span>
-            </label>
-            <select
-              value={filters.minSalary ? String(filters.minSalary) : ''}
-              onChange={(e) => update('minSalary', e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
-            >
-              <option value="">{bn ? 'যে কোনো বেতন (Any Salary)' : 'Any Salary'}</option>
-              <option value="15000">৳১৫,০০০+ (15,000+ BDT)</option>
-              <option value="22000">৳২২,০০০+ (9th Grade equivalent / 22,000+ BDT)</option>
-              <option value="35000">৳৩৫,০০০+ (35,000+ BDT)</option>
-              <option value="50000">৳৫০,০০০+ (50,000+ BDT)</option>
-            </select>
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{bn ? 'নূন্যতম বেতন (Minimum Monthly Salary)' : 'Minimum Monthly Salary'}</span>
+              </label>
+              <select
+                value={filters.minSalary ? String(filters.minSalary) : ''}
+                onChange={(e) => update('minSalary', e.target.value ? parseInt(e.target.value, 10) : null)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="">{bn ? 'যে কোনো বেতন (Any Salary)' : 'Any Salary'}</option>
+                <option value="15000">৳১৫,০০০+ (15,000+ BDT)</option>
+                <option value="22000">৳২২,০০০+ (9th Grade equivalent / 22,000+ BDT)</option>
+                <option value="35000">৳৩৫,০০০+ (35,000+ BDT)</option>
+                <option value="50000">৳৫০,০০০+ (50,000+ BDT)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                <span>{bn ? 'নিয়োগকর্তার ধরন (Employer Type)' : 'Employer Type'}</span>
+              </label>
+              <select
+                value={filters.employerType || 'All'}
+                onChange={(e) => update('employerType', e.target.value as any)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব ধরনের প্রতিষ্ঠান' : 'All Employer Types'}</option>
+                {EMPLOYER_TYPES.map((et) => (
+                  <option key={et} value={et}>{et}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Globe className="w-3.5 h-3.5 text-cyan-600" />
+                <span>{bn ? 'কাজের মোড (Work Mode)' : 'Work Mode'}</span>
+              </label>
+              <select
+                value={filters.workMode || 'All'}
+                onChange={(e) => update('workMode', e.target.value as any)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব মোড (On-Site/Remote/Hybrid)' : 'All Work Modes'}</option>
+                {WORK_MODES.map((wm) => (
+                  <option key={wm} value={wm}>{wm}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Briefcase className="w-3.5 h-3.5 text-petro-600" />
+                <span>{bn ? 'অভিজ্ঞতার পর্যায় (Experience Level)' : 'Experience Level'}</span>
+              </label>
+              <select
+                value={filters.experienceLevel || 'All'}
+                onChange={(e) => update('experienceLevel', e.target.value as any)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব অভিজ্ঞতার পর্যায়' : 'All Experience Levels'}</option>
+                {EXPERIENCE_LEVELS.map((el) => (
+                  <option key={el} value={el}>{el}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center pt-5">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={filters.includeUnclassified ?? true}
+                  onChange={(e) => update('includeUnclassified', e.target.checked)}
+                  className="rounded text-petro-600 focus:ring-petro-500"
+                />
+                <span>{bn ? 'অনির্দিষ্ট ক্যাটাগরিও অন্তর্ভুক্ত রাখুন' : 'Include Unclassified Jobs'}</span>
+              </label>
+            </div>
           </div>
         </div>
       )}

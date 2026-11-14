@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Sparkles,
   PlusCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useApp } from '../../dashboard/context/AppContext';
 import { CompactSourceHealthBar } from './CompactSourceHealthBar';
@@ -28,6 +29,10 @@ import {
   JobCategory,
   EducationRequirement,
   DeadlineFilterOption,
+  EmployerType,
+  WorkMode,
+  ExperienceLevel,
+  JobSearchFilters,
 } from '../types/job.types';
 import { JobRepository } from '../database/job-repository';
 import { BookmarkRepository } from '../database/bookmark-repository';
@@ -35,6 +40,13 @@ import { ApplicationRepository } from '../database/application-repository';
 import { JobSourceRegistry } from '../sources/source-registry';
 import { JobCheckService } from '../background/job-check-service';
 import { SourceProgressEvent } from '../services/job-fetcher';
+import {
+  FederatedSearchOrchestrator,
+  FederatedSearchResultReport,
+  FederatedSearchProgress,
+} from '../services/federated-search-orchestrator';
+import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
+import { JobGradeExtractor, GRADE_LABELS } from '../services/grade-extractor';
 import {
   SEARCH_ENGINE_CATEGORIES,
   JobSearchQueryState,
@@ -49,7 +61,14 @@ import {
   formatSourceFailureAlertMessage,
   formatJobCategoryLabel,
 } from '../services/source-health-state';
-import { EDUCATION_LEVELS, JOB_LOCATIONS } from './JobFilters';
+import {
+  EDUCATION_LEVELS,
+  JOB_LOCATIONS,
+  ALL_GOVT_GRADES,
+  EMPLOYER_TYPES,
+  WORK_MODES,
+  EXPERIENCE_LEVELS,
+} from './JobFilters';
 import { JobDetails } from './JobDetails';
 import {
   AddJobCircularModal,
@@ -103,6 +122,17 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
 
   const [draftQuery, setDraftQuery] = useState('');
   const [searchState, setSearchState] = useState<JobSearchQueryState>(DEFAULT_SEARCH_STATE);
+  const [searchMode, setSearchMode] = useState<'all_categories' | 'smart_filter' | 'saved_jobs'>('smart_filter');
+  const [taxonomyCategory, setTaxonomyCategory] = useState<string>('All');
+  const [taxonomySubcategory, setTaxonomySubcategory] = useState<string>('All');
+  const [employerType, setEmployerType] = useState<EmployerType | 'All'>('All');
+  const [workMode, setWorkMode] = useState<WorkMode | 'All'>('All');
+  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | 'All'>('All');
+  const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+  const [minGpa, setMinGpa] = useState<number | null>(null);
+  const [includeUnclassified, setIncludeUnclassified] = useState<boolean>(true);
+  const [federatedReport, setFederatedReport] = useState<FederatedSearchResultReport | null>(null);
+  const [federatedProgress, setFederatedProgress] = useState<FederatedSearchProgress | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -233,6 +263,82 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
     }
   }, [bn, loadAllState, onDataChanged, showToast, sourceOutcomes]);
 
+  const handleRunFederatedSearch = useCallback(async () => {
+    if (searchMode === 'saved_jobs') {
+      showToast(bn ? 'সেভ করা চাকরি মোডে অফলাইন সার্চ সক্রিয়' : 'Offline local search is active for Saved Jobs');
+      return;
+    }
+    setSyncing(true);
+    setHardSyncError(null);
+    setFederatedProgress({
+      phase: 'planning',
+      completedSources: 0,
+      totalSources: JobSourceRegistry.getAll().length,
+      retrievedSoFar: 0,
+    });
+
+    try {
+      const filtersForSearch: JobSearchFilters = {
+        query: draftQuery.trim() || searchState.query,
+        category: searchState.category,
+        education: searchState.education,
+        employmentType: 'All',
+        deadline: searchState.deadline,
+        location: (searchState.location as any) || 'All',
+        sortBy: searchState.sortBy as any,
+        taxonomyCategory,
+        taxonomySubcategory,
+        employerType,
+        workMode,
+        experienceLevel,
+        selectedGrades,
+        minGpa,
+        includeUnclassified,
+      };
+
+      const report = await FederatedSearchOrchestrator.executeFederatedSearch({
+        filters: filtersForSearch,
+        onProgress: (prog) => {
+          setFederatedProgress(prog);
+        },
+      });
+
+      setFederatedReport(report);
+      setLastRunNewJobsCount(report.uniqueNewSavedCount);
+      await loadAllState();
+      onDataChanged?.();
+
+      showToast(
+        bn
+          ? `✅ লাইভ অনলাইন সার্চ সম্পন্ন: ${report.uniqueNewSavedCount}টি নতুন সার্কুলার যুক্ত হয়েছে (${report.successfulSourcesCount}/${report.configuredSourcesCount} সোর্স সফল)`
+          : `✅ Live Search complete: ${report.uniqueNewSavedCount} new circular(s) indexed (${report.successfulSourcesCount}/${report.configuredSourcesCount} sources succeeded)`
+      );
+    } catch (err: any) {
+      const msg = err?.message || 'Federated search failed';
+      setHardSyncError(msg);
+      showToast(`❌ ${msg}`);
+    } finally {
+      setSyncing(false);
+      setFederatedProgress(null);
+    }
+  }, [
+    searchMode,
+    draftQuery,
+    searchState,
+    taxonomyCategory,
+    taxonomySubcategory,
+    employerType,
+    workMode,
+    experienceLevel,
+    selectedGrades,
+    minGpa,
+    includeUnclassified,
+    loadAllState,
+    onDataChanged,
+    showToast,
+    bn,
+  ]);
+
   const handleFetchLatestRef = useRef(handleFetchLatest);
   handleFetchLatestRef.current = handleFetchLatest;
 
@@ -303,10 +409,65 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
     [jobs, draftQuery]
   );
 
-  const rankedResults = useMemo(
-    () => searchAndRankJobs(jobs, searchState, bookmarkedIds, hiddenSet, searchIndexMap),
-    [jobs, searchState, bookmarkedIds, hiddenSet, searchIndexMap]
-  );
+  const rankedResults = useMemo(() => {
+    let list = searchAndRankJobs(jobs, searchState, bookmarkedIds, hiddenSet, searchIndexMap);
+
+    if (searchMode === 'saved_jobs') {
+      list = list.filter((item) => bookmarkedIds.has(item.job.id) || appByJobId.has(item.job.id));
+    } else if (searchMode === 'smart_filter') {
+      if (taxonomyCategory !== 'All') {
+        list = list.filter((item) => {
+          const matchCat = item.job.taxonomyCategoryId === taxonomyCategory;
+          const matchUnclassified = Boolean(includeUnclassified && item.job.isUnclassified);
+          return matchCat || matchUnclassified;
+        });
+      }
+      if (taxonomySubcategory !== 'All') {
+        list = list.filter((item) => {
+          const matchSub = item.job.taxonomySubcategoryId === taxonomySubcategory;
+          const matchUnclassified = Boolean(includeUnclassified && item.job.isUnclassified);
+          return matchSub || matchUnclassified;
+        });
+      }
+      if (employerType !== 'All') {
+        list = list.filter((item) => item.job.employerType === employerType);
+      }
+      if (workMode !== 'All') {
+        list = list.filter((item) => item.job.workMode === workMode);
+      }
+      if (experienceLevel !== 'All') {
+        list = list.filter((item) => item.job.experienceLevel === experienceLevel);
+      }
+      if (selectedGrades.length > 0 && !selectedGrades.includes('All')) {
+        list = list.filter((item) => JobGradeExtractor.matchesGradeFilter(item.job, selectedGrades));
+      }
+      if (typeof minGpa === 'number' && minGpa > 0) {
+        list = list.filter((item) => {
+          if (typeof item.job.minGpa === 'number' && item.job.minGpa > minGpa) return false;
+          if (typeof item.job.minCgpa === 'number' && item.job.minCgpa > minGpa) return false;
+          return true;
+        });
+      }
+    }
+
+    return list;
+  }, [
+    jobs,
+    searchState,
+    bookmarkedIds,
+    hiddenSet,
+    searchIndexMap,
+    searchMode,
+    appByJobId,
+    taxonomyCategory,
+    taxonomySubcategory,
+    employerType,
+    workMode,
+    experienceLevel,
+    selectedGrades,
+    minGpa,
+    includeUnclassified,
+  ]);
 
   const SEARCH_PAGE_SIZE = 20;
   const [currentPage, setCurrentPage] = useState(1);
@@ -510,12 +671,12 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              {bn ? 'স্মার্ট জব সার্চ' : 'Job Search'}
+              {bn ? 'স্মার্ট জব সার্চ ও সার্বজনীন অনুসন্ধান' : 'Job Search & Federated Discovery'}
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {bn
-                ? 'কনফিগারকৃত সরকারি, ব্যাংক, NGO ও রিমোট সোর্স এবং লোকাল ইনডেক্স থেকে সরাসরি বিজ্ঞপ্তি খুঁজুন।'
-                : 'Search across locally indexed circulars and configured Bangladesh & international job portals.'}
+                ? '২০টি সার্বজনীন ক্যাটাগরি, গ্রেড ও লাইভ ফেডারেটেড সার্চ দিয়ে সরকারি, ব্যাংক, NGO ও রিমোট সার্কুলার খুঁজুন।'
+                : 'Search across 20 Universal Categories, Pay Grades, and live federated portals with zero missing data.'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -528,6 +689,48 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
               <span>{bn ? 'সার্চ সেভ করুন' : 'Save Search'}</span>
             </button>
           </div>
+        </div>
+
+        {/* 3 Dedicated Search Modes */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setSearchMode('all_categories')}
+            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-left sm:text-center ${
+              searchMode === 'all_categories'
+                ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs border border-emerald-300 dark:border-emerald-700'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <div>{bn ? '১. সব ক্যাটাগরি ও পূর্ণ অনুসন্ধান' : '1. All Categories (Search Everything)'}</div>
+            <div className="text-[10.5px] font-normal opacity-80">{bn ? 'অনলাইন ও লোকাল সব ২০টি ক্যাটাগরি' : 'All 20 Categories (Online + Local)'}</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSearchMode('smart_filter')}
+            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-left sm:text-center ${
+              searchMode === 'smart_filter'
+                ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs border border-emerald-300 dark:border-emerald-700'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <div>{bn ? '২. স্মার্ট ফিল্টার সার্চ' : '2. Smart Filter Search'}</div>
+            <div className="text-[10.5px] font-normal opacity-80">{bn ? 'ক্যাটাগরি, গ্রেড, যোগ্যতা, মোড ও প্রতিষ্ঠান' : 'Category, Grade, GPA & Work Mode'}</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSearchMode('saved_jobs')}
+            className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-left sm:text-center ${
+              searchMode === 'saved_jobs'
+                ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 shadow-xs border border-indigo-300 dark:border-indigo-700'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <div>{bn ? '৩. সংরক্ষিত সার্কুলার (অফলাইন)' : '3. Saved Jobs (Offline)'}</div>
+            <div className="text-[10.5px] font-normal opacity-80">{bn ? 'লোকাল IndexedDB ও বুকমার্ককৃত' : 'Saved & Tracked Jobs Only'}</div>
+          </button>
         </div>
 
         {/* Main Search Bar + Primary Actions */}
@@ -546,9 +749,13 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                   setShowSuggestions(true);
                 }}
                 placeholder={
-                  bn
-                    ? 'পদবি, প্রতিষ্ঠান, যোগ্যতা বা এলাকা লিখুন (যেমন: BPSC, ব্যাংক, প্রকৌশলী, ঢাকা)...'
-                    : 'Search job title, organization, qualification, location, or circular...'
+                  searchMode === 'saved_jobs'
+                    ? bn
+                      ? 'সংরক্ষিত চাকরির পদবি বা প্রতিষ্ঠান দিয়ে খুঁজুন (অফলাইন)...'
+                      : 'Search saved / bookmarked circulars (offline)...'
+                    : bn
+                      ? 'পদবি, প্রতিষ্ঠান, ৯ম গ্রেড, বিসিএস, যোগ্যতা বা এলাকা লিখুন...'
+                      : 'Search job title, organization, 9th grade, qualification, location...'
                 }
                 className="w-full h-11 pl-10 pr-9 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 focus:bg-white dark:focus:bg-slate-900 transition-all"
               />
@@ -604,6 +811,7 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                 type="button"
                 onClick={() => handleFetchLatest()}
                 disabled={syncing}
+                title={bn ? 'সব কনফিগারকৃত উৎস থেকে সর্বশেষ সার্কুলার আনুন' : 'Fetch latest circulars from all sources'}
                 className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-xl text-xs font-semibold border border-emerald-200 dark:border-emerald-800 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 disabled:opacity-50 cursor-pointer transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
@@ -613,8 +821,98 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                     : bn ? 'সর্বশেষ আনুন' : 'Fetch Latest'}
                 </span>
               </button>
+
+              {searchMode !== 'saved_jobs' && (
+                <button
+                  type="button"
+                  onClick={() => handleRunFederatedSearch()}
+                  disabled={syncing}
+                  title={bn ? 'সব ক্যাটাগরি ও পোর্টালে লাইভ ফেডারেটেড সার্চ চালান' : 'Run live federated search across all categories'}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs disabled:opacity-50 cursor-pointer transition-colors"
+                >
+                  <Search className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                  <span className="whitespace-nowrap">
+                    {syncing
+                      ? bn ? 'সার্চ হচ্ছে...' : 'Searching...'
+                      : bn ? 'ফেডারেটেড সার্চ' : 'Federated Search'}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Federated Search Progress Indicator */}
+          {syncing && federatedProgress && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 space-y-1.5 text-xs animate-fadeIn">
+              <div className="flex items-center justify-between text-emerald-900 dark:text-emerald-200 font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                  <span>
+                    {federatedProgress.activeSourceName
+                      ? `${bn ? 'অনুসন্ধান চলছে:' : 'Querying:'} ${federatedProgress.activeSourceName}`
+                      : bn ? 'সার্চ প্রস্তুত হচ্ছে...' : 'Orchestrating search...'}
+                  </span>
+                </span>
+                <span>
+                  {federatedProgress.completedSources} / {federatedProgress.totalSources} {bn ? 'সোর্স' : 'sources'}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-600 h-1.5 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.round(
+                      (federatedProgress.completedSources / Math.max(1, federatedProgress.totalSources)) * 100
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Transparent Search Coverage Report Panel */}
+          {federatedReport && (
+            <div className="bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-2.5 text-xs animate-fadeIn">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5 text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{bn ? 'লাইভ ফেডারেটেড সার্চ কভারেজ রিপোর্ট' : 'Live Federated Search Coverage Report'}</span>
+                </span>
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                  {bn
+                    ? `${federatedReport.successfulSourcesCount}/${federatedReport.configuredSourcesCount} সোর্স সফল • ${federatedReport.uniqueNewSavedCount}টি নতুন সার্কুলার সংরক্ষিত`
+                    : `${federatedReport.successfulSourcesCount}/${federatedReport.configuredSourcesCount} sources succeeded • ${federatedReport.uniqueNewSavedCount} new circulars saved`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 text-center">
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'কনফিগারকৃত' : 'Configured'}</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 text-sm">{federatedReport.configuredSourcesCount}</div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'অনুরোধকৃত' : 'Attempted'}</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 text-sm">{federatedReport.attemptedSourcesCount}</div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'সফল সোর্স' : 'Successful'}</div>
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{federatedReport.successfulSourcesCount}</div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'আংশিক / ব্যর্থ' : 'Partial/Fail'}</div>
+                  <div className="font-bold text-amber-600 dark:text-amber-400 text-sm">{federatedReport.partialSourcesCount + federatedReport.failedSourcesCount}</div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'পেজ ফেচ' : 'Pages'}</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 text-sm">{federatedReport.pagesFetchedTotal}</div>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  <div className="text-slate-400 text-[10px] uppercase font-bold">{bn ? 'নতুন সংরক্ষিত' : 'New Saved'}</div>
+                  <div className="font-bold text-emerald-700 dark:text-emerald-300 text-sm">+{federatedReport.uniqueNewSavedCount}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Recent & Popular Suggestions + Saved Searches */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
@@ -836,6 +1134,135 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                 />
                 <span>{bn ? 'শুধু বুকমার্ক' : 'Bookmarked Only'}</span>
               </label>
+            </div>
+          )}
+
+          {/* Smart Filter Extended Taxonomy Row (When Smart Filter Mode is selected) */}
+          {searchMode === 'smart_filter' && (
+            <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-2.5 animate-fadeIn">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                {/* 20 Universal Categories */}
+                <select
+                  aria-label="Universal Category"
+                  value={taxonomyCategory}
+                  onChange={(e) => {
+                    setTaxonomyCategory(e.target.value);
+                    setTaxonomySubcategory('All');
+                  }}
+                  className="h-9 text-xs border border-emerald-300 dark:border-emerald-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-emerald-900 dark:text-emerald-200 font-semibold"
+                >
+                  <option value="All">{bn ? 'সব পেশা (A-T সার্বজনীন)' : 'All 20 Categories (A-T)'}</option>
+                  {JobTaxonomyRegistry.getAll().map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code}. {bn ? c.labelBn : c.labelEn}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Subcategory */}
+                <select
+                  aria-label="Subcategory"
+                  value={taxonomySubcategory}
+                  disabled={taxonomyCategory === 'All'}
+                  onChange={(e) => setTaxonomySubcategory(e.target.value)}
+                  className="h-9 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-50"
+                >
+                  <option value="All">{bn ? 'সব সাব-ক্যাটাগরি' : 'All Subcategories'}</option>
+                  {taxonomyCategory !== 'All' &&
+                    JobTaxonomyRegistry.getSubcategories(taxonomyCategory).map((sub) => (
+                      <option key={sub.id} value={sub.id}>
+                        {bn ? sub.labelBn : sub.labelEn}
+                      </option>
+                    ))}
+                </select>
+
+                {/* Employer Type */}
+                <select
+                  aria-label="Employer Type"
+                  value={employerType}
+                  onChange={(e) => setEmployerType(e.target.value as any)}
+                  className="h-9 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="All">{bn ? 'সব নিয়োগকর্তা' : 'All Employer Types'}</option>
+                  {EMPLOYER_TYPES.map((et) => (
+                    <option key={et} value={et}>{et}</option>
+                  ))}
+                </select>
+
+                {/* Work Mode */}
+                <select
+                  aria-label="Work Mode"
+                  value={workMode}
+                  onChange={(e) => setWorkMode(e.target.value as any)}
+                  className="h-9 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="All">{bn ? 'সব কাজের মোড' : 'All Work Modes'}</option>
+                  {WORK_MODES.map((wm) => (
+                    <option key={wm} value={wm}>{wm}</option>
+                  ))}
+                </select>
+
+                {/* Experience Level */}
+                <select
+                  aria-label="Experience Level"
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value as any)}
+                  className="h-9 text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="All">{bn ? 'সব অভিজ্ঞতা' : 'All Experience Levels'}</option>
+                  {EXPERIENCE_LEVELS.map((el) => (
+                    <option key={el} value={el}>{el}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quick Govt Grade Selectors */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
+                <span className="font-bold text-slate-500 mr-1">{bn ? 'সরকারি গ্রেড ফিল্টার:' : 'Pay Grades:'}</span>
+                {['1st-9th', '10th-15th', '16th-20th', '9', '10', '11'].map((g) => {
+                  const isSel = selectedGrades.includes(g);
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGrades((prev) =>
+                          prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
+                        );
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-colors ${
+                        isSel
+                          ? 'bg-petro-600 text-white'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {g.includes('-')
+                        ? g === '1st-9th' ? (bn ? '১ম–৯ম' : '1st-9th') : g === '10th-15th' ? (bn ? '১০ম–১৫তম' : '10th-15th') : (bn ? '১৬তম–২০তম' : '16th-20th')
+                        : `${g}th`}
+                    </button>
+                  );
+                })}
+                {selectedGrades.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGrades([])}
+                    className="text-rose-600 font-bold ml-1 hover:underline cursor-pointer"
+                  >
+                    {bn ? 'মুছুন' : 'Clear'}
+                  </button>
+                )}
+                <div className="ml-auto flex items-center">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={includeUnclassified}
+                      onChange={(e) => setIncludeUnclassified(e.target.checked)}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>{bn ? 'অনির্দিষ্ট ক্যাটাগরিও দেখান' : 'Include Unclassified'}</span>
+                  </label>
+                </div>
+              </div>
             </div>
           )}
         </form>
