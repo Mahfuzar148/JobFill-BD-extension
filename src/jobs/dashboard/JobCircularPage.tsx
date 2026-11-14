@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../dashboard/context/AppContext';
 import { CompactSourceHealthBar, LiveSourceProgressSnapshot } from './CompactSourceHealthBar';
+import { CaptchaExtractionPanel, ExtractionLifecycleState } from './CaptchaExtractionPanel';
 import {
   computeSourceHealthSummary,
   formatSourceFailureAlertMessage,
@@ -179,6 +180,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   const [loadState, setLoadState] = useState<HubLoadState>('initial_loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
+  const [dismissExtractionPanel, setDismissExtractionPanel] = useState(false);
   const sourcesPanelRef = useRef<HTMLDivElement | null>(null);
 
   const computeHubState = useCallback(
@@ -529,6 +531,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
 
   const handleSyncSources = async (targetSourceIds?: string[]) => {
     setSyncing(true);
+    setDismissExtractionPanel(false);
     setErrorMessage(null);
     const isTargeted = Array.isArray(targetSourceIds) && targetSourceIds.length > 0;
     try {
@@ -677,6 +680,43 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     await shareJobCircular(job, showToast, bn);
   };
 
+  const adapters = useMemo(() => JobSourceRegistry.getAll(), []);
+  const sourceHealth = useMemo(
+    () => computeSourceHealthSummary(adapters, sourceOutcomes, lastSuccessfulSyncAt),
+    [adapters, sourceOutcomes, lastSuccessfulSyncAt]
+  );
+  const partialFailureText = useMemo(
+    () => formatSourceFailureAlertMessage(sourceHealth, bn),
+    [sourceHealth, bn]
+  );
+
+  const captchaBlockedSource = useMemo(() => {
+    return sourceHealth.sources.find((s) => s.blockedByCaptcha) || null;
+  }, [sourceHealth.sources]);
+
+  const rateLimitedSource = useMemo(() => {
+    return sourceHealth.sources.find((s) => s.rateLimited || s.httpStatus === 429) || null;
+  }, [sourceHealth.sources]);
+
+  const extractionLifecycleState: ExtractionLifecycleState = useMemo(() => {
+    if (captchaBlockedSource) return 'captcha_required';
+    if (rateLimitedSource) return 'rate_limited';
+    if (syncing) {
+      if (liveProgress?.activeSourceName?.includes('যাচাই') || liveProgress?.activeSourceName?.includes('Validat')) {
+        return 'validating';
+      }
+      return 'extracting';
+    }
+    if (loadState === 'fetch_failure') return 'failed';
+    return 'completed';
+  }, [captchaBlockedSource, rateLimitedSource, syncing, liveProgress, loadState]);
+
+  const handleResumeExtraction = async () => {
+    if (!captchaBlockedSource) return;
+    showToast(bn ? '🔄 পোর্টাল পুনঃযাচাই করা হচ্ছে...' : '🔄 Re-checking portal challenge status...');
+    await handleSyncSources([captchaBlockedSource.sourceId]);
+  };
+
   if (selectedJob) {
     return (
       <>
@@ -700,10 +740,6 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
       </>
     );
   }
-
-  const adapters = JobSourceRegistry.getAll();
-  const sourceHealth = computeSourceHealthSummary(adapters, sourceOutcomes, lastSuccessfulSyncAt);
-  const partialFailureText = formatSourceFailureAlertMessage(sourceHealth, bn);
 
   return (
     <div className="space-y-5">
@@ -971,6 +1007,41 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           </div>
         }
       />
+
+      {/* CAPTCHA-Aware Extraction Lifecycle Panel */}
+      {!dismissExtractionPanel && (syncing || captchaBlockedSource || rateLimitedSource) && (
+        <CaptchaExtractionPanel
+          state={extractionLifecycleState}
+          activeSourceName={
+            liveProgress?.activeSourceName ||
+            captchaBlockedSource?.sourceName ||
+            rateLimitedSource?.sourceName
+          }
+          retrievedCount={jobs.length}
+          savedCount={jobs.length}
+          errorMessage={errorMessage || captchaBlockedSource?.error}
+          retryAfterMs={
+            rateLimitedSource?.retryCooldownUntil
+              ? Math.max(0, rateLimitedSource.retryCooldownUntil - Date.now())
+              : null
+          }
+          portalUrl={captchaBlockedSource?.openPortalUrl || captchaBlockedSource?.directPortalUrl}
+          canResume={true}
+          onResume={handleResumeExtraction}
+          onOpenPortal={() => {
+            const url = captchaBlockedSource?.openPortalUrl || captchaBlockedSource?.directPortalUrl;
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+          }}
+          onOpenManualAdd={() => {
+            if (captchaBlockedSource) {
+              setManualPrefill(buildPrefillFromSourceHealthItem(captchaBlockedSource));
+            }
+            setShowAddModal(true);
+          }}
+          onDismiss={() => setDismissExtractionPanel(true)}
+          bn={bn}
+        />
+      )}
 
       {/* Offline / Fetch Failure / Partial Failure Status Banners */}
       {!loading && loadState === 'offline' && (
