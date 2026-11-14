@@ -4,7 +4,7 @@
 // Fully local, persistent, and sandboxed inside Chrome.
 
 export const DB_NAME = 'JobFillBD_SecureStorage';
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 export const STORES = {
   PROFILES: 'profiles',
@@ -23,6 +23,7 @@ export const STORES = {
   JOBS: 'jobs',
   BOOKMARKS: 'bookmarks',
   APPLICATIONS: 'applications',
+  JOB_VISITS: 'job_visits',
   NOTIFICATIONS: 'notifications',
   SEARCH_INDEX: 'search_index',
   SYNC_HISTORY: 'sync_history',
@@ -251,6 +252,15 @@ export class IndexedDBManager {
           const noteStore = db.createObjectStore(STORES.STUDY_NOTES, { keyPath: 'id' });
           noteStore.createIndex('kind', 'kind', { unique: false });
           noteStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 23. Job Circular Visits Store (v11 additive store)
+        if (!db.objectStoreNames.contains(STORES.JOB_VISITS)) {
+          const visitStore = db.createObjectStore(STORES.JOB_VISITS, { keyPath: 'visitId' });
+          visitStore.createIndex('jobId', 'jobId', { unique: false });
+          visitStore.createIndex('canonicalUrl', 'canonicalUrl', { unique: false });
+          visitStore.createIndex('lastVisitedAt', 'lastVisitedAt', { unique: false });
+          visitStore.createIndex('sourceId', 'sourceId', { unique: false });
         }
       };
 

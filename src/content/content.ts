@@ -25,6 +25,13 @@ import { recordExtensionDiagnostic } from '../security/diagnostics';
 import { detectAccessRestrictionWithReason } from '../jobs/services/captcha-detector';
 import { LoginFormDetector } from '../credentials/login-detector';
 import {
+  detectJobCircularPage,
+  detectApplicationConfirmation,
+  isJobApplicationForm,
+  showSaveCredentialDialog,
+  injectLoginAutofillPill,
+} from './assistant-workflows';
+import {
   DocumentFieldDetector,
   DocumentUploadCoordinator,
   DocumentApprovalItem,
@@ -247,6 +254,195 @@ async function initAssistant() {
   }
 
   await ensureAssistantUiInitialized(false);
+
+  // 1. Automatic Job Circular Visit Tracking (non-intrusive)
+  try {
+    const circular = detectJobCircularPage(document);
+    if (circular && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'RECORD_JOB_CIRCULAR_VISIT',
+        payload: {
+          jobId: null,
+          sourceId: circular.sourceId,
+          organization: circular.organization,
+          jobTitle: circular.jobTitle,
+          circularUrl: circular.circularUrl,
+          verificationStatus: 'verified',
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Circular visit notice:', err);
+  }
+
+  // 2. Post-Submission Confirmation Detection
+  try {
+    const confirmation = detectApplicationConfirmation(document);
+    if (confirmation.isConfirmed && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'CONFIRM_APPLICATION_SUBMISSION',
+        payload: {
+          teletalkUserId: confirmation.teletalkUserId,
+          applicantId: confirmation.applicantId,
+          confirmedAt: Date.now(),
+        },
+      });
+      showToast(
+        `🎉 আবেদন সফলভাবে গৃহীত হয়েছে!` +
+          (confirmation.teletalkUserId ? ` (User ID: ${confirmation.teletalkUserId})` : '')
+      );
+    }
+    // Also check for newly generated portal credentials
+    const generated = LoginFormDetector.detectGeneratedPortalCredentials(document);
+    if (generated.hasGeneratedCredentials && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      showSaveCredentialDialog(
+        {
+          origin: window.location.origin,
+          portalName: generated.portalName,
+          portalUrl: window.location.href,
+          username: generated.userId || generated.applicantId || '',
+          password: generated.password,
+        },
+        async () => {
+          chrome.runtime.sendMessage({
+            action: 'CRED_VAULT_SAVE_MANUAL',
+            payload: {
+              origin: window.location.origin,
+              portalName: generated.portalName,
+              portalUrl: window.location.href,
+              username: generated.userId || generated.applicantId || '',
+              password: generated.password || '',
+            },
+          });
+          showToast('🔐 নতুন পোর্টাল লগইন সফলভাবে ভল্টে সংরক্ষিত হয়েছে!');
+        },
+        () => {}
+      );
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Confirmation check notice:', err);
+  }
+
+  // 3. Passive Form Submission Observer (captures application submits & login submits)
+  setupPassiveSubmissionObserver();
+
+  // 4. Smart Login Autofill Pill / Trusted Origin Autofill
+  void setupSmartLoginAutofill();
+}
+
+function setupPassiveSubmissionObserver() {
+  if (typeof window === 'undefined') return;
+  if ((window as any).__jobfillSubmitObserverAttached) return;
+  (window as any).__jobfillSubmitObserverAttached = true;
+
+  document.addEventListener(
+    'submit',
+    (event) => {
+      try {
+        const form = event.target as HTMLFormElement | null;
+        if (!form || form.tagName?.toLowerCase() !== 'form') return;
+
+        // A. Login / Registration Form Submission
+        const formKind = LoginFormDetector.classifyForm(form);
+        if (formKind === 'login' || formKind === 'registration') {
+          const candidate = LoginFormDetector.readExplicitCaptureCandidate(document, window.location.href, true);
+          if (candidate.ok && candidate.password) {
+            showSaveCredentialDialog(
+              {
+                origin: candidate.origin || window.location.origin,
+                portalName: candidate.portalName || document.title,
+                portalUrl: candidate.portalUrl || window.location.href,
+                username: candidate.username || '',
+                password: candidate.password,
+              },
+              async () => {
+                if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                  chrome.runtime.sendMessage({
+                    action: 'CRED_VAULT_SAVE_MANUAL',
+                    payload: {
+                      origin: candidate.origin,
+                      portalName: candidate.portalName,
+                      portalUrl: candidate.portalUrl,
+                      username: candidate.username,
+                      password: candidate.password,
+                    },
+                  });
+                  showToast('🔐 পোর্টাল লগইন ক্রেডেনশিয়াল ভল্টে সংরক্ষিত হয়েছে!');
+                }
+              },
+              () => {}
+            );
+          }
+          return;
+        }
+
+        // B. Job Application Form Submission
+        if (isJobApplicationForm(form)) {
+          showToast('📝 আবেদন সাবমিট সম্পন্ন হচ্ছে — ফলাফল ভেরিফিকেশন চলছে...');
+          if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+            chrome.runtime.sendMessage({
+              action: 'RECORD_APPLICATION_SUBMIT_ATTEMPT',
+              payload: {
+                organization: document.title.split('-')[0].trim() || 'Recruitment Portal',
+                jobTitle: document.querySelector('h1, h2')?.textContent?.trim() || 'Online Job Application',
+                applicationUrl: window.location.href,
+              },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('JobFill BD: Submit observation notice:', err);
+      }
+    },
+    true
+  );
+}
+
+async function setupSmartLoginAutofill() {
+  if (typeof window === 'undefined' || !window.location.protocol.startsWith('https')) return;
+  const loginScan = LoginFormDetector.scan(document);
+  if (!loginScan.hasLoginForm || !loginScan.usernameInputSelector) return;
+
+  const uEl = document.querySelector<HTMLInputElement>(loginScan.usernameInputSelector);
+  if (!uEl) return;
+
+  if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({ action: 'GET_TRUSTED_AUTOFILL_ORIGINS' }, (trustedRes) => {
+      const trustedList = Array.isArray(trustedRes?.origins) ? trustedRes.origins : [];
+      const isTrusted = trustedList.includes(window.location.origin);
+
+      chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
+        if (!credRes || credRes.status !== 'ok' || !credRes.credentials || credRes.credentials.length === 0) {
+          return;
+        }
+
+        const cred = credRes.credentials[0];
+        if (isTrusted && credRes.vaultUnlocked && credRes.credentials.length === 1) {
+          // Trusted origin explicit autofill
+          LoginFormDetector.executeExplicitFill(document, window.location.href, {
+            expectedOrigin: window.location.origin,
+            username: cred.username,
+            password: cred.password,
+            fillMode: 'both',
+            explicitUserInitiated: true,
+          });
+          showToast(`🔐 বিশ্বস্ত পোর্টালে (${cred.portalName}) লগইন তথ্য পূরণ করা হয়েছে।`);
+        } else {
+          // Non-trusted origin: inject discreet suggestion pill
+          injectLoginAutofillPill(uEl, cred.portalName || 'Portal', () => {
+            LoginFormDetector.executeExplicitFill(document, window.location.href, {
+              expectedOrigin: window.location.origin,
+              username: cred.username,
+              password: cred.password,
+              fillMode: 'both',
+              explicitUserInitiated: true,
+            });
+            showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে।');
+          });
+        }
+      });
+    });
+  }
 }
 
 // Load active profile from trusted MV3 Service Worker or fallback local cache

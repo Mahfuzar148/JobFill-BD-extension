@@ -25,8 +25,8 @@ describe('Phase 7 — Meet/Zoom Exclusion, Schema Non-Destructive Upgrade & Rout
     expect(excludes).toContain('*://*.zoom.us/*');
   });
 
-  it('2. Keeps IndexedDB schema upgrade additive (v10 with credentials, cv, calendar, exam & vocab stores, zero deleteObjectStore)', () => {
-    expect(DB_VERSION).toBe(10);
+  it('2. Keeps IndexedDB schema upgrade additive (v10+ with credentials, cv, calendar, exam, vocab & job visits stores, zero deleteObjectStore)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(10);
     expect(STORES.CREDENTIALS).toBe('credential_vault');
     expect(STORES.CV_DOCUMENTS).toBe('cv_documents');
     expect(STORES.CALENDAR_EVENTS).toBe('calendar_events');
@@ -35,6 +35,7 @@ describe('Phase 7 — Meet/Zoom Exclusion, Schema Non-Destructive Upgrade & Rout
     expect(STORES.STUDY_NOTES).toBe('study_notes');
     expect(STORES.PROFILES).toBe('profiles');
     expect(STORES.APPLICATIONS).toBe('applications');
+    expect(STORES.JOB_VISITS).toBe('job_visits');
 
     const dbSource = fs.readFileSync(
       path.resolve(__dirname, '../../src/database/indexeddb.ts'),

@@ -45,7 +45,11 @@ export const APPLICATION_STATUSES: ApplicationStatus[] = [
   'Bookmarked',
   'Saved',
   'Ready to Apply',
+  'Visited',
+  'Application Started',
+  'Submission Pending Verification',
   'Applied',
+  'Submission Failed',
   'Payment Pending',
   'Payment Completed',
   'Admit Card Available',
@@ -303,6 +307,14 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     switch (status) {
       case 'Bookmarked':
         return 'bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-950/60 dark:text-sky-300';
+      case 'Visited':
+        return 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300';
+      case 'Application Started':
+        return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300';
+      case 'Submission Pending Verification':
+        return 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200';
+      case 'Submission Failed':
+        return 'bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-200';
       case 'Applied':
       case 'Payment Completed':
         return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300';

@@ -57,6 +57,7 @@ import {
 } from './MissingApplicationUrlModal';
 import { DeadlineCountdown } from './DeadlineCountdown';
 import { BookmarkButton } from './BookmarkButton';
+import { JobVisitRepository } from '../database/job-visit-repository';
 
 interface JobDetailsProps {
   job: NormalizedJobCircular;
@@ -133,6 +134,19 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
       mounted = false;
     };
   }, [applicantDob]);
+
+  useEffect(() => {
+    if (!job?.id) return;
+    JobVisitRepository.recordVisit({
+      jobId: job.id,
+      sourceId: job.sourceId || 'job_hub',
+      organization: job.organization,
+      jobTitle: job.jobTitle,
+      circularUrl: job.circularUrl || job.applicationUrl || '',
+      deadlineAt: job.deadlineAt,
+      verificationStatus: job.sourceVerification === 'official_verified' ? 'verified' : 'internal',
+    }).catch((err) => console.warn('JobFill BD: Could not record job visit:', err));
+  }, [job?.id]);
 
   const ageCheck = calculateAgeOnCutoffDate(dobInput, cutoffInput);
   const fullEligibility = loadedProfile ? evaluateProfileEligibility(loadedProfile, job) : null;

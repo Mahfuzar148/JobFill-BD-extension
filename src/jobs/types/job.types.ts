@@ -201,7 +201,11 @@ export type ApplicationStatus =
   | 'Bookmarked'
   | 'Saved'
   | 'Ready to Apply'
+  | 'Visited'
+  | 'Application Started'
+  | 'Submission Pending Verification'
   | 'Applied'
+  | 'Submission Failed'
   | 'Payment Pending'
   | 'Payment Completed'
   | 'Admit Card Available'
@@ -216,6 +220,7 @@ export type AdmitCardStatus = 'Not Published' | 'Available' | 'Downloaded';
 
 export interface ApplicationTrackerRecord {
   jobId: string;
+  applicationId?: string;
   jobTitle: string;
   organization: string;
   circularId?: string;
@@ -224,8 +229,12 @@ export interface ApplicationTrackerRecord {
   deadlineAt: number | null;
   status: ApplicationStatus;
   applicationDate?: string;
+  submissionAttemptedAt?: number;
+  submissionConfirmedAt?: number;
   teletalkUserId?: string;
   applicationRefId?: string;
+  applicantId?: string;
+  userId?: string;
   transactionId?: string;
   applicationFeeAmount?: string;
   paymentDate?: string;
@@ -242,6 +251,21 @@ export interface ApplicationTrackerRecord {
   resultUrl?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface JobVisitRecord {
+  visitId: string;
+  jobId?: string | null;
+  sourceId: string;
+  organization: string;
+  jobTitle: string;
+  circularUrl: string;
+  canonicalUrl: string;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  verificationStatus: 'verified' | 'unverified' | 'internal';
+  deadlineAt?: number | null;
 }
 
 export type ReminderStatus =

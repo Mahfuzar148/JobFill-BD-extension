@@ -13,6 +13,8 @@ import { JobCheckService } from '../jobs/background/job-check-service';
 import { JobAlarmManager } from '../jobs/background/alarm-manager';
 import { CredentialVaultRepository } from '../credentials/credential-repository';
 import { isStrictOriginMatch } from '../credentials/origin-matcher';
+import { JobVisitRepository } from '../jobs/database/job-visit-repository';
+import { ApplicationRepository } from '../jobs/database/application-repository';
 import {
   getActiveProfile,
   getAllProfiles,
@@ -52,7 +54,17 @@ export interface ExtensionMessage {
     | 'CRED_VAULT_FILL_TAB'
     | 'CRED_VAULT_SAVE_MANUAL'
     | 'CRED_VAULT_UNLOCK'
-    | 'CRED_VAULT_LOCK';
+    | 'CRED_VAULT_LOCK'
+    | 'RECORD_JOB_CIRCULAR_VISIT'
+    | 'GET_JOB_VISITS'
+    | 'CLEAR_JOB_VISITS'
+    | 'REMOVE_JOB_VISIT'
+    | 'GET_VISIT_TRACKING_ENABLED'
+    | 'SET_VISIT_TRACKING_ENABLED'
+    | 'RECORD_APPLICATION_SUBMIT_ATTEMPT'
+    | 'CONFIRM_APPLICATION_SUBMISSION'
+    | 'GET_TRUSTED_AUTOFILL_ORIGINS'
+    | 'SET_TRUSTED_AUTOFILL_ORIGIN';
   payload?: any;
 }
 
@@ -605,6 +617,164 @@ export class MessageRouter {
           CredentialVaultRepository.lockVault();
           const vaultStatus = await CredentialVaultRepository.getStatus();
           sendResponse({ status: 'ok', vaultStatus });
+        })();
+        return true;
+      }
+
+      case 'RECORD_JOB_CIRCULAR_VISIT': {
+        (async () => {
+          try {
+            const visit = await JobVisitRepository.recordVisit(message.payload || {});
+            sendResponse({ status: 'ok', visit });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_JOB_VISITS': {
+        (async () => {
+          try {
+            const visits = await JobVisitRepository.getAllVisits();
+            sendResponse({ status: 'ok', visits });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message, visits: [] });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_JOB_VISITS': {
+        (async () => {
+          try {
+            await JobVisitRepository.clearAllVisits();
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REMOVE_JOB_VISIT': {
+        (async () => {
+          try {
+            if (message.payload?.visitId) {
+              await JobVisitRepository.removeVisit(message.payload.visitId);
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_VISIT_TRACKING_ENABLED': {
+        (async () => {
+          try {
+            const enabled = await JobVisitRepository.isVisitTrackingEnabled();
+            sendResponse({ status: 'ok', enabled });
+          } catch {
+            sendResponse({ status: 'ok', enabled: true });
+          }
+        })();
+        return true;
+      }
+
+      case 'SET_VISIT_TRACKING_ENABLED': {
+        (async () => {
+          try {
+            await JobVisitRepository.setVisitTrackingEnabled(Boolean(message.payload?.enabled));
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_APPLICATION_SUBMIT_ATTEMPT': {
+        (async () => {
+          try {
+            const { jobId, jobTitle, organization, applicationUrl, circularUrl } = message.payload || {};
+            const finalJobId = jobId || `app_sub_${Date.now()}`;
+            const rec = await ApplicationRepository.setStatus(
+              {
+                id: finalJobId,
+                jobTitle: jobTitle || 'Online Application',
+                organization: organization || 'Recruitment Portal',
+                applicationUrl: applicationUrl || sender.tab?.url || '',
+                circularUrl: circularUrl || '',
+                deadlineAt: null,
+              },
+              'Submission Pending Verification',
+              {
+                applicationDate: new Date().toISOString().slice(0, 10),
+              }
+            );
+            rec.submissionAttemptedAt = Date.now();
+            await ApplicationRepository.upsert(rec);
+            sendResponse({ status: 'ok', application: rec });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'CONFIRM_APPLICATION_SUBMISSION': {
+        (async () => {
+          try {
+            const { jobId, teletalkUserId, applicantId, confirmedAt } = message.payload || {};
+            let target = jobId ? await ApplicationRepository.getByJobId(jobId) : null;
+            if (!target) {
+              const all = await ApplicationRepository.getAll();
+              target = all.find((a) => a.status === 'Submission Pending Verification') || null;
+            }
+            if (target) {
+              target.status = 'Applied';
+              target.submissionConfirmedAt = confirmedAt || Date.now();
+              if (teletalkUserId) target.teletalkUserId = teletalkUserId;
+              if (applicantId) target.applicantId = applicantId;
+              await ApplicationRepository.upsert(target);
+              sendResponse({ status: 'ok', application: target });
+            } else {
+              sendResponse({ status: 'no_pending_application' });
+            }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_TRUSTED_AUTOFILL_ORIGINS': {
+        (async () => {
+          try {
+            const origins = await CredentialVaultRepository.getTrustedAutofillOrigins();
+            sendResponse({ status: 'ok', origins: Array.from(origins) });
+          } catch (err: any) {
+            sendResponse({ status: 'error', origins: [], error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'SET_TRUSTED_AUTOFILL_ORIGIN': {
+        (async () => {
+          try {
+            if (message.payload?.origin) {
+              await CredentialVaultRepository.setTrustedAutofillOrigin(
+                message.payload.origin,
+                Boolean(message.payload.trusted)
+              );
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
         })();
         return true;
       }

@@ -534,4 +534,51 @@ export class CredentialVaultRepository {
       }
     }
   }
+
+  public static async getTrustedAutofillOrigins(): Promise<Set<string>> {
+    const key = 'jobfill_trusted_autofill_origins_v1';
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const res = await new Promise<{ [key: string]: any }>((resolve) => {
+        chrome.storage.local.get([key], (r) => resolve(r || {}));
+      });
+      const list = Array.isArray(res[key]) ? res[key] : [];
+      return new Set<string>(list);
+    }
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(key);
+        const list = raw ? JSON.parse(raw) : [];
+        return new Set<string>(Array.isArray(list) ? list : []);
+      } catch {
+        return new Set<string>();
+      }
+    }
+    return new Set<string>();
+  }
+
+  public static async setTrustedAutofillOrigin(origin: string, trusted: boolean): Promise<void> {
+    const norm = normalizeStrictOrigin(origin);
+    if (!norm) return;
+    const key = 'jobfill_trusted_autofill_origins_v1';
+    const current = await this.getTrustedAutofillOrigins();
+    if (trusted) {
+      current.add(norm);
+    } else {
+      current.delete(norm);
+    }
+    const arr = Array.from(current);
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      await chrome.storage.local.set({ [key]: arr });
+    }
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(arr));
+    }
+  }
+
+  public static async isOriginTrustedForAutofill(origin: string): Promise<boolean> {
+    const norm = normalizeStrictOrigin(origin);
+    if (!norm) return false;
+    const set = await this.getTrustedAutofillOrigins();
+    return set.has(norm);
+  }
 }

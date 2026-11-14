@@ -27,7 +27,8 @@ export async function openJobApplicationWithContext(
   job: NormalizedJobCircular,
   showToast: (msg: string) => void,
   bn: boolean,
-  onMissingApplicationUrl?: (job: NormalizedJobCircular) => void
+  onMissingApplicationUrl?: (job: NormalizedJobCircular) => void,
+  options?: { trackStarted?: boolean }
 ): Promise<{ opened: boolean; reason?: 'missing_application_url' | 'unsafe_url' | 'cancelled' }> {
   const rawAppUrl = (job.applicationUrl || '').trim();
   const classification = classifyApplicationDestination(rawAppUrl);
@@ -74,6 +75,24 @@ export async function openJobApplicationWithContext(
         openedAt: Date.now(),
       },
     });
+  }
+
+  if (options?.trackStarted) {
+    try {
+      await ApplicationRepository.setStatus(
+        {
+          ...job,
+          applicationUrl: check.normalizedUrl,
+        },
+        'Application Started',
+        {
+          circularId: job.circularNumber,
+          applicationDate: new Date().toISOString().slice(0, 10),
+        }
+      );
+    } catch (err) {
+      console.warn('JobFill BD: Could not record Application Started draft:', err);
+    }
   }
 
   await openSafeExternalTab(check.normalizedUrl);

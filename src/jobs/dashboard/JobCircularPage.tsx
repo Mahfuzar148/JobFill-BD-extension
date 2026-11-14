@@ -17,6 +17,9 @@ import {
   Shield,
   WifiOff,
   X,
+  History,
+  Trash2,
+  Eye,
 } from 'lucide-react';
 import { useApp } from '../../dashboard/context/AppContext';
 import { CompactSourceHealthBar, LiveSourceProgressSnapshot } from './CompactSourceHealthBar';
@@ -36,6 +39,8 @@ import {
 import { JobRepository } from '../database/job-repository';
 import { BookmarkRepository } from '../database/bookmark-repository';
 import { ApplicationRepository } from '../database/application-repository';
+import { JobVisitRepository } from '../database/job-visit-repository';
+import { JobVisitRecord } from '../types/job.types';
 import { JobSourceRegistry } from '../sources/source-registry';
 import { OFFICIAL_PORTAL_DIRECTORY } from '../sources/official-website.adapter';
 import { DAY_MS, isTimestampInCurrentDhakaWeek } from '../services/deadline-parser';
@@ -155,6 +160,9 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   const [sourceOutcomes, setSourceOutcomes] = useState<any[]>([]);
   const [filters, setFilters] = useState<JobSearchFilters>(DEFAULT_JOB_FILTERS);
   const [applyMyPrefsFilter, setApplyMyPrefsFilter] = useState(false);
+  const [hubTab, setHubTab] = useState<'all' | 'recommended' | 'visited' | 'bookmarked' | 'closing_soon' | 'applied'>('all');
+  const [visitedRecords, setVisitedRecords] = useState<JobVisitRecord[]>([]);
+  const [trackVisitsEnabled, setTrackVisitsEnabled] = useState(true);
 
   const [selectedJob, setSelectedJob] = useState<NormalizedJobCircular | null>(null);
   const [missingAppJob, setMissingAppJob] = useState<NormalizedJobCircular | null>(null);
@@ -296,7 +304,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
       setErrorMessage(null);
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
-        const [allJobs, bmIds, apps, prefs, outcomes, schedState] = await Promise.race([
+        const [allJobs, bmIds, apps, prefs, outcomes, schedState, visits, visitsEnabled] = await Promise.race([
           Promise.all([
             JobRepository.getAllJobs(),
             BookmarkRepository.getBookmarkedJobIds(),
@@ -304,6 +312,8 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
             JobRepository.getPreferences(),
             JobRepository.getSourceOutcomes(),
             JobRepository.getSchedulerState(),
+            JobVisitRepository.getAllVisits(),
+            JobVisitRepository.isVisitTrackingEnabled(),
           ]),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(
@@ -326,6 +336,8 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         setPreferences(prefs);
         setSourceOutcomes(outcomes);
         setLastSuccessfulSyncAt(syncTs);
+        setVisitedRecords(visits || []);
+        setTrackVisitsEnabled(visitsEnabled !== false);
         setLoadState(computeHubState(cleanedJobs, outcomes));
 
         // Only auto-sync on first empty open; background chrome.alarms & manual Sync handle ongoing checks
@@ -440,11 +452,21 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
 
   const displayedJobs = useMemo(() => {
     let list = filterAndSortJobs(jobs, filters, bookmarkedIds, Date.now(), appByJobId);
-    if (applyMyPrefsFilter) {
+    if (applyMyPrefsFilter || hubTab === 'recommended') {
       list = list.filter((j) => jobMatchesPreferences(j, preferences));
     }
+    if (hubTab === 'bookmarked') {
+      list = list.filter((j) => bookmarkedIds.has(j.id));
+    }
+    if (hubTab === 'closing_soon') {
+      const now = Date.now();
+      list = list.filter((j) => isJobMatchingStatFilter(j, 'closing_soon', bookmarkedIds, appByJobId, now));
+    }
+    if (hubTab === 'applied') {
+      list = list.filter((j) => appByJobId.has(j.id));
+    }
     return list;
-  }, [jobs, filters, bookmarkedIds, applyMyPrefsFilter, preferences, appByJobId]);
+  }, [jobs, filters, bookmarkedIds, applyMyPrefsFilter, hubTab, preferences, appByJobId]);
 
   const totalPages = Math.max(1, Math.ceil(displayedJobs.length / CIRCULARS_PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -455,7 +477,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, applyMyPrefsFilter]);
+  }, [filters, applyMyPrefsFilter, hubTab]);
 
   const activeStat: DashboardStatFilter = filters.statFilter || 'total';
 
@@ -594,7 +616,10 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   };
 
   const handleApplyNow = async (job: NormalizedJobCircular) => {
-    await openJobApplicationWithContext(job, showToast, bn, setMissingAppJob);
+    await openJobApplicationWithContext(job, showToast, bn, setMissingAppJob, { trackStarted: true });
+    const apps = await ApplicationRepository.getAll();
+    setApplications(apps);
+    onDataChanged?.();
   };
 
   const handleMarkApplied = async (job: NormalizedJobCircular) => {
@@ -622,6 +647,30 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     await loadAll(false);
     onDataChanged?.();
     showToast(bn ? '✅ নতুন সার্কুলার সংরক্ষিত হয়েছে' : '✅ Job circular saved');
+  };
+
+  const handleRemoveVisit = async (visitId: string) => {
+    await JobVisitRepository.removeVisit(visitId);
+    setVisitedRecords((prev) => prev.filter((v) => v.visitId !== visitId));
+    showToast(bn ? 'ভিজিট রেকর্ড মুছে ফেলা হয়েছে' : 'Visit record removed');
+  };
+
+  const handleClearAllVisits = async () => {
+    if (window.confirm(bn ? 'আপনি কি সমস্ত ভিজিট হিস্ট্রি মুছে ফেলতে চান?' : 'Are you sure you want to clear all visited circular history?')) {
+      await JobVisitRepository.clearAllVisits();
+      setVisitedRecords([]);
+      showToast(bn ? 'ভিজিট হিস্ট্রি মুছে ফেলা হয়েছে' : 'All visited history cleared');
+    }
+  };
+
+  const handleToggleVisitTracking = async (enabled: boolean) => {
+    setTrackVisitsEnabled(enabled);
+    await JobVisitRepository.setVisitTrackingEnabled(enabled);
+    showToast(
+      enabled
+        ? (bn ? 'সার্কুলার ভিজিট ট্র্যাকিং সক্রিয়' : 'Circular visit tracking enabled')
+        : (bn ? 'সার্কুলার ভিজিট ট্র্যাকিং নিষ্ক্রিয়' : 'Circular visit tracking disabled')
+    );
   };
 
   const handleShare = async (job: NormalizedJobCircular) => {
@@ -733,6 +782,54 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
             <span>{bn ? 'সার্কুলার যোগ করুন' : 'Add Job Circular'}</span>
           </button>
         </div>
+      </div>
+
+      {/* 6 Hub Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto" role="tablist">
+        {[
+          { id: 'all', label: bn ? 'সব সার্কুলার' : 'All Jobs', count: jobs.length, icon: Briefcase },
+          { id: 'recommended', label: bn ? 'পছন্দের চাকরি' : 'Recommended', count: null, icon: CheckCircle2 },
+          { id: 'visited', label: bn ? 'সম্প্রতি দেখা' : 'Visited History', count: visitedRecords.length, icon: History },
+          { id: 'bookmarked', label: bn ? 'বুকমার্ক' : 'Bookmarked', count: bookmarkedIds.size, icon: Bookmark },
+          { id: 'closing_soon', label: bn ? 'শীঘ্রই শেষ' : 'Closing Soon', count: summary.closingSoon, icon: Clock },
+          { id: 'applied', label: bn ? 'আবেদিত' : 'Applied', count: applications.length, icon: CheckCircle2 },
+        ].map((tab) => {
+          const isActive = hubTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                setHubTab(tab.id as any);
+                if (tab.id === 'visited') {
+                  JobVisitRepository.getAllVisits().then(setVisitedRecords);
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                isActive
+                  ? 'bg-petro-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+              {tab.count !== null && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Top 6 Interactive Summary Cards */}
@@ -937,8 +1034,141 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         </div>
       )}
 
-      {/* Search & Filters */}
-      <JobFilters filters={filters} onChange={setFilters} language={language} />
+      {hubTab === 'visited' ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-petro-600" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                {bn ? 'সম্প্রতি দেখা জব সার্কুলার হিস্ট্রি' : 'Recently Visited Job Circulars'}
+              </h3>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                ({visitedRecords.length} {bn ? 'টি রেকর্ড' : 'records'})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={trackVisitsEnabled}
+                  onChange={(e) => handleToggleVisitTracking(e.target.checked)}
+                  className="rounded text-petro-600 focus:ring-petro-500"
+                />
+                <span>{bn ? 'স্বয়ংক্রিয় ভিজিট ট্র্যাকিং চালু' : 'Track Circular Visits Automatically'}</span>
+              </label>
+
+              {visitedRecords.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllVisits}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{bn ? 'সব হিস্ট্রি মুছুন' : 'Clear All History'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {visitedRecords.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-3">
+              <History className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+              <h4 className="text-sm font-bold text-slate-800 dark:text-white">
+                {bn ? 'এখনও কোনো সার্কুলার ভিজিট রেকর্ড নেই' : 'No Visited Job Circulars Yet'}
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                {bn
+                  ? 'আপনি যখন বিভিন্ন চাকরির বিবরণী দেখবেন অথবা Teletalk, BDJobs বা সরকারি জব পোর্টালে সার্কুলার ব্রাউজ করবেন, সেগুলি এখানে স্বয়ংক্রিয়ভাবে সংরক্ষিত হবে।'
+                  : 'Circulars you view in JobDetails or browse on supported official portals (Teletalk, BDJobs, Bangladesh Bank) will be automatically logged here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {visitedRecords.map((record) => {
+                const matchingJob = jobs.find(
+                  (j) =>
+                    (record.jobId && j.id === record.jobId) ||
+                    j.applicationUrl === record.canonicalUrl ||
+                    j.circularUrl === record.canonicalUrl
+                );
+                const title = record.jobTitle || matchingJob?.position || 'Job Circular';
+                const org = record.organization || matchingJob?.organization || 'Official Portal';
+                const sourceBadge = record.sourceId || matchingJob?.sourceId || 'Direct Portal';
+                const visitTimeStr = new Date(record.lastVisitedAt).toLocaleString();
+
+                return (
+                  <div
+                    key={record.visitId}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-petro-300 dark:hover:border-petro-700 transition-colors"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-petro-600 dark:text-petro-400 px-2 py-0.5 rounded-md bg-petro-50 dark:bg-petro-950/50">
+                          {sourceBadge}
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                          {bn ? `${record.visitCount} বার দেখা হয়েছে` : `Visited ${record.visitCount} time(s)`}
+                        </span>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2">
+                        {title}
+                      </h4>
+
+                      <div className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                        {org}
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1 pt-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{bn ? `সর্বশেষ দর্শন: ${visitTimeStr}` : `Last viewed: ${visitTimeStr}`}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        {matchingJob ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedJob(matchingJob)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-petro-50 dark:bg-petro-950/40 text-petro-700 dark:text-petro-300 hover:bg-petro-100 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{bn ? 'বিবরণ দেখুন' : 'View Details'}</span>
+                          </button>
+                        ) : (
+                          <a
+                            href={record.canonicalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>{bn ? 'পোর্টাল খুলুন' : 'Open Link'}</span>
+                          </a>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVisit(record.visitId)}
+                        title={bn ? 'হিস্ট্রি থেকে সরান' : 'Remove from visited history'}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Search & Filters */}
+          <JobFilters filters={filters} onChange={setFilters} language={language} />
 
       {/* Active Filter Indicator + Clear Filter Bar + Preference Toggle */}
       <div className="flex items-center justify-between flex-wrap gap-2 text-xs px-1">
@@ -1166,6 +1396,8 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           )}
         </div>
       )}
+    </>
+  )}
 
       {/* Honest Data & Source Disclaimer */}
       <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">

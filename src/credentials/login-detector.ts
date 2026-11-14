@@ -250,4 +250,104 @@ export class LoginFormDetector {
       password,
     };
   }
+
+  /**
+   * Distinguishes login forms from registration, password reset, or full application forms.
+   */
+  public static classifyForm(
+    container: HTMLElement | Document
+  ): 'login' | 'registration' | 'password_reset' | 'application' | 'unknown' {
+    const inputs = Array.from(container.querySelectorAll<HTMLInputElement>('input')).filter(
+      (el) => (el.type || '').toLowerCase() !== 'hidden'
+    );
+    const passwordInputs = inputs.filter((el) => (el.type || '').toLowerCase() === 'password');
+
+    if (passwordInputs.length === 0) {
+      const allFormElements = container.querySelectorAll('input:not([type="hidden"]), select, textarea');
+      const rawText = container instanceof HTMLElement
+        ? (container.innerText || container.textContent || '')
+        : (container.body?.innerText || container.body?.textContent || '');
+      const text = (rawText || '').toLowerCase();
+      const hasAppKeywords =
+        text.includes('application') ||
+        text.includes('applicant') ||
+        text.includes('আবেদন') ||
+        text.includes('bio-data') ||
+        text.includes('cv');
+      if (allFormElements.length >= 4 && (hasAppKeywords || allFormElements.length > 6)) {
+        return 'application';
+      }
+      return allFormElements.length > 5 ? 'application' : 'unknown';
+    }
+
+    // Extensive form fields (like full job applications) should not be classified as simple logins
+    if (inputs.length > 8 || container.querySelectorAll('select').length > 2) {
+      return 'application';
+    }
+
+    const rawText = container instanceof HTMLElement
+      ? (container.innerText || container.textContent || '')
+      : (container.body?.innerText || container.body?.textContent || '');
+    const containerText = (rawText || '').toLowerCase();
+
+    if (passwordInputs.length >= 2) {
+      if (containerText.includes('current password') || containerText.includes('old password') || containerText.includes('reset password')) {
+        return 'password_reset';
+      }
+      return 'registration';
+    }
+
+    if (
+      containerText.includes('register') ||
+      containerText.includes('sign up') ||
+      containerText.includes('create account') ||
+      containerText.includes('নিবন্ধন') ||
+      containerText.includes('নতুন একাউন্ট')
+    ) {
+      return 'registration';
+    }
+
+    return 'login';
+  }
+
+  /**
+   * Scans a recruitment confirmation page or slip for newly generated User ID,
+   * Applicant ID, or temporary portal Password.
+   */
+  public static detectGeneratedPortalCredentials(doc: Document): {
+    hasGeneratedCredentials: boolean;
+    userId?: string;
+    applicantId?: string;
+    password?: string;
+    portalName: string;
+  } {
+    const text = (doc.body ? (doc.body.innerText || doc.body.textContent || '') : '') || '';
+    const strictOrigin = normalizeStrictOrigin(typeof window !== 'undefined' ? window.location?.href : '');
+    const portalName = (doc.title || (strictOrigin ? new URL(strictOrigin).hostname : '')).slice(0, 60).trim();
+
+    // Look for User ID: [A-Z0-9]+
+    const userMatch = text.match(/User\s*ID\s*[:：\-]\s*([A-Za-z0-9_-]{4,24})/i);
+    const userId = userMatch ? userMatch[1].trim() : undefined;
+
+    // Look for Applicant / Application ID
+    const appMatch = text.match(/(?:Applicant|Application|Tracking)\s*(?:ID|No|Number)\s*[:：\-]\s*#?([A-Za-z0-9_-]{4,24})/i);
+    const applicantId = appMatch ? appMatch[1].trim() : undefined;
+
+    // Look for Password: [A-Za-z0-9!@#$%^&*()_+]{4,24}
+    const passMatch = text.match(/Password\s*[:：\-]\s*([^\s<>"'\r\n]{4,24})/i);
+    // Ignore false matches like "Password:" followed by empty or instructions
+    const password = passMatch && !passMatch[1].toLowerCase().includes('must') && !passMatch[1].toLowerCase().includes('keep')
+      ? passMatch[1].trim()
+      : undefined;
+
+    const hasGeneratedCredentials = Boolean((userId || applicantId) && (password || text.includes('Applicant Copy') || text.includes('Teletalk')));
+
+    return {
+      hasGeneratedCredentials,
+      userId,
+      applicantId,
+      password,
+      portalName,
+    };
+  }
 }
