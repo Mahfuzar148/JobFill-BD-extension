@@ -351,8 +351,30 @@ export interface FormScanReport {
 }
 
 // --- Application Autofill History Schema ---
+export type AutofillFieldFillStatus =
+  | 'FILLED'
+  | 'ALREADY_CORRECT'
+  | 'FAILED'
+  | 'SKIPPED'
+  | 'NOT_FOUND'
+  | 'AMBIGUOUS'
+  | 'NEEDS_MANUAL_INPUT'
+  | 'UNSUPPORTED';
+
+export interface AutofillFieldAuditItem {
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType?: string;
+  mappingStatus?: 'matched' | 'ambiguous' | 'unmapped';
+  fillStatus: AutofillFieldFillStatus;
+  failureReason?: string;
+  confidence?: string;
+  value?: string; // Safely masked representation only
+}
+
 export interface AutofillHistoryRecord {
   id: string;
+  sessionId?: string;
   timestamp: number;
   url: string;
   domain: string;
@@ -363,12 +385,28 @@ export interface AutofillHistoryRecord {
   totalFilled: number;
   totalFailed: number;
   totalAmbiguous: number;
-  status: 'completed' | 'partial' | 'reverted';
+  status: 'completed' | 'partial' | 'failed' | 'in_progress' | 'reverted';
+  // Extended audit and application metadata
+  jobId?: string;
+  organization?: string;
+  jobTitle?: string;
+  sourceUrl?: string;
+  formIdentifier?: string;
+  startedAt?: number;
+  completedAt?: number;
+  attemptedFields?: number;
+  skippedFields?: number;
+  alreadyCorrectFields?: number;
+  verificationStatus?: string;
+  fieldResults?: AutofillFieldAuditItem[];
+  // Backward-compatible filled fields list
   filledFields?: Array<{
     fieldLabel: string;
     canonicalKey: string;
     value: string;
     confidence: string;
+    fillStatus?: string;
+    failureReason?: string;
   }>;
 }
 

@@ -16,6 +16,7 @@ import {
 import { KeyManager } from '../security/key-manager';
 import { DocumentRepository } from '../database/document-repository';
 import { ProfileRepository } from '../database/profile-repository';
+import { HistoryRepository } from '../database/history-repository';
 import { IndexedDBManager, STORES } from '../database/indexeddb';
 import { JobRepository } from '../jobs/database/job-repository';
 import { BookmarkRepository } from '../jobs/database/bookmark-repository';
@@ -839,81 +840,19 @@ export const DEFAULT_GENERAL_SETTINGS: AppGeneralSettings = {
 
 // Application History Storage Methods (IndexedDB primary when available, storage fallback)
 export async function getAutofillHistory(): Promise<AutofillHistoryRecord[]> {
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      const idbList = await IndexedDBManager.executeTransaction<AutofillHistoryRecord[]>(
-        STORES.HISTORY,
-        'readonly',
-        (store) =>
-          new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-          })
-      );
-      if (idbList.length > 0) {
-        return [...idbList].sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
-      }
-    } catch {
-      // Safe fallback below
-    }
-  }
-  const res = await storageAdapter.get<AutofillHistoryRecord[]>([STORAGE_KEY_HISTORY]);
-  return res[STORAGE_KEY_HISTORY] || [];
+  return HistoryRepository.getHistory();
 }
 
 export async function addAutofillHistory(record: AutofillHistoryRecord): Promise<void> {
-  const sanitizedUrl = (() => {
-    try {
-      const u = new URL(record.url);
-      return `${u.origin}${u.pathname}`;
-    } catch {
-      return String(record.url || '').split('?')[0].split('#')[0];
-    }
-  })();
-  const sanitizedRecord: AutofillHistoryRecord = {
-    ...record,
-    url: sanitizedUrl,
-    profileName: 'Applicant Profile',
-  };
+  return HistoryRepository.upsertRecord(record);
+}
 
-  let savedToIdb = false;
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      await IndexedDBManager.executeTransaction(STORES.HISTORY, 'readwrite', (store) =>
-        new Promise<void>((resolve, reject) => {
-          const req = store.put(sanitizedRecord);
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        })
-      );
-      savedToIdb = true;
-    } catch {
-      savedToIdb = false;
-    }
-  }
-  if (!savedToIdb) {
-    const history = await getAutofillHistory();
-    const updated = [sanitizedRecord, ...history].slice(0, 100); // Keep last 100 sessions
-    await storageAdapter.set({ [STORAGE_KEY_HISTORY]: updated });
-  }
+export async function deleteAutofillHistoryItem(id: string): Promise<void> {
+  return HistoryRepository.deleteRecord(id);
 }
 
 export async function clearAutofillHistory(): Promise<void> {
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      await IndexedDBManager.executeTransaction(STORES.HISTORY, 'readwrite', (store) =>
-        new Promise<void>((resolve, reject) => {
-          const req = store.clear();
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        })
-      );
-    } catch {
-      // Ignore
-    }
-  }
-  await storageAdapter.remove([STORAGE_KEY_HISTORY]);
+  return HistoryRepository.clearHistory();
 }
 
 // General Settings Methods

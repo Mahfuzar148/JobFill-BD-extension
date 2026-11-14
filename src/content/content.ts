@@ -2,7 +2,7 @@
 // Simplified Profile-First Autofill Architecture
 // FIELD NAME + SECTION CONTEXT -> MATCH PROFILE FIELD -> GET SAVED VALUE -> FILL WEBSITE FIELD -> VERIFY RESULT
 
-import { UserProfile, DocumentCategory } from '../types/profile';
+import { UserProfile, DocumentCategory, AutofillFieldAuditItem, AutofillFieldFillStatus } from '../types/profile';
 import { FieldCompletenessEntry } from '../types/field-status';
 import { createEmptyProfile } from '../types/defaults';
 import { PageScanner, PageScanResult, toCanonicalProfile } from './page-scanner';
@@ -17,6 +17,7 @@ import { DocumentRepository } from '../database/document-repository';
 import { extractElementFingerprint } from '../intelligence/mapping-memory';
 import { DynamicDomObserver } from './dom-observer';
 import { addAutofillHistory, applyCanonicalProfileFieldUpdate } from '../services/storage';
+import { sanitizeHistoryFieldRecord } from '../database/history-repository';
 import {
   isExcludedSiteUrl,
   assessHttpSensitiveAutofillRisk,
@@ -66,12 +67,184 @@ let lastScannedTime: string = '';
 let toastHideTimer: any = null;
 
 function maskSensitiveHistoryValue(canonicalKey: string, val: string): string {
-  if (!val) return '';
-  const k = canonicalKey.toLowerCase();
-  if (k.includes('nationalid') || k.includes('nid') || k.includes('passport') || k.includes('birthreg')) {
-    return val.length > 4 ? `***${val.slice(-4)}` : '****';
+  return sanitizeHistoryFieldRecord(canonicalKey, '', val);
+}
+
+async function dispatchAutofillSessionStart(
+  sessionId: string,
+  totalDetected: number,
+  totalAmbiguous: number
+): Promise<void> {
+  const profileName = currentProfile.profileName || currentProfile.personal.applicantNameEn || 'Default Profile';
+  const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+  const payload = {
+    id: sessionId,
+    sessionId,
+    url: cleanUrl,
+    domain: window.location.hostname || 'Local Form',
+    pageTitle: document.title || 'Job Application Form',
+    profileId: currentProfile.id,
+    profileName,
+    totalDetected,
+    totalAmbiguous,
+    startedAt: Date.now(),
+  };
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: 'RECORD_AUTOFILL_SESSION_START', payload },
+          () => resolve()
+        );
+      });
+      return;
+    } catch (e) {
+      console.warn('JobFill BD: Background session start dispatch error:', e);
+    }
   }
-  return val;
+
+  // Fallback: storageAdapter
+  try {
+    await addAutofillHistory({
+      ...payload,
+      timestamp: Date.now(),
+      totalFilled: 0,
+      totalFailed: 0,
+      status: 'in_progress',
+    });
+  } catch (err) {
+    console.warn('JobFill BD: Fallback session start storage error:', err);
+  }
+}
+
+function mapPlanItemToAudit(item: FillPlanItem): AutofillFieldAuditItem {
+  let fillStatus: AutofillFieldFillStatus = 'UNSUPPORTED';
+  const itemStatus = String(item.status || '');
+
+  // Legal declaration checkboxes must NEVER be treated as automatically filled
+  const isLegalDeclaration =
+    item.canonicalId.includes('declaration') ||
+    item.canonicalId.includes('certify') ||
+    item.fieldLabel.toLowerCase().includes('declare') ||
+    item.fieldLabel.toLowerCase().includes('declaration');
+
+  if (isLegalDeclaration) {
+    fillStatus = 'NEEDS_MANUAL_INPUT';
+  } else if (itemStatus === 'Filled') {
+    fillStatus = 'FILLED';
+  } else if (itemStatus === 'Already Correct') {
+    fillStatus = 'ALREADY_CORRECT';
+  } else if (itemStatus === 'Failed Verification') {
+    fillStatus = 'FAILED';
+  } else if (itemStatus === 'Skipped') {
+    fillStatus = 'SKIPPED';
+  } else if (itemStatus === 'Not Found') {
+    fillStatus = 'NOT_FOUND';
+  } else if (itemStatus === 'Ambiguous') {
+    fillStatus = 'AMBIGUOUS';
+  } else if (itemStatus.includes('Confirmation') || itemStatus.includes('Missing')) {
+    fillStatus = 'NEEDS_MANUAL_INPUT';
+  }
+
+  return {
+    fieldKey: item.canonicalId,
+    fieldLabel: item.fieldLabel,
+    fieldType: item.element?.tagName?.toLowerCase() || 'input',
+    mappingStatus: item.canonicalId ? 'matched' : 'unmapped',
+    fillStatus,
+    failureReason: itemStatus === 'Failed Verification' ? 'DOM verification mismatch after dispatch' : undefined,
+    confidence: item.status,
+    value: sanitizeHistoryFieldRecord(item.canonicalId, item.fieldLabel, item.proposedValue),
+  };
+}
+
+async function dispatchAutofillSessionComplete(
+  sessionId: string,
+  totalDetected: number,
+  allItems: FillPlanItem[],
+  totalFilledCount: number,
+  totalFailedCount: number,
+  totalAmbiguousCount: number
+): Promise<void> {
+  const profileName = currentProfile.profileName || currentProfile.personal.applicantNameEn || 'Default Profile';
+  const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+  const fieldResults: AutofillFieldAuditItem[] = allItems.map(mapPlanItemToAudit);
+
+  const filledFields = fieldResults
+    .filter((f) => f.fillStatus === 'FILLED')
+    .map((f) => ({
+      fieldLabel: f.fieldLabel,
+      canonicalKey: f.fieldKey,
+      value: f.value || '(Selected)',
+      confidence: f.confidence || 'HIGH',
+      fillStatus: f.fillStatus,
+      failureReason: f.failureReason,
+    }));
+
+  const alreadyCorrectCount = fieldResults.filter((f) => f.fillStatus === 'ALREADY_CORRECT').length;
+  const skippedCount = fieldResults.filter(
+    (f) => f.fillStatus === 'SKIPPED' || f.fillStatus === 'NEEDS_MANUAL_INPUT'
+  ).length;
+
+  let sessionStatus: 'completed' | 'partial' | 'failed' = 'completed';
+  if (totalFilledCount === 0 && totalFailedCount > 0) {
+    sessionStatus = 'failed';
+  } else if (totalFailedCount > 0) {
+    sessionStatus = 'partial';
+  }
+
+  const payload = {
+    id: sessionId,
+    sessionId,
+    timestamp: Date.now(),
+    completedAt: Date.now(),
+    url: cleanUrl,
+    domain: window.location.hostname || 'Local Form',
+    pageTitle: document.title || 'Job Application Form',
+    profileId: currentProfile.id,
+    profileName,
+    totalDetected,
+    totalFilled: totalFilledCount,
+    totalFailed: totalFailedCount,
+    totalAmbiguous: totalAmbiguousCount,
+    attemptedFields: totalFilledCount + totalFailedCount,
+    skippedFields: skippedCount,
+    alreadyCorrectFields: alreadyCorrectCount,
+    status: sessionStatus,
+    fieldResults,
+    filledFields,
+  };
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: 'RECORD_AUTOFILL_SESSION_COMPLETE', payload },
+          () => resolve()
+        );
+      });
+      return;
+    } catch (e) {
+      console.warn('JobFill BD: Background session complete dispatch error:', e);
+    }
+  }
+
+  // Fallback: storageAdapter
+  try {
+    await addAutofillHistory(payload as any);
+  } catch (err) {
+    console.warn('JobFill BD: Fallback session complete storage error:', err);
+  }
+}
+
+function dispatchAutofillSessionReverted(sessionId: string): void {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({
+      action: 'RECORD_AUTOFILL_SESSION_UPDATE',
+      payload: { id: sessionId, status: 'reverted' },
+    }).catch(() => {});
+  }
 }
 
 function isExtensionRuntime(): boolean {
@@ -896,6 +1069,11 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
   }
 
   activeSessionId = 'session_' + Date.now();
+  await dispatchAutofillSessionStart(
+    activeSessionId,
+    currentScanResult.totalVisibleInputs,
+    currentScanResult.ambiguousCount || 0
+  );
   let totalFilled = 0;
   let totalFailed = 0;
 
@@ -1001,29 +1179,14 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
 
 async function recordAutofillHistoryEntry(summary: TwoPassExecutionSummary): Promise<void> {
   try {
-    const cleanUrl = window.location.href.split('?')[0].split('#')[0];
-    await addAutofillHistory({
-      id: activeSessionId,
-      timestamp: Date.now(),
-      url: cleanUrl,
-      domain: window.location.hostname || 'Local Document',
-      pageTitle: document.title || 'Job Application Form',
-      profileId: currentProfile.id,
-      profileName: 'Applicant Profile',
-      totalDetected: summary.scan.totalVisibleInputs,
-      totalFilled: summary.totalFilled,
-      totalFailed: summary.totalFailed,
-      totalAmbiguous: summary.ambiguous || 0,
-      status: summary.totalFailed === 0 ? 'completed' : 'partial',
-      filledFields: summary.allItems
-        .filter((i) => i.status === 'Filled')
-        .map((item) => ({
-          fieldLabel: item.fieldLabel,
-          canonicalKey: item.canonicalId,
-          value: maskSensitiveHistoryValue(item.canonicalId, item.proposedValue),
-          confidence: item.status,
-        })),
-    });
+    await dispatchAutofillSessionComplete(
+      activeSessionId,
+      summary.scan.totalVisibleInputs,
+      summary.allItems,
+      summary.totalFilled,
+      summary.totalFailed,
+      summary.ambiguous || 0
+    );
   } catch (e) {
     console.warn('JobFill BD: Could not save quick fill history', e);
   }
@@ -1362,6 +1525,7 @@ function createReviewModal() {
   // Undo button
   document.getElementById('jobfill-undo-btn')?.addEventListener('click', () => {
     const { restoredCount, preservedCount } = VerificationEngine.undoLastFill(activeSessionId);
+    dispatchAutofillSessionReverted(activeSessionId);
     showToast(
       preservedCount > 0
         ? `↩️ ${restoredCount}টি ফিল্ড আগের অবস্থায় ফিরেছে (${preservedCount}টি ম্যানুয়াল পরিবর্তন সংরক্ষিত)।`
@@ -1388,6 +1552,11 @@ function createReviewModal() {
     if (!activeSessionId) {
       activeSessionId = 'session_' + Date.now();
     }
+    await dispatchAutofillSessionStart(
+      activeSessionId,
+      currentScanResult.totalVisibleInputs,
+      currentScanResult.ambiguousCount || 0
+    );
     const approvedItems = currentScanResult.planItems.filter((item) => item.isApproved && item.proposedValue);
 
     if (approvedItems.length === 0) {
@@ -1426,26 +1595,14 @@ function createReviewModal() {
 
     // Record to Application History
     try {
-      await addAutofillHistory({
-        id: activeSessionId,
-        timestamp: Date.now(),
-        url: window.location.href,
-        domain: window.location.hostname || 'Local Document',
-        pageTitle: document.title || 'Job Application Form',
-        profileId: currentProfile.id,
-        profileName: currentProfile.personal.applicantNameEn || currentProfile.profileName,
-        totalDetected: currentScanResult.totalVisibleInputs,
-        totalFilled: report.successfullyFilled,
-        totalFailed: report.failedVerification,
-        totalAmbiguous: currentScanResult.ambiguousCount || 0,
-        status: report.failedVerification === 0 ? 'completed' : 'partial',
-        filledFields: approvedItems.map((item) => ({
-          fieldLabel: item.fieldLabel,
-          canonicalKey: item.canonicalId,
-          value: maskSensitiveHistoryValue(item.canonicalId, item.proposedValue),
-          confidence: item.status,
-        })),
-      });
+      await dispatchAutofillSessionComplete(
+        activeSessionId,
+        currentScanResult.totalVisibleInputs,
+        report.items,
+        report.successfullyFilled,
+        report.failedVerification,
+        currentScanResult.ambiguousCount || 0
+      );
     } catch (e) {
       console.warn('JobFill BD: Could not save autofill history', e);
     }
@@ -2714,6 +2871,7 @@ if (
           }
         } else if (message.action === 'UNDO_LAST_FILL') {
           const { restoredCount, preservedCount } = VerificationEngine.undoLastFill(activeSessionId);
+          dispatchAutofillSessionReverted(activeSessionId);
           showToast(
             preservedCount > 0
               ? `↩️ ${restoredCount}টি ফিল্ড আগের অবস্থায় ফিরেছে (${preservedCount}টি ম্যানুয়াল পরিবর্তন সংরক্ষিত)।`

@@ -8,7 +8,8 @@ import { isTabToolbarDismissed, setTabToolbarDismissed } from './toolbar-state';
 import { isExcludedSiteUrl } from '../security/site-policy';
 import { getExtensionDiagnostics, recordExtensionDiagnostic } from '../security/diagnostics';
 import { DocumentRepository } from '../database/document-repository';
-import { DocumentCategory } from '../types/profile';
+import { HistoryRepository } from '../database/history-repository';
+import { DocumentCategory, AutofillHistoryRecord } from '../types/profile';
 import { JobCheckService } from '../jobs/background/job-check-service';
 import { JobAlarmManager } from '../jobs/background/alarm-manager';
 import { CredentialVaultRepository } from '../credentials/credential-repository';
@@ -69,7 +70,14 @@ export interface ExtensionMessage {
     | 'PROFILE_UPDATE_APPROVE'
     | 'PROFILE_UPDATE_UNDO'
     | 'GET_PROFILE_CHANGE_HISTORY'
-    | 'CLEAR_PROFILE_CHANGE_HISTORY';
+    | 'CLEAR_PROFILE_CHANGE_HISTORY'
+    | 'RECORD_AUTOFILL_SESSION_START'
+    | 'RECORD_AUTOFILL_SESSION_COMPLETE'
+    | 'RECORD_AUTOFILL_SESSION_UPDATE'
+    | 'GET_AUTOFILL_HISTORY'
+    | 'GET_AUTOFILL_STATISTICS'
+    | 'DELETE_AUTOFILL_HISTORY_ITEM'
+    | 'CLEAR_ALL_AUTOFILL_HISTORY';
   payload?: any;
 }
 
@@ -846,6 +854,253 @@ export class MessageRouter {
                 message.payload.origin,
                 Boolean(message.payload.trusted)
               );
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_START': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            const originUrl = sender.tab?.url || sender.url || payload.url || '';
+            const domain = (() => {
+              try {
+                return new URL(originUrl).hostname;
+              } catch {
+                return payload.domain || 'Local Form';
+              }
+            })();
+
+            const sessionRecord: AutofillHistoryRecord = {
+              id: payload.id || `session_${Date.now()}`,
+              sessionId: payload.id || `session_${Date.now()}`,
+              timestamp: Date.now(),
+              startedAt: Date.now(),
+              url: originUrl,
+              domain,
+              pageTitle: payload.pageTitle || sender.tab?.title || 'Job Application Form',
+              profileId: payload.profileId || 'default',
+              profileName: payload.profileName || 'Applicant Profile',
+              totalDetected: Number(payload.totalDetected) || 0,
+              totalFilled: 0,
+              totalFailed: 0,
+              totalAmbiguous: Number(payload.totalAmbiguous) || 0,
+              status: 'in_progress',
+              jobId: payload.jobId,
+              organization: payload.organization,
+              jobTitle: payload.jobTitle,
+              fieldResults: [],
+              filledFields: [],
+            };
+
+            await HistoryRepository.upsertRecord(sessionRecord);
+
+            // Broadcast real-time update to dashboard/views
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { sessionId: sessionRecord.id, status: 'in_progress' },
+              });
+            } catch {
+              // no active views listening
+            }
+
+            sendResponse({ status: 'ok', sessionId: sessionRecord.id });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_COMPLETE': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            const existing = payload.id ? await HistoryRepository.getById(payload.id) : null;
+            const originUrl = sender.tab?.url || sender.url || payload.url || existing?.url || '';
+            const domain = (() => {
+              try {
+                return new URL(originUrl).hostname;
+              } catch {
+                return payload.domain || existing?.domain || 'Local Form';
+              }
+            })();
+
+            const totalFilled = Number(payload.totalFilled ?? existing?.totalFilled ?? 0);
+            const totalFailed = Number(payload.totalFailed ?? existing?.totalFailed ?? 0);
+            const totalDetected = Number(payload.totalDetected ?? existing?.totalDetected ?? 0);
+            const attemptedFields = Number(payload.attemptedFields ?? (totalFilled + totalFailed));
+
+            let sessionStatus: 'completed' | 'partial' | 'failed' = 'completed';
+            if (totalFilled === 0 && totalFailed > 0) {
+              sessionStatus = 'failed';
+            } else if (totalFailed > 0) {
+              sessionStatus = 'partial';
+            }
+
+            const completeRecord: AutofillHistoryRecord = {
+              ...(existing || {}),
+              id: payload.id || existing?.id || `session_${Date.now()}`,
+              sessionId: payload.id || existing?.id || `session_${Date.now()}`,
+              timestamp: Date.now(),
+              startedAt: existing?.startedAt || payload.startedAt || Date.now(),
+              completedAt: Date.now(),
+              url: originUrl,
+              domain,
+              pageTitle: payload.pageTitle || existing?.pageTitle || sender.tab?.title || 'Job Application Form',
+              profileId: payload.profileId || existing?.profileId || 'default',
+              profileName: payload.profileName || existing?.profileName || 'Applicant Profile',
+              totalDetected,
+              totalFilled,
+              totalFailed,
+              totalAmbiguous: Number(payload.totalAmbiguous ?? existing?.totalAmbiguous ?? 0),
+              attemptedFields,
+              skippedFields: Number(payload.skippedFields || 0),
+              alreadyCorrectFields: Number(payload.alreadyCorrectFields || 0),
+              status: payload.status || sessionStatus,
+              jobId: payload.jobId || existing?.jobId,
+              organization: payload.organization || existing?.organization,
+              jobTitle: payload.jobTitle || existing?.jobTitle,
+              fieldResults: payload.fieldResults || existing?.fieldResults || [],
+              filledFields: payload.filledFields || existing?.filledFields || [],
+            };
+
+            await HistoryRepository.upsertRecord(completeRecord);
+
+            // If job ID exists and user completed autofill, ensure a draft exists in Application Tracker
+            if (completeRecord.jobId) {
+              try {
+                const existingApp = await ApplicationRepository.getByJobId(completeRecord.jobId);
+                if (!existingApp) {
+                  await ApplicationRepository.setStatus(
+                    {
+                      id: completeRecord.jobId,
+                      jobTitle: completeRecord.jobTitle || 'Job Application',
+                      organization: completeRecord.organization || domain,
+                      applicationUrl: originUrl,
+                      circularUrl: '',
+                      deadlineAt: null,
+                    },
+                    'Application Started'
+                  );
+                }
+              } catch {
+                // Tracker is separate, safe ignore
+              }
+            }
+
+            // Broadcast real-time update to dashboard/views
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { sessionId: completeRecord.id, record: completeRecord },
+              });
+            } catch {
+              // no views listening
+            }
+
+            sendResponse({ status: 'ok', record: completeRecord });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_UPDATE': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            if (payload.id) {
+              const existing = await HistoryRepository.getById(payload.id);
+              if (existing) {
+                const updated: AutofillHistoryRecord = {
+                  ...existing,
+                  ...payload,
+                  id: existing.id,
+                };
+                await HistoryRepository.upsertRecord(updated);
+                try {
+                  chrome.runtime?.sendMessage?.({
+                    action: 'AUTOFILL_HISTORY_UPDATED',
+                    payload: { sessionId: existing.id, record: updated },
+                  });
+                } catch {
+                  // ignore
+                }
+              }
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_AUTOFILL_HISTORY': {
+        (async () => {
+          try {
+            const history = await HistoryRepository.getHistory();
+            sendResponse({ status: 'ok', history });
+          } catch (err: any) {
+            sendResponse({ status: 'error', history: [], error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_AUTOFILL_STATISTICS': {
+        (async () => {
+          try {
+            const statistics = await HistoryRepository.getStatistics();
+            sendResponse({ status: 'ok', statistics });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'DELETE_AUTOFILL_HISTORY_ITEM': {
+        (async () => {
+          try {
+            if (message.payload?.id) {
+              await HistoryRepository.deleteRecord(message.payload.id);
+              try {
+                chrome.runtime?.sendMessage?.({
+                  action: 'AUTOFILL_HISTORY_UPDATED',
+                  payload: { deletedId: message.payload.id },
+                });
+              } catch {
+                // ignore
+              }
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_ALL_AUTOFILL_HISTORY': {
+        (async () => {
+          try {
+            await HistoryRepository.clearHistory();
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { cleared: true },
+              });
+            } catch {
+              // ignore
             }
             sendResponse({ status: 'ok' });
           } catch (err: any) {

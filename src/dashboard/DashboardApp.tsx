@@ -655,7 +655,7 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'autofill' && <SmartAutoFillPage />}
           {activeTab === 'mappings' && <SavedMappingsPage />}
           {activeTab === 'history' && (
-            <ApplicationHistoryPage showToast={showToast} />
+            <ApplicationHistoryPage showToast={showToast} onNavigateTab={(tab) => setActiveTab(tab as any)} />
           )}
 
           {/* Preferences & System */}
