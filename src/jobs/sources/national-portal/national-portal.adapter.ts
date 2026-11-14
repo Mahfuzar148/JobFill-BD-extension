@@ -324,6 +324,12 @@ export const OFFICIAL_PORTAL_DIRECTORY: OfficialPortalDirectoryEntry[] = [
     notes: 'Primary Assistant Teacher & DPE recruitment circulars.',
   },
   {
+    name: 'Directorate of Registration (Sub-Registrar / DOR)',
+    category: 'Government',
+    url: 'http://dor.gov.bd/site/view/notices',
+    notes: 'Sub-Registrar & registration directorate departmental notices.',
+  },
+  {
     name: 'Ministry of Public Administration (MOPA)',
     category: 'Government',
     url: 'https://mopa.gov.bd/pages/notices',
