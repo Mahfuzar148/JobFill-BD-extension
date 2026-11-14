@@ -22,12 +22,25 @@ const CREDENTIAL_LOCAL_FALLBACK_KEY = 'jobfill_credential_vault_items_v1';
 const CREDENTIAL_PBKDF2_ITERATIONS = 210_000;
 const VERIFIER_SENTINEL = 'JOBFILL_CREDENTIAL_VAULT_VERIFIER_OK';
 
+export type CredentialAccountType =
+  | 'General Portal Account'
+  | 'Organization Account'
+  | 'Job-Specific Account'
+  | 'Recruitment Application Account'
+  | 'Other';
+
 export interface CredentialSecretPayload {
   username: string;
   userId: string;
   applicantId: string;
   password: string;
   notes: string;
+  organization?: string;
+  jobTitle?: string;
+  jobCircularId?: string;
+  accountType?: CredentialAccountType;
+  linkedApplicationIds?: string[];
+  verificationStatus?: 'verified' | 'unverified' | 'pending';
 }
 
 export interface StoredEncryptedCredentialRecord {
@@ -35,6 +48,12 @@ export interface StoredEncryptedCredentialRecord {
   portalName: string;
   portalUrl: string;
   origin: string;
+  organization?: string;
+  jobTitle?: string;
+  jobCircularId?: string;
+  accountType?: CredentialAccountType;
+  verificationStatus?: 'verified' | 'unverified' | 'pending';
+  lastUsedAt?: string;
   createdAt: string;
   updatedAt: string;
   encryptedPayload: EncryptedPayload;
@@ -45,6 +64,13 @@ export interface DecryptedCredentialEntry {
   portalName: string;
   portalUrl: string;
   origin: string;
+  organization?: string;
+  jobTitle?: string;
+  jobCircularId?: string;
+  accountType?: CredentialAccountType;
+  linkedApplicationIds?: string[];
+  verificationStatus?: 'verified' | 'unverified' | 'pending';
+  lastUsedAt?: string;
   username: string;
   userId: string;
   applicantId: string;
@@ -59,6 +85,11 @@ export interface CredentialPortalSummary {
   portalName: string;
   portalUrl: string;
   origin: string;
+  organization?: string;
+  jobTitle?: string;
+  accountType?: CredentialAccountType;
+  verificationStatus?: 'verified' | 'unverified' | 'pending';
+  lastUsedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -326,6 +357,11 @@ export class CredentialVaultRepository {
         portalName: r.portalName,
         portalUrl: r.portalUrl,
         origin: r.origin,
+        organization: r.organization,
+        jobTitle: r.jobTitle,
+        accountType: r.accountType,
+        verificationStatus: r.verificationStatus,
+        lastUsedAt: r.lastUsedAt,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       }))
@@ -345,6 +381,13 @@ export class CredentialVaultRepository {
         portalName: r.portalName,
         portalUrl: r.portalUrl,
         origin: r.origin,
+        organization: r.organization || secret.organization || '',
+        jobTitle: r.jobTitle || secret.jobTitle || '',
+        jobCircularId: r.jobCircularId || secret.jobCircularId,
+        accountType: r.accountType || (secret.accountType as any) || 'General Portal Account',
+        linkedApplicationIds: secret.linkedApplicationIds || [],
+        verificationStatus: r.verificationStatus || secret.verificationStatus || 'unverified',
+        lastUsedAt: r.lastUsedAt,
         username: secret.username || '',
         userId: secret.userId || '',
         applicantId: secret.applicantId || '',
@@ -362,6 +405,12 @@ export class CredentialVaultRepository {
     id?: string;
     portalName: string;
     portalUrl: string;
+    organization?: string;
+    jobTitle?: string;
+    jobCircularId?: string;
+    accountType?: CredentialAccountType;
+    linkedApplicationIds?: string[];
+    verificationStatus?: 'verified' | 'unverified' | 'pending';
     username: string;
     userId?: string;
     applicantId?: string;
@@ -392,12 +441,26 @@ export class CredentialVaultRepository {
     const id = existing?.id || `cred_${Date.now().toString(36)}_${generateSaltHex(4)}`;
     const createdAt = existing?.createdAt || nowIso;
 
+    const organization = (input.organization || existing?.organization || '').trim();
+    const jobTitle = (input.jobTitle || existing?.jobTitle || '').trim();
+    const jobCircularId = input.jobCircularId || existing?.jobCircularId;
+    const accountType = input.accountType || existing?.accountType || 'General Portal Account';
+    const linkedApplicationIds = input.linkedApplicationIds || [];
+    const verificationStatus = input.verificationStatus || existing?.verificationStatus || 'unverified';
+    const lastUsedAt = existing?.lastUsedAt;
+
     const secretPayload: CredentialSecretPayload = {
       username: input.username.trim(),
       userId: (input.userId || '').trim(),
       applicantId: (input.applicantId || '').trim(),
       password: input.password,
       notes: (input.notes || '').trim(),
+      organization,
+      jobTitle,
+      jobCircularId,
+      accountType,
+      linkedApplicationIds,
+      verificationStatus,
     };
 
     const meta = await readMeta();
@@ -413,6 +476,12 @@ export class CredentialVaultRepository {
       portalName,
       portalUrl: portalUrl.includes('://') ? portalUrl : `https://${portalUrl}`,
       origin: strictOrigin,
+      organization,
+      jobTitle,
+      jobCircularId,
+      accountType,
+      verificationStatus,
+      lastUsedAt,
       createdAt,
       updatedAt: nowIso,
       encryptedPayload,
@@ -425,10 +494,49 @@ export class CredentialVaultRepository {
       portalName,
       portalUrl: storedRecord.portalUrl,
       origin: strictOrigin,
+      organization,
+      jobTitle,
+      jobCircularId,
+      accountType,
+      linkedApplicationIds,
+      verificationStatus,
+      lastUsedAt,
       ...secretPayload,
       createdAt,
       updatedAt: nowIso,
     };
+  }
+
+  public static async updateLastUsed(id: string): Promise<void> {
+    const list = await readAllEncryptedRecords();
+    const rec = list.find((r) => r.id === id);
+    if (!rec) return;
+    rec.lastUsedAt = new Date().toISOString();
+    rec.updatedAt = new Date().toISOString();
+    await writeEncryptedRecord(rec);
+  }
+
+  public static async linkApplication(credentialId: string, applicationId: string): Promise<void> {
+    const { key, saltHex } = getValidatedActiveKey();
+    const list = await readAllEncryptedRecords();
+    const rec = list.find((r) => r.id === credentialId);
+    if (!rec) return;
+
+    const jsonStr = await decryptDataWithKey(rec.encryptedPayload, key);
+    const secret = JSON.parse(jsonStr) as CredentialSecretPayload;
+    const linked = new Set(secret.linkedApplicationIds || []);
+    linked.add(applicationId);
+    secret.linkedApplicationIds = Array.from(linked);
+
+    const meta = await readMeta();
+    rec.encryptedPayload = await encryptDataWithKey(
+      JSON.stringify(secret),
+      key,
+      saltHex,
+      meta?.iterations || CREDENTIAL_PBKDF2_ITERATIONS
+    );
+    rec.updatedAt = new Date().toISOString();
+    await writeEncryptedRecord(rec);
   }
 
   public static async deleteCredential(id: string): Promise<void> {

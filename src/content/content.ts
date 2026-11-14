@@ -29,8 +29,18 @@ import {
   detectApplicationConfirmation,
   isJobApplicationForm,
   showSaveCredentialDialog,
+  showAccountChooserDialog,
   injectLoginAutofillPill,
 } from './assistant-workflows';
+import {
+  ProfileDiffEngine,
+  DetectedProfileDiffItem,
+} from '../services/profile-diff-engine';
+import {
+  showProfileUpdatePill,
+  removeProfileUpdatePill,
+  showProfileUpdateReviewModal,
+} from './profile-update-dialog';
 import {
   DocumentFieldDetector,
   DocumentUploadCoordinator,
@@ -328,6 +338,9 @@ async function initAssistant() {
 
   // 4. Smart Login Autofill Pill / Trusted Origin Autofill
   void setupSmartLoginAutofill();
+
+  // 5. Smart Profile Diff & Update Observer
+  setupProfileDiffObserver();
 }
 
 function setupPassiveSubmissionObserver() {
@@ -347,31 +360,39 @@ function setupPassiveSubmissionObserver() {
         if (formKind === 'login' || formKind === 'registration') {
           const candidate = LoginFormDetector.readExplicitCaptureCandidate(document, window.location.href, true);
           if (candidate.ok && candidate.password) {
-            showSaveCredentialDialog(
-              {
-                origin: candidate.origin || window.location.origin,
-                portalName: candidate.portalName || document.title,
-                portalUrl: candidate.portalUrl || window.location.href,
-                username: candidate.username || '',
-                password: candidate.password,
-              },
-              async () => {
-                if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                  chrome.runtime.sendMessage({
-                    action: 'CRED_VAULT_SAVE_MANUAL',
-                    payload: {
-                      origin: candidate.origin,
-                      portalName: candidate.portalName,
-                      portalUrl: candidate.portalUrl,
-                      username: candidate.username,
-                      password: candidate.password,
-                    },
-                  });
-                  showToast('🔐 পোর্টাল লগইন ক্রেডেনশিয়াল ভল্টে সংরক্ষিত হয়েছে!');
-                }
-              },
-              () => {}
-            );
+            chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
+              const existingMatches = credRes?.matches || credRes?.credentials || [];
+              showSaveCredentialDialog(
+                {
+                  origin: candidate.origin || window.location.origin,
+                  portalName: candidate.portalName || document.title,
+                  portalUrl: candidate.portalUrl || window.location.href,
+                  username: candidate.username || '',
+                  password: candidate.password,
+                  organization: document.title.split('-')[0].trim(),
+                },
+                async (saveMode, targetAccountId) => {
+                  if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                    chrome.runtime.sendMessage({
+                      action: 'CRED_VAULT_SAVE_MANUAL',
+                      payload: {
+                        id: saveMode === 'update' ? targetAccountId : undefined,
+                        origin: candidate.origin,
+                        portalName: candidate.portalName,
+                        portalUrl: candidate.portalUrl,
+                        username: candidate.username,
+                        password: candidate.password,
+                        organization: document.title.split('-')[0].trim(),
+                        accountType: 'Job-Specific Account',
+                      },
+                    });
+                    showToast('🔐 পোর্টাল লগইন ক্রেডেনশিয়াল ভল্টে সংরক্ষিত হয়েছে!');
+                  }
+                },
+                () => {},
+                existingMatches
+              );
+            });
           }
           return;
         }
@@ -412,30 +433,69 @@ async function setupSmartLoginAutofill() {
       const isTrusted = trustedList.includes(window.location.origin);
 
       chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
-        if (!credRes || credRes.status !== 'ok' || !credRes.credentials || credRes.credentials.length === 0) {
+        const matches: Array<any> = credRes?.matches || credRes?.credentials || [];
+        if (!credRes || credRes.status !== 'ok' || matches.length === 0) {
           return;
         }
 
-        const cred = credRes.credentials[0];
-        if (isTrusted && credRes.vaultUnlocked && credRes.credentials.length === 1) {
+        const portalName = matches[0].portalName || 'Portal';
+
+        // Case A: Multiple accounts exist on this origin!
+        if (matches.length > 1) {
+          injectLoginAutofillPill(uEl, `${portalName} (${matches.length} accounts)`, () => {
+            showAccountChooserDialog(
+              portalName,
+              matches,
+              async (selectedAccId) => {
+                chrome.runtime.sendMessage(
+                  {
+                    action: 'CRED_VAULT_FILL_TAB',
+                    payload: {
+                      tabId: null,
+                      tabUrl: window.location.href,
+                      credentialId: selectedAccId,
+                      fillMode: 'both',
+                      explicitUserInitiated: true,
+                    },
+                  },
+                  () => {
+                    showToast('🔐 নির্বাচিত অ্যাকাউন্টের লগইন তথ্য পূরণ করা হয়েছে।');
+                  }
+                );
+              },
+              () => {}
+            );
+          });
+          return;
+        }
+
+        // Case B: Exactly one matching account
+        const cred = matches[0];
+        if (isTrusted && credRes.vaultUnlocked) {
           // Trusted origin explicit autofill
-          LoginFormDetector.executeExplicitFill(document, window.location.href, {
-            expectedOrigin: window.location.origin,
-            username: cred.username,
-            password: cred.password,
-            fillMode: 'both',
-            explicitUserInitiated: true,
+          chrome.runtime.sendMessage({
+            action: 'CRED_VAULT_FILL_TAB',
+            payload: {
+              tabId: null,
+              tabUrl: window.location.href,
+              credentialId: cred.id,
+              fillMode: 'both',
+              explicitUserInitiated: true,
+            },
           });
           showToast(`🔐 বিশ্বস্ত পোর্টালে (${cred.portalName}) লগইন তথ্য পূরণ করা হয়েছে।`);
         } else {
-          // Non-trusted origin: inject discreet suggestion pill
+          // Suggest Autofill Pill
           injectLoginAutofillPill(uEl, cred.portalName || 'Portal', () => {
-            LoginFormDetector.executeExplicitFill(document, window.location.href, {
-              expectedOrigin: window.location.origin,
-              username: cred.username,
-              password: cred.password,
-              fillMode: 'both',
-              explicitUserInitiated: true,
+            chrome.runtime.sendMessage({
+              action: 'CRED_VAULT_FILL_TAB',
+              payload: {
+                tabId: null,
+                tabUrl: window.location.href,
+                credentialId: cred.id,
+                fillMode: 'both',
+                explicitUserInitiated: true,
+              },
             });
             showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে।');
           });
@@ -443,6 +503,166 @@ async function setupSmartLoginAutofill() {
       });
     });
   }
+}
+
+let profileDiffDebounceTimer: any = null;
+let currentDetectedDiffs: DetectedProfileDiffItem[] = [];
+
+async function evaluateLiveFormProfileDiffs(): Promise<void> {
+  if (typeof window === 'undefined' || isExcludedSiteUrl(window.location?.href)) return;
+  if (!currentProfile || isVaultLocked || currentProfile.id === 'locked_vault_session') return;
+
+  const candidateForm =
+    Array.from(document.querySelectorAll('form')).find((f) => isJobApplicationForm(f)) ||
+    document.querySelector('form') ||
+    document.body;
+
+  if (!candidateForm) return;
+
+  const inputs = Array.from(
+    candidateForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      'input:not([type="hidden"]):not([type="password"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]), select, textarea'
+    )
+  );
+
+  if (inputs.length < 2) return;
+
+  const scannedItems: Array<{ canonicalKey?: string; label?: string; value: string; sectionContext?: string }> = [];
+
+  for (const input of inputs) {
+    const val = input.value?.trim();
+    if (!val) continue;
+
+    const existingPlanItem = currentScanResult?.planItems.find((p) => p.element === input);
+    let canonicalKey = existingPlanItem?.canonicalId;
+
+    if (!canonicalKey) {
+      const idOrName = (input.id || input.name || '').toLowerCase();
+      if (idOrName.includes('mobile') || idOrName.includes('phone')) {
+        canonicalKey = 'contact.mobile';
+      } else if (idOrName.includes('email')) {
+        canonicalKey = 'contact.email';
+      } else if (idOrName.includes('nid') || idOrName.includes('national_id') || idOrName.includes('nationalid')) {
+        canonicalKey = 'identity.nationalId';
+      } else if (idOrName.includes('birth_reg') || idOrName.includes('birthreg') || idOrName.includes('brn')) {
+        canonicalKey = 'identity.birthRegistration';
+      } else if (idOrName.includes('applicant_name') || idOrName.includes('applicantname')) {
+        canonicalKey = 'applicant.fullName.english';
+      } else if (idOrName.includes('father_name') || idOrName.includes('fathername')) {
+        canonicalKey = 'family.father.name.english';
+      } else if (idOrName.includes('mother_name') || idOrName.includes('mothername')) {
+        canonicalKey = 'family.mother.name.english';
+      } else if (
+        idOrName.includes('present_address') ||
+        idOrName.includes('presentaddress') ||
+        (idOrName.includes('village') && !idOrName.includes('perm'))
+      ) {
+        canonicalKey = 'address.present.village';
+      } else if (
+        idOrName.includes('permanent_address') ||
+        (idOrName.includes('village') && idOrName.includes('perm'))
+      ) {
+        canonicalKey = 'address.permanent.village';
+      } else if (idOrName.includes('ssc_year') || (idOrName.includes('year') && idOrName.includes('ssc'))) {
+        canonicalKey = 'education.ssc.passingYear';
+      } else if (idOrName.includes('hsc_year') || (idOrName.includes('year') && idOrName.includes('hsc'))) {
+        canonicalKey = 'education.hsc.passingYear';
+      } else if (
+        idOrName.includes('grad_year') ||
+        (idOrName.includes('year') &&
+          (idOrName.includes('grad') || idOrName.includes('honours') || idOrName.includes('degree')))
+      ) {
+        canonicalKey = 'education.graduation.passingYear';
+      }
+    }
+
+    if (canonicalKey) {
+      const label =
+        input.getAttribute('aria-label') ||
+        (input.labels && input.labels[0]?.textContent?.trim()) ||
+        input.getAttribute('placeholder') ||
+        input.name ||
+        canonicalKey;
+      scannedItems.push({
+        canonicalKey,
+        label,
+        value: val,
+      });
+    }
+  }
+
+  const diffs = ProfileDiffEngine.detectFormDiffs(scannedItems, currentProfile);
+  currentDetectedDiffs = diffs;
+
+  if (diffs.length > 0) {
+    const lang = (localStorage.getItem('jobfill_language') === 'en' ? 'en' : 'bn') as 'bn' | 'en';
+    showProfileUpdatePill(
+      diffs.length,
+      () => {
+        showProfileUpdateReviewModal({
+          diffs: currentDetectedDiffs,
+          lang,
+          onApprove: async (approved) => {
+            if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+              const res: any = await new Promise((resolve) => {
+                chrome.runtime.sendMessage(
+                  {
+                    action: 'PROFILE_UPDATE_APPROVE',
+                    payload: { approvedItems: approved, sourceOrigin: window.location.origin },
+                  },
+                  resolve
+                );
+              });
+              if (res && res.status === 'ok') {
+                if (res.updatedProfile) {
+                  currentProfile = res.updatedProfile;
+                }
+                showToast(
+                  lang === 'bn'
+                    ? `✅ ${res.appliedCount} টি তথ্য প্রোফাইলে সফলভাবে আপডেট হয়েছে!`
+                    : `✅ Successfully updated ${res.appliedCount} profile field(s)!`
+                );
+              }
+            } else {
+              const res = await ProfileDiffEngine.applyApprovedDiffs(
+                currentProfile,
+                approved,
+                window.location.origin
+              );
+              currentProfile = res.updatedProfile;
+              showToast(
+                lang === 'bn'
+                  ? `✅ ${res.appliedCount} টি তথ্য প্রোফাইলে সফলভাবে আপডেট হয়েছে!`
+                  : `✅ Successfully updated ${res.appliedCount} profile field(s)!`
+              );
+            }
+            removeProfileUpdatePill();
+          },
+          onDismiss: () => {},
+        });
+      },
+      () => {},
+      lang
+    );
+  } else {
+    removeProfileUpdatePill();
+  }
+}
+
+function setupProfileDiffObserver() {
+  if (typeof window === 'undefined') return;
+  if ((window as any).__jobfillProfileDiffObserverAttached) return;
+  (window as any).__jobfillProfileDiffObserverAttached = true;
+
+  const handleInputOrChange = () => {
+    clearTimeout(profileDiffDebounceTimer);
+    profileDiffDebounceTimer = setTimeout(() => {
+      void evaluateLiveFormProfileDiffs();
+    }, 600);
+  };
+
+  document.addEventListener('input', handleInputOrChange, true);
+  document.addEventListener('change', handleInputOrChange, true);
 }
 
 // Load active profile from trusted MV3 Service Worker or fallback local cache

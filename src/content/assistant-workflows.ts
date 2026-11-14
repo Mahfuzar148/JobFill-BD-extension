@@ -203,6 +203,7 @@ export function isJobApplicationForm(form: HTMLFormElement): boolean {
 /**
  * Injects a non-intrusive floating dialog asking the user to save or update login credentials.
  * User approval is strictly required before saving to the encrypted Credential Vault.
+ * Supports multiple accounts per portal and account updates.
  */
 export function showSaveCredentialDialog(
   candidate: {
@@ -211,9 +212,18 @@ export function showSaveCredentialDialog(
     portalUrl: string;
     username: string;
     password?: string;
+    organization?: string;
+    jobTitle?: string;
+    accountType?: string;
   },
-  onApprove: (saveMode: 'save' | 'update') => Promise<void>,
-  onDismiss: () => void
+  onApprove: (saveMode: 'save' | 'update' | 'separate', targetAccountId?: string) => Promise<void>,
+  onDismiss: () => void,
+  existingAccounts: Array<{
+    id: string;
+    username: string;
+    organization?: string;
+    jobTitle?: string;
+  }> = []
 ): void {
   const existing = document.getElementById('jobfill-cred-save-backdrop');
   if (existing) existing.remove();
@@ -233,8 +243,9 @@ export function showSaveCredentialDialog(
     padding: 16px 18px;
     box-shadow: 0 16px 40px rgba(0,0,0,0.45);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    max-width: 340px;
+    max-width: 360px;
     font-size: 12.5px;
+    animation: jobfillSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   `;
 
   const maskedUsername = candidate.username
@@ -242,6 +253,27 @@ export function showSaveCredentialDialog(
       ? `${candidate.username.slice(0, 3)}***`
       : `${candidate.username[0]}***`
     : 'User Account';
+
+  const hasExisting = existingAccounts.length > 0;
+  const matchOrg = candidate.organization || 'General Recruitment Portal';
+
+  let existingSection = '';
+  if (hasExisting) {
+    existingSection = `
+      <div style="background:#1e293b;border-radius:8px;padding:8px 10px;margin-bottom:10px;border:1px solid #475569;font-size:11.5px;">
+        <span style="color:#fbbf24;font-weight:700;display:block;margin-bottom:3px;">ℹ️ Existing Account(s) on this Portal:</span>
+        ${existingAccounts
+          .slice(0, 3)
+          .map(
+            (a) =>
+              `<div style="color:#cbd5e1;padding:2px 0;">• <strong>${escapeWorkflowHtml(
+                a.organization || a.jobTitle || 'Account'
+              )}</strong> (${escapeWorkflowHtml(a.username)})</div>`
+          )
+          .join('')}
+      </div>
+    `;
+  }
 
   backdrop.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -252,54 +284,268 @@ export function showSaveCredentialDialog(
       <button id="jobfill-cred-close-btn" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;">✕</button>
     </div>
     <p style="margin:0 0 10px;color:#cbd5e1;line-height:1.4;">
-      Do you want JobFill BD to save your credentials for <strong style="color:#fff;">${candidate.portalName}</strong> to your encrypted Credential Vault?
+      Do you want JobFill BD to save credentials for <strong style="color:#fff;">${escapeWorkflowHtml(
+        candidate.portalName
+      )}</strong> to your encrypted Credential Vault?
     </p>
+    ${existingSection}
     <div style="background:#1e293b;border-radius:8px;padding:8px 10px;margin-bottom:12px;font-size:12px;border:1px solid #334155;">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
         <span style="color:#94a3b8;">Portal:</span>
-        <span style="font-weight:600;color:#f8fafc;max-width:180px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">${candidate.portalName}</span>
+        <span style="font-weight:600;color:#f8fafc;max-width:180px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">${escapeWorkflowHtml(
+          candidate.portalName
+        )}</span>
       </div>
+      ${
+        candidate.organization
+          ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <span style="color:#94a3b8;">Organization:</span>
+              <span style="font-weight:600;color:#38bdf8;max-width:180px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">${escapeWorkflowHtml(
+                candidate.organization
+              )}</span>
+            </div>`
+          : ''
+      }
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
         <span style="color:#94a3b8;">Username / ID:</span>
-        <span style="font-weight:600;color:#38bdf8;">${maskedUsername}</span>
+        <span style="font-weight:600;color:#38bdf8;">${escapeWorkflowHtml(maskedUsername)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;">
         <span style="color:#94a3b8;">Password:</span>
         <span style="letter-spacing:2px;color:#94a3b8;">••••••••</span>
       </div>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
       <button id="jobfill-cred-cancel-btn" style="background:#334155;color:#e2e8f0;border:none;padding:7px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:12px;">Not Now</button>
-      <button id="jobfill-cred-save-btn" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none;padding:7px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;box-shadow:0 4px 12px rgba(2,132,199,0.4);">Save to Vault</button>
+      ${
+        hasExisting
+          ? `<button id="jobfill-cred-separate-btn" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none;padding:7px 12px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;box-shadow:0 4px 12px rgba(2,132,199,0.4);">Save as Separate Account</button>
+             <button id="jobfill-cred-update-btn" style="background:#047857;color:#fff;border:none;padding:7px 12px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Update Existing</button>`
+          : `<button id="jobfill-cred-save-btn" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none;padding:7px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;box-shadow:0 4px 12px rgba(2,132,199,0.4);">Save to Vault</button>`
+      }
     </div>
   `;
 
   document.body.appendChild(backdrop);
 
-  document.getElementById('jobfill-cred-close-btn')?.addEventListener('click', () => {
+  const closeDialog = () => {
     backdrop.remove();
     onDismiss();
-  });
-  document.getElementById('jobfill-cred-cancel-btn')?.addEventListener('click', () => {
-    backdrop.remove();
-    onDismiss();
-  });
+  };
+
+  document.getElementById('jobfill-cred-close-btn')?.addEventListener('click', closeDialog);
+  document.getElementById('jobfill-cred-cancel-btn')?.addEventListener('click', closeDialog);
+
   document.getElementById('jobfill-cred-save-btn')?.addEventListener('click', async () => {
-    const saveBtn = document.getElementById('jobfill-cred-save-btn') as HTMLButtonElement | null;
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
+    const btn = document.getElementById('jobfill-cred-save-btn') as HTMLButtonElement | null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
     }
     try {
       await onApprove('save');
       backdrop.remove();
     } catch {
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save to Vault';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save to Vault';
       }
     }
   });
+
+  document.getElementById('jobfill-cred-separate-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('jobfill-cred-separate-btn') as HTMLButtonElement | null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+    }
+    try {
+      await onApprove('separate');
+      backdrop.remove();
+    } catch {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save as Separate Account';
+      }
+    }
+  });
+
+  document.getElementById('jobfill-cred-update-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('jobfill-cred-update-btn') as HTMLButtonElement | null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Updating...';
+    }
+    try {
+      const targetId = existingAccounts[0]?.id;
+      await onApprove('update', targetId);
+      backdrop.remove();
+    } catch {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Update Existing';
+      }
+    }
+  });
+}
+
+/**
+ * Injects an Account Chooser modal when multiple saved accounts match the current portal origin.
+ * Allows the user to select the exact organization / job application account before autofilling.
+ */
+export function showAccountChooserDialog(
+  portalName: string,
+  accounts: Array<{
+    id: string;
+    username: string;
+    userId?: string;
+    applicantId?: string;
+    organization?: string;
+    jobTitle?: string;
+    accountType?: string;
+  }>,
+  onSelectAccount: (accountId: string) => Promise<void>,
+  onDismiss: () => void
+): void {
+  const existing = document.getElementById('jobfill-account-chooser-backdrop');
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'jobfill-account-chooser-backdrop';
+  backdrop.setAttribute('data-jobfill-ext', 'true');
+  backdrop.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(3px);
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  `;
+
+  const modalBox = document.createElement('div');
+  modalBox.style.cssText = `
+    background: #0f172a;
+    color: #f8fafc;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 460px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    overflow: hidden;
+  `;
+
+  const accountsHtml = accounts
+    .map((acc, idx) => {
+      const org = acc.organization || acc.jobTitle || 'Recruitment Account';
+      const usr = acc.username || acc.userId || acc.applicantId || 'Saved User';
+      const type = acc.accountType || 'Job Account';
+
+      return `
+        <div class="jobfill-chooser-item" data-acc-id="${acc.id}" style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 14px;
+          background: #1e293b;
+          border-radius: 10px;
+          margin-bottom: 8px;
+          border: 1px solid #334155;
+          cursor: pointer;
+          transition: all 0.2s;
+        " onmouseover="this.style.borderColor='#0284c7';this.style.background='#1e293b/80';" onmouseout="this.style.borderColor='#334155';this.style.background='#1e293b';">
+          <div style="flex:1;min-width:0;padding-right:10px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+              <span style="font-weight:700;color:#f8fafc;font-size:13px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${escapeWorkflowHtml(org)}
+              </span>
+              <span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#0284c7/20;color:#38bdf8;border:1px solid #0284c7/30;">
+                ${escapeWorkflowHtml(type)}
+              </span>
+            </div>
+            <div style="font-size:11.5px;color:#94a3b8;">
+              User ID / Name: <strong style="color:#e2e8f0;">${escapeWorkflowHtml(usr)}</strong>
+            </div>
+          </div>
+          <button type="button" style="
+            background: linear-gradient(135deg, #0284c7, #0369a1);
+            color: #ffffff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+          ">Autofill</button>
+        </div>
+      `;
+    })
+    .join('');
+
+  modalBox.innerHTML = `
+    <div style="padding:16px 20px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">🔑</span>
+        <div>
+          <h3 style="margin:0;font-size:15px;font-weight:700;color:#f8fafc;">
+            Choose Account (${escapeWorkflowHtml(portalName)})
+          </h3>
+          <p style="margin:2px 0 0;font-size:11.5px;color:#94a3b8;">
+            Multiple accounts found. Select which job login to autofill.
+          </p>
+        </div>
+      </div>
+      <button id="jobfill-chooser-close-btn" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;">✕</button>
+    </div>
+    <div style="padding:16px 20px;overflow-y:auto;flex:1;">
+      ${accountsHtml}
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid #334155;display:flex;justify-content:flex-end;">
+      <button id="jobfill-chooser-cancel-btn" style="background:#334155;color:#e2e8f0;border:none;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button>
+    </div>
+  `;
+
+  backdrop.appendChild(modalBox);
+  document.body.appendChild(backdrop);
+
+  const closeChooser = () => {
+    backdrop.remove();
+    onDismiss();
+  };
+
+  document.getElementById('jobfill-chooser-close-btn')?.addEventListener('click', closeChooser);
+  document.getElementById('jobfill-chooser-cancel-btn')?.addEventListener('click', closeChooser);
+
+  const items = modalBox.querySelectorAll('.jobfill-chooser-item');
+  items.forEach((item) => {
+    item.addEventListener('click', async () => {
+      const accId = item.getAttribute('data-acc-id');
+      if (accId) {
+        backdrop.remove();
+        await onSelectAccount(accId);
+      }
+    });
+  });
+}
+
+function escapeWorkflowHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**

@@ -26,6 +26,7 @@ import {
   CredentialVaultStatus,
   DecryptedCredentialEntry,
   EncryptedCredentialBackupBundle,
+  CredentialAccountType,
 } from '../../credentials/credential-repository';
 import {
   generateStrongPassword,
@@ -41,6 +42,9 @@ interface CredentialFormState {
   id?: string;
   portalName: string;
   portalUrl: string;
+  organization: string;
+  jobTitle: string;
+  accountType: CredentialAccountType;
   username: string;
   userId: string;
   applicantId: string;
@@ -51,6 +55,9 @@ interface CredentialFormState {
 const EMPTY_FORM: CredentialFormState = {
   portalName: '',
   portalUrl: '',
+  organization: '',
+  jobTitle: '',
+  accountType: 'General Portal Account',
   username: '',
   userId: '',
   applicantId: '',
@@ -78,6 +85,7 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
 
   const [searchQuery, setSearchQuery] = useState('');
   const [portalFilter, setPortalFilter] = useState('All');
+  const [categoryTab, setCategoryTab] = useState<'All' | 'JobSpecific' | 'PortalAccounts' | 'Recent'>('All');
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -227,6 +235,9 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
       id: entry.id,
       portalName: entry.portalName,
       portalUrl: entry.portalUrl,
+      organization: entry.organization || '',
+      jobTitle: entry.jobTitle || '',
+      accountType: entry.accountType || 'General Portal Account',
       username: entry.username,
       userId: entry.userId,
       applicantId: entry.applicantId,
@@ -323,16 +334,34 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
     const q = searchQuery.trim().toLowerCase();
     return entries.filter((item) => {
       if (portalFilter !== 'All' && item.portalName !== portalFilter) return false;
+      if (categoryTab === 'JobSpecific') {
+        const isJob =
+          item.accountType === 'Job-Specific Account' ||
+          item.accountType === 'Organization Account' ||
+          Boolean(item.organization || item.jobTitle);
+        if (!isJob) return false;
+      } else if (categoryTab === 'PortalAccounts') {
+        const isGeneral =
+          item.accountType === 'General Portal Account' ||
+          (!item.organization && !item.jobTitle);
+        if (!isGeneral) return false;
+      } else if (categoryTab === 'Recent') {
+        if (!item.lastUsedAt && !item.updatedAt) return false;
+      }
+
       if (!q) return true;
       return (
         item.portalName.toLowerCase().includes(q) ||
         item.origin.toLowerCase().includes(q) ||
+        (item.organization && item.organization.toLowerCase().includes(q)) ||
+        (item.jobTitle && item.jobTitle.toLowerCase().includes(q)) ||
+        (item.accountType && item.accountType.toLowerCase().includes(q)) ||
         item.username.toLowerCase().includes(q) ||
         item.userId.toLowerCase().includes(q) ||
         item.applicantId.toLowerCase().includes(q)
       );
     });
-  }, [entries, portalFilter, searchQuery]);
+  }, [entries, portalFilter, categoryTab, searchQuery]);
 
   const strength = useMemo(() => evaluatePasswordStrength(formState.password), [formState.password]);
   const derivedOriginPreview = useMemo(() => normalizeStrictOrigin(formState.portalUrl), [formState.portalUrl]);
@@ -579,12 +608,60 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
             </div>
           </div>
 
+          {/* Account Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setCategoryTab('All')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                categoryTab === 'All'
+                  ? 'bg-petro-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {bn ? `সব অ্যাকাউন্ট (${entries.length})` : `All Accounts (${entries.length})`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryTab('JobSpecific')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                categoryTab === 'JobSpecific'
+                  ? 'bg-petro-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              💼 {bn ? 'নির্দিষ্ট চাকরি / প্রতিষ্ঠান' : 'Job-Specific Accounts'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryTab('PortalAccounts')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                categoryTab === 'PortalAccounts'
+                  ? 'bg-petro-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              🏛️ {bn ? 'সাধারণ পোর্টাল' : 'Portal Accounts'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryTab('Recent')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                categoryTab === 'Recent'
+                  ? 'bg-petro-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              ⏱️ {bn ? 'সাম্প্রতিক ব্যবহৃত' : 'Recent'}
+            </button>
+          </div>
+
           {/* Empty State or Cards */}
           {filteredEntries.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center space-y-2">
               <KeyRound className="w-8 h-8 text-slate-300 mx-auto" />
               <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                {bn ? 'কোনো পোর্টাল ক্রেডেনশিয়াল সংরক্ষিত নেই' : 'No saved portal credentials yet'}
+                {bn ? 'কোনো পোর্টাল ক্রেডেনশিয়াল পাওয়া যায়নি' : 'No matching portal credentials found'}
               </div>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 {bn
@@ -604,9 +681,21 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h3 className="text-sm font-extrabold text-slate-800 dark:text-white truncate">
-                          {item.portalName}
-                        </h3>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white truncate">
+                            {item.portalName}
+                          </h3>
+                          {item.organization && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {item.organization}
+                            </span>
+                          )}
+                          {item.jobTitle && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                              {item.jobTitle}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono flex items-center gap-1 truncate mt-0.5">
                           <Globe className="w-3 h-3 shrink-0" />
                           <span className="truncate">{item.origin}</span>
@@ -750,6 +839,42 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
                     onChange={(e) => setFormState({ ...formState, portalUrl: e.target.value })}
                     className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Organization (সংগঠন)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Petrobangla (BOGMC)"
+                    value={formState.organization}
+                    onChange={(e) => setFormState({ ...formState, organization: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Job Title (পদের নাম)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Assistant Director"
+                    value={formState.jobTitle}
+                    onChange={(e) => setFormState({ ...formState, jobTitle: e.target.value })}
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Account Type</label>
+                  <select
+                    value={formState.accountType}
+                    onChange={(e) => setFormState({ ...formState, accountType: e.target.value as CredentialAccountType })}
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-xs font-semibold"
+                  >
+                    <option value="Job-Specific Account">Job-Specific Account</option>
+                    <option value="General Portal Account">General Portal Account</option>
+                    <option value="Organization Account">Organization Account</option>
+                    <option value="Recruitment Application Account">Recruitment Application Account</option>
+                  </select>
                 </div>
               </div>
 

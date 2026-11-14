@@ -15,6 +15,7 @@ import { CredentialVaultRepository } from '../credentials/credential-repository'
 import { isStrictOriginMatch } from '../credentials/origin-matcher';
 import { JobVisitRepository } from '../jobs/database/job-visit-repository';
 import { ApplicationRepository } from '../jobs/database/application-repository';
+import { ProfileDiffEngine, DetectedProfileDiffItem } from '../services/profile-diff-engine';
 import {
   getActiveProfile,
   getAllProfiles,
@@ -64,7 +65,11 @@ export interface ExtensionMessage {
     | 'RECORD_APPLICATION_SUBMIT_ATTEMPT'
     | 'CONFIRM_APPLICATION_SUBMISSION'
     | 'GET_TRUSTED_AUTOFILL_ORIGINS'
-    | 'SET_TRUSTED_AUTOFILL_ORIGIN';
+    | 'SET_TRUSTED_AUTOFILL_ORIGIN'
+    | 'PROFILE_UPDATE_APPROVE'
+    | 'PROFILE_UPDATE_UNDO'
+    | 'GET_PROFILE_CHANGE_HISTORY'
+    | 'CLEAR_PROFILE_CHANGE_HISTORY';
   payload?: any;
 }
 
@@ -475,11 +480,11 @@ export class MessageRouter {
       case 'CRED_VAULT_FIND_FOR_TAB': {
         (async () => {
           const originUrl = sender.tab?.url || sender.url || '';
-          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+          const targetUrl = String(message.payload?.url || sender.tab?.url || '');
+          if (sender.tab && sender.tab.url && !isStrictOriginMatch(targetUrl, sender.tab.url).matched) {
             sendResponse({ status: 'denied', matches: [] });
             return;
           }
-          const targetUrl = String(message.payload?.url || '');
           const vaultStatus = await CredentialVaultRepository.getStatus();
           if (!vaultStatus.initialized) {
             sendResponse({ status: 'uninitialized', vaultStatus, matches: [] });
@@ -496,6 +501,9 @@ export class MessageRouter {
                 id: s.id,
                 portalName: s.portalName,
                 origin: s.origin,
+                organization: s.organization,
+                jobTitle: s.jobTitle,
+                accountType: s.accountType,
               })),
             });
             return;
@@ -508,6 +516,9 @@ export class MessageRouter {
               id: m.id,
               portalName: m.portalName,
               origin: m.origin,
+              organization: m.organization,
+              jobTitle: m.jobTitle,
+              accountType: m.accountType,
               username: m.username,
               userId: m.userId,
               applicantId: m.applicantId,
@@ -560,6 +571,7 @@ export class MessageRouter {
               fillMode,
             },
           });
+          void CredentialVaultRepository.updateLastUsed(entry.id);
           sendResponse({ status: 'ok', result: fillResponse });
         })().catch((err) => {
           sendResponse({ status: 'error', error: err?.message || 'Credential fill failed.' });
@@ -570,9 +582,12 @@ export class MessageRouter {
       case 'CRED_VAULT_SAVE_MANUAL': {
         (async () => {
           const originUrl = sender.tab?.url || sender.url || '';
-          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
-            sendResponse({ status: 'denied', error: 'Credential saving restricted to extension UI.' });
-            return;
+          if (sender.tab && sender.tab.url) {
+            const check = isStrictOriginMatch(message.payload?.origin || message.payload?.portalUrl, sender.tab.url);
+            if (!check.matched) {
+              sendResponse({ status: 'denied', error: `Origin mismatch: ${check.reason}` });
+              return;
+            }
           }
           if (!CredentialVaultRepository.isUnlocked()) {
             sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
@@ -583,6 +598,67 @@ export class MessageRouter {
         })().catch((err) => {
           sendResponse({ status: 'error', error: err?.message || 'Could not save credential.' });
         });
+        return true;
+      }
+
+      case 'PROFILE_UPDATE_APPROVE': {
+        (async () => {
+          try {
+            const approvedItems: DetectedProfileDiffItem[] = message.payload?.approvedItems || [];
+            const sourceOrigin = String(message.payload?.sourceOrigin || sender.tab?.url || '');
+            const profile = await getActiveProfile();
+            const result = await ProfileDiffEngine.applyApprovedDiffs(profile, approvedItems, sourceOrigin);
+            sendResponse({
+              status: 'ok',
+              appliedCount: result.appliedCount,
+              updatedProfile: result.updatedProfile,
+            });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message || 'Profile update failed.' });
+          }
+        })();
+        return true;
+      }
+
+      case 'PROFILE_UPDATE_UNDO': {
+        (async () => {
+          try {
+            const recordId = String(message.payload?.historyRecordId || '');
+            const result = await ProfileDiffEngine.undoChange(recordId);
+            sendResponse({
+              status: 'ok',
+              reverted: result.reverted,
+              fieldKey: result.fieldKey,
+              updatedProfile: result.updatedProfile,
+            });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message || 'Undo failed.' });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_PROFILE_CHANGE_HISTORY': {
+        (async () => {
+          try {
+            const history = await ProfileDiffEngine.getChangeHistory();
+            sendResponse({ status: 'ok', history });
+          } catch (err: any) {
+            sendResponse({ status: 'error', history: [] });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_PROFILE_CHANGE_HISTORY': {
+        (async () => {
+          try {
+            await ProfileDiffEngine.clearChangeHistory();
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error' });
+          }
+        })();
         return true;
       }
 
