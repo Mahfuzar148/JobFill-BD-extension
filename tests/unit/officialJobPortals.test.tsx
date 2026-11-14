@@ -45,6 +45,7 @@ const EXPECTED_PORTAL_URLS: Array<[string, string]> = [
   ['Teletalk Alljobs', 'https://alljobs.teletalk.com.bd/jobs/government'],
   ['BPSC', 'https://bpsc.gov.bd/'],
   ['BPSC Teletalk', 'https://bpscs.teletalk.com.bd/'],
+  ['Directorate of Registration (Sub-Registrar)', 'https://dor.gov.bd/site/view/notices'],
   ['Bangladesh National Portal', 'https://bangladesh.gov.bd/pages/job-tender-announcements'],
   ['Bangladesh Bank eRecruitment', 'https://erecruitment.bb.org.bd/'],
   ['Bangladesh Bank', 'https://www.bb.org.bd/'],
@@ -87,8 +88,8 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
     container.remove();
   });
 
-  it('contains all 14 exact predefined official HTTPS portal entries across all 6 categories', () => {
-    expect(OFFICIAL_JOB_PORTALS).toHaveLength(14);
+  it('contains all 15 exact predefined official HTTPS portal entries across all 6 categories', () => {
+    expect(OFFICIAL_JOB_PORTALS).toHaveLength(15);
     expect(OFFICIAL_PORTAL_CATEGORIES).toEqual([
       'Government',
       'Bank',
@@ -107,7 +108,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
     }
 
     // Category distribution should keep every pill populated
-    expect(filterOfficialPortals(OFFICIAL_JOB_PORTALS, 'Government', '').length).toBe(4);
+    expect(filterOfficialPortals(OFFICIAL_JOB_PORTALS, 'Government', '').length).toBe(5);
     expect(filterOfficialPortals(OFFICIAL_JOB_PORTALS, 'Bank', '').length).toBe(2);
     expect(filterOfficialPortals(OFFICIAL_JOB_PORTALS, 'Education', '').length).toBe(3);
     expect(filterOfficialPortals(OFFICIAL_JOB_PORTALS, 'Private', '').length).toBe(1);
@@ -143,7 +144,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 
-  it('renders all 14 portal cards and opens exact predefined URLs in new Chrome tabs via chrome.tabs.create', async () => {
+  it('renders all 15 portal cards and opens exact predefined URLs in new Chrome tabs via chrome.tabs.create', async () => {
     const tabsCreateSpy = vi.fn().mockResolvedValue({ id: 101 });
     (globalThis as any).chrome = {
       tabs: { create: tabsCreateSpy },
@@ -161,10 +162,10 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
     await flushUi();
 
     expect(container.textContent).toContain('Official Job Portals');
-    expect(container.textContent).toContain('Showing 14 of 14 portals');
+    expect(container.textContent).toContain('Showing 15 of 15 portals');
 
     const cards = container.querySelectorAll('[data-testid^="portal-card-"]');
-    expect(cards.length).toBe(14);
+    expect(cards.length).toBe(15);
 
     // Every card displays name, category, description, and Visit Website button with SVG icon
     for (const portal of OFFICIAL_JOB_PORTALS) {
@@ -189,7 +190,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
       expect(tabsCreateSpy).toHaveBeenCalledWith({ url: portal.url, active: true });
     }
 
-    expect(tabsCreateSpy).toHaveBeenCalledTimes(14);
+    expect(tabsCreateSpy).toHaveBeenCalledTimes(15);
     // Must not navigate away from existing Dashboard page
     expect(window.location.href).toBe(initialHref);
   });
@@ -240,7 +241,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
     expect(container.textContent).toContain('Remotive');
 
     await clickCategory('All');
-    expect(container.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(14);
+    expect(container.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(15);
 
     // Search test
     const searchInput = container.querySelector(
@@ -270,7 +271,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
       resetBtn!.click();
     });
     await flushUi(15);
-    expect(container.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(14);
+    expect(container.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(15);
   });
 
   it('adds 🌐 Official Job Portals button to Sidebar, Header breadcrumbs, Extension Popup, and Circular Hub Header', async () => {
@@ -386,7 +387,7 @@ describe('JobFill BD - Official Job Portals Quick Access', () => {
 
     const dialog = container.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
-    expect(dialog!.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(14);
+    expect(dialog!.querySelectorAll('[data-testid^="portal-card-"]').length).toBe(15);
   });
 
   it('preserves Official Job Portals search & category filter state across navigation returns', async () => {

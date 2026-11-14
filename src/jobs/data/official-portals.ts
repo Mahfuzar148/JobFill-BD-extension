@@ -123,7 +123,7 @@ export const OFFICIAL_JOB_PORTALS: OfficialJobPortalEntry[] = [
     shortName: 'DOR / Sub-Registrar',
     category: 'Government',
     categoryBn: 'সরকারি চাকরি',
-    url: 'http://dor.gov.bd/site/view/notices',
+    url: 'https://dor.gov.bd/site/view/notices',
     domain: 'dor.gov.bd',
     description:
       'Official portal of the Directorate of Registration under Law & Justice Division for Sub-Registrar and departmental recruitment notices.',
@@ -141,7 +141,6 @@ export const OFFICIAL_JOB_PORTALS: OfficialJobPortalEntry[] = [
       'dor',
       'minlaw',
       'আইন মন্ত্রণালয়',
-      'bpsc',
       'non-cadre',
     ],
     isBangladeshOfficial: true,
