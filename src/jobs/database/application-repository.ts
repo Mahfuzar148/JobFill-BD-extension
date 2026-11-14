@@ -38,6 +38,8 @@ export class ApplicationRepository {
   public static async setStatus(
     job: Pick<NormalizedJobCircular, 'id' | 'jobTitle' | 'organization' | 'applicationUrl' | 'circularUrl' | 'deadlineAt'> & {
       circularNumber?: string;
+      loginUrl?: string | null;
+      organizationUrl?: string | null;
     },
     status: ApplicationStatus,
     extra: Partial<
@@ -62,6 +64,13 @@ export class ApplicationRepository {
         | 'submissionAttemptedAt'
         | 'needsReview'
         | 'reviewReason'
+        | 'loginUrl'
+        | 'organizationUrl'
+        | 'loginUrlVerified'
+        | 'loginUrlProvenance'
+        | 'previousLoginUrl'
+        | 'credentialId'
+        | 'credentialLinkedAt'
       >
     > = {}
   ): Promise<ApplicationTrackerRecord> {
@@ -74,6 +83,13 @@ export class ApplicationRepository {
       circularId: extra.circularId ?? existing?.circularId ?? job.circularNumber,
       applicationUrl: job.applicationUrl,
       circularUrl: job.circularUrl,
+      loginUrl: extra.loginUrl ?? existing?.loginUrl ?? job.loginUrl ?? null,
+      organizationUrl: extra.organizationUrl ?? existing?.organizationUrl ?? job.organizationUrl ?? null,
+      loginUrlVerified: extra.loginUrlVerified ?? existing?.loginUrlVerified ?? false,
+      loginUrlProvenance: extra.loginUrlProvenance ?? existing?.loginUrlProvenance ?? 'system',
+      previousLoginUrl: extra.previousLoginUrl ?? existing?.previousLoginUrl ?? null,
+      credentialId: extra.credentialId ?? existing?.credentialId ?? null,
+      credentialLinkedAt: extra.credentialLinkedAt ?? existing?.credentialLinkedAt,
       deadlineAt: job.deadlineAt,
       status,
       applicationDate:
@@ -105,6 +121,204 @@ export class ApplicationRepository {
     };
     await appCrud.put(record);
     return record;
+  }
+
+  /**
+   * Sanitizes, normalizes and validates a candidate portal URL.
+   * Enforces HTTPS, checks hostname, strips sensitive query parameters (tokens, session IDs),
+   * and blocks PDF circulars from being assigned as login URLs.
+   */
+  public static sanitizeAndValidateUrl(rawUrl: string): {
+    isValid: boolean;
+    normalizedUrl: string;
+    hostname: string;
+    isHttps: boolean;
+    isPdfCircular: boolean;
+    warnings: string[];
+    reason?: string;
+  } {
+    const trimmed = (rawUrl || '').trim();
+    if (!trimmed) {
+      return {
+        isValid: false,
+        normalizedUrl: '',
+        hostname: '',
+        isHttps: false,
+        isPdfCircular: false,
+        warnings: ['URL cannot be empty.'],
+        reason: 'Empty URL',
+      };
+    }
+
+    try {
+      const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+      const isHttps = parsed.protocol === 'https:';
+      const warnings: string[] = [];
+
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return {
+          isValid: false,
+          normalizedUrl: '',
+          hostname: '',
+          isHttps: false,
+          isPdfCircular: false,
+          warnings: ['Invalid protocol. Only HTTPS URLs are permitted.'],
+          reason: 'Invalid protocol',
+        };
+      }
+
+      if (!isHttps) {
+        warnings.push('URL is not using secure HTTPS.');
+      }
+
+      const pathnameLower = parsed.pathname.toLowerCase();
+      const isPdfCircular = pathnameLower.endsWith('.pdf') || pathnameLower.includes('circular.pdf');
+      if (isPdfCircular) {
+        return {
+          isValid: false,
+          normalizedUrl: parsed.toString(),
+          hostname: parsed.hostname,
+          isHttps,
+          isPdfCircular: true,
+          warnings: ['PDF Circular cannot be used as a Portal Login URL.'],
+          reason: 'Circular PDF cannot be used as a Login URL.',
+        };
+      }
+
+      // Strip sensitive query parameters (auth tokens, session IDs, tickets)
+      const sensitiveParams = [
+        'token',
+        'auth',
+        'session',
+        'sid',
+        'ticket',
+        'jwt',
+        'code',
+        'access_token',
+        'refresh_token',
+        'jsessionid',
+        'phpsessid',
+      ];
+      for (const param of sensitiveParams) {
+        if (parsed.searchParams.has(param)) {
+          parsed.searchParams.delete(param);
+          warnings.push(`Removed sensitive session parameter: ${param}`);
+        }
+      }
+
+      return {
+        isValid: Boolean(parsed.hostname && parsed.hostname.includes('.')),
+        normalizedUrl: parsed.toString(),
+        hostname: parsed.hostname,
+        isHttps,
+        isPdfCircular: false,
+        warnings,
+      };
+    } catch {
+      return {
+        isValid: false,
+        normalizedUrl: '',
+        hostname: '',
+        isHttps: false,
+        isPdfCircular: false,
+        warnings: ['Malformed URL syntax.'],
+        reason: 'Malformed URL syntax',
+      };
+    }
+  }
+
+  public static async setLoginUrl(
+    jobId: string,
+    url: string,
+    provenance: 'manual' | 'detected' | 'system' = 'manual',
+    verified = false
+  ): Promise<ApplicationTrackerRecord> {
+    const existing = await this.getByJobId(jobId);
+    if (!existing) {
+      throw new Error(`Application record with jobId "${jobId}" not found.`);
+    }
+
+    const check = this.sanitizeAndValidateUrl(url);
+    if (!check.isValid) {
+      throw new Error(check.reason || 'Invalid portal URL.');
+    }
+
+    const updated: ApplicationTrackerRecord = {
+      ...existing,
+      previousLoginUrl: existing.loginUrl ?? null,
+      loginUrl: check.normalizedUrl,
+      loginUrlVerified: verified,
+      loginUrlProvenance: provenance,
+      updatedAt: Date.now(),
+    };
+    await appCrud.put(updated);
+    return updated;
+  }
+
+  public static async undoLoginUrlChange(jobId: string): Promise<ApplicationTrackerRecord> {
+    const existing = await this.getByJobId(jobId);
+    if (!existing) {
+      throw new Error(`Application record with jobId "${jobId}" not found.`);
+    }
+    if (existing.previousLoginUrl === undefined) {
+      return existing;
+    }
+    const updated: ApplicationTrackerRecord = {
+      ...existing,
+      loginUrl: existing.previousLoginUrl,
+      previousLoginUrl: null,
+      updatedAt: Date.now(),
+    };
+    await appCrud.put(updated);
+    return updated;
+  }
+
+  public static async linkCredential(
+    jobId: string,
+    credentialId: string
+  ): Promise<ApplicationTrackerRecord> {
+    const existing = await this.getByJobId(jobId);
+    if (!existing) {
+      throw new Error(`Application record with jobId "${jobId}" not found.`);
+    }
+    const updated: ApplicationTrackerRecord = {
+      ...existing,
+      credentialId,
+      credentialLinkedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await appCrud.put(updated);
+    return updated;
+  }
+
+  public static async unlinkCredential(jobId: string): Promise<ApplicationTrackerRecord> {
+    const existing = await this.getByJobId(jobId);
+    if (!existing) {
+      throw new Error(`Application record with jobId "${jobId}" not found.`);
+    }
+    const updated: ApplicationTrackerRecord = {
+      ...existing,
+      credentialId: null,
+      credentialLinkedAt: undefined,
+      updatedAt: Date.now(),
+    };
+    await appCrud.put(updated);
+    return updated;
+  }
+
+  public static async setOrganizationUrl(jobId: string, url: string): Promise<ApplicationTrackerRecord> {
+    const existing = await this.getByJobId(jobId);
+    if (!existing) {
+      throw new Error(`Application record with jobId "${jobId}" not found.`);
+    }
+    const check = this.sanitizeAndValidateUrl(url);
+    const updated: ApplicationTrackerRecord = {
+      ...existing,
+      organizationUrl: check.normalizedUrl || url.trim(),
+      updatedAt: Date.now(),
+    };
+    await appCrud.put(updated);
+    return updated;
   }
 
   /**

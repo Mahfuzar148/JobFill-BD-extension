@@ -689,4 +689,54 @@ export class CredentialVaultRepository {
     const set = await this.getTrustedAutofillOrigins();
     return set.has(norm);
   }
+
+  public static async getCredentialSummaryById(id: string): Promise<CredentialPortalSummary | null> {
+    const records = await readAllEncryptedRecords();
+    const r = records.find((rec) => rec.id === id);
+    if (!r) return null;
+    return {
+      id: r.id,
+      portalName: r.portalName,
+      portalUrl: r.portalUrl,
+      origin: r.origin,
+      organization: r.organization,
+      jobTitle: r.jobTitle,
+      accountType: r.accountType,
+      verificationStatus: r.verificationStatus,
+      lastUsedAt: r.lastUsedAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    };
+  }
+
+  public static async getDecryptedCredentialById(id: string): Promise<DecryptedCredentialEntry | null> {
+    const { key } = getValidatedActiveKey();
+    const records = await readAllEncryptedRecords();
+    const r = records.find((rec) => rec.id === id);
+    if (!r) return null;
+    const jsonStr = await decryptDataWithKey(r.encryptedPayload, key);
+    const secret = JSON.parse(jsonStr) as CredentialSecretPayload;
+    return {
+      id: r.id,
+      portalName: r.portalName,
+      portalUrl: r.portalUrl,
+      origin: r.origin,
+      organization: r.organization || secret.organization || '',
+      jobTitle: r.jobTitle || secret.jobTitle || '',
+      jobCircularId: r.jobCircularId || secret.jobCircularId,
+      accountType: r.accountType || (secret.accountType as any) || 'General Portal Account',
+      linkedApplicationIds: secret.linkedApplicationIds || [],
+      verificationStatus: r.verificationStatus || secret.verificationStatus || 'unverified',
+      lastUsedAt: r.lastUsedAt,
+      username: secret.username || '',
+      userId: secret.userId || '',
+      applicantId: secret.applicantId || '',
+      password: secret.password || '',
+      notes: secret.notes || '',
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    };
+  }
 }
+
+export const CredentialRepository = CredentialVaultRepository;

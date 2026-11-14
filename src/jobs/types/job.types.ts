@@ -169,6 +169,7 @@ export interface NormalizedJobCircular {
   deadlineNeedsRevalidation?: boolean;
   circularUrl?: string;
   applicationUrl: string | null;
+  loginUrl?: string | null;
   organizationUrl?: string;
   sourceUrl?: string | null;
   description: string;
@@ -286,6 +287,13 @@ export interface ApplicationTrackerRecord {
   circularId?: string;
   applicationUrl?: string | null;
   circularUrl?: string;
+  loginUrl?: string | null;
+  organizationUrl?: string | null;
+  loginUrlVerified?: boolean;
+  loginUrlProvenance?: 'manual' | 'detected' | 'system';
+  previousLoginUrl?: string | null;
+  credentialId?: string | null;
+  credentialLinkedAt?: number;
   deadlineAt: number | null;
   status: ApplicationStatus;
   applicationDate?: string;

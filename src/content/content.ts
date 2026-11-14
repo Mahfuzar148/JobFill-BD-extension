@@ -611,65 +611,88 @@ async function setupSmartLoginAutofill() {
   if (!uEl) return;
 
   if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-    chrome.runtime.sendMessage({ action: 'GET_TRUSTED_AUTOFILL_ORIGINS' }, (trustedRes) => {
-      const trustedList = Array.isArray(trustedRes?.origins) ? trustedRes.origins : [];
-      const isTrusted = trustedList.includes(window.location.origin);
+    chrome.storage?.local?.get(['jobfill_active_portal_login_context'], (ctxRes) => {
+      const activeCtx = ctxRes?.jobfill_active_portal_login_context;
+      const targetCredId = activeCtx?.credentialId;
 
-      chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
-        const matches: Array<any> = credRes?.matches || credRes?.credentials || [];
-        if (!credRes || credRes.status !== 'ok' || matches.length === 0) {
-          return;
-        }
+      chrome.runtime.sendMessage({ action: 'GET_TRUSTED_AUTOFILL_ORIGINS' }, (trustedRes) => {
+        const trustedList = Array.isArray(trustedRes?.origins) ? trustedRes.origins : [];
+        const isTrusted = trustedList.includes(window.location.origin);
 
-        const portalName = matches[0].portalName || 'Portal';
+        chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
+          const matches: Array<any> = credRes?.matches || credRes?.credentials || [];
+          if (!credRes || (credRes.status !== 'ok' && credRes.status !== 'locked') || matches.length === 0) {
+            return;
+          }
 
-        // Case A: Multiple accounts exist on this origin!
-        if (matches.length > 1) {
-          injectLoginAutofillPill(uEl, `${portalName} (${matches.length} accounts)`, () => {
-            showAccountChooserDialog(
-              portalName,
-              matches,
-              async (selectedAccId) => {
+          if (credRes.status === 'locked') {
+            injectLoginAutofillPill(uEl, '🔐 ভল্ট লকড (Unlock Vault to Login)', () => {
+              showToast('🔒 অনুগ্রহ করে ড্যাশবোর্ড থেকে ক্রেডেনশিয়াল ভল্ট আনলক করুন।');
+            });
+            return;
+          }
+
+          // Case A: A specific credential was linked to the active job application
+          if (targetCredId) {
+            const linkedMatch = matches.find((m) => m.id === targetCredId);
+            if (linkedMatch) {
+              const label = `${activeCtx.organization || linkedMatch.portalName} (${linkedMatch.userId || linkedMatch.username || 'Linked Account'})`;
+              injectLoginAutofillPill(uEl, label, () => {
                 chrome.runtime.sendMessage(
                   {
                     action: 'CRED_VAULT_FILL_TAB',
                     payload: {
                       tabId: null,
                       tabUrl: window.location.href,
-                      credentialId: selectedAccId,
+                      credentialId: linkedMatch.id,
                       fillMode: 'both',
                       explicitUserInitiated: true,
                     },
                   },
                   () => {
-                    showToast('🔐 নির্বাচিত অ্যাকাউন্টের লগইন তথ্য পূরণ করা হয়েছে।');
+                    showToast('🔐 চাকরির নির্ধারিত অ্যাকাউন্টের তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
                   }
                 );
-              },
-              () => {}
-            );
-          });
-          return;
-        }
+              });
+              return;
+            }
+          }
 
-        // Case B: Exactly one matching account
-        const cred = matches[0];
-        if (isTrusted && credRes.vaultUnlocked) {
-          // Trusted origin explicit autofill
-          chrome.runtime.sendMessage({
-            action: 'CRED_VAULT_FILL_TAB',
-            payload: {
-              tabId: null,
-              tabUrl: window.location.href,
-              credentialId: cred.id,
-              fillMode: 'both',
-              explicitUserInitiated: true,
-            },
-          });
-          showToast(`🔐 বিশ্বস্ত পোর্টালে (${cred.portalName}) লগইন তথ্য পূরণ করা হয়েছে।`);
-        } else {
-          // Suggest Autofill Pill
-          injectLoginAutofillPill(uEl, cred.portalName || 'Portal', () => {
+          const portalName = matches[0].portalName || 'Portal';
+
+          // Case B: Multiple accounts exist on this origin!
+          if (matches.length > 1) {
+            injectLoginAutofillPill(uEl, `${portalName} (${matches.length} accounts)`, () => {
+              showAccountChooserDialog(
+                portalName,
+                matches,
+                async (selectedAccId) => {
+                  chrome.runtime.sendMessage(
+                    {
+                      action: 'CRED_VAULT_FILL_TAB',
+                      payload: {
+                        tabId: null,
+                        tabUrl: window.location.href,
+                        credentialId: selectedAccId,
+                        fillMode: 'both',
+                        explicitUserInitiated: true,
+                      },
+                    },
+                    () => {
+                      showToast('🔐 নির্বাচিত অ্যাকাউন্টের লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
+                    }
+                  );
+                },
+                () => {}
+              );
+            });
+            return;
+          }
+
+          // Case C: Exactly one matching account
+          const cred = matches[0];
+          if (isTrusted && credRes.vaultUnlocked) {
+            // Trusted origin explicit autofill
             chrome.runtime.sendMessage({
               action: 'CRED_VAULT_FILL_TAB',
               payload: {
@@ -680,9 +703,24 @@ async function setupSmartLoginAutofill() {
                 explicitUserInitiated: true,
               },
             });
-            showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে।');
-          });
-        }
+            showToast(`🔐 বিশ্বস্ত পোর্টালে (${cred.portalName}) লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।`);
+          } else {
+            // Suggest Autofill Pill
+            injectLoginAutofillPill(uEl, `${cred.portalName || 'Portal'} (${cred.userId || cred.username || 'Account'})`, () => {
+              chrome.runtime.sendMessage({
+                action: 'CRED_VAULT_FILL_TAB',
+                payload: {
+                  tabId: null,
+                  tabUrl: window.location.href,
+                  credentialId: cred.id,
+                  fillMode: 'both',
+                  explicitUserInitiated: true,
+                },
+              });
+              showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
+            });
+          }
+        });
       });
     });
   }

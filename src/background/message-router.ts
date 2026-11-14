@@ -57,6 +57,7 @@ export interface ExtensionMessage {
     | 'CRED_VAULT_SAVE_MANUAL'
     | 'CRED_VAULT_UNLOCK'
     | 'CRED_VAULT_LOCK'
+    | 'OPEN_APPLICATION_PORTAL_TAB'
     | 'RECORD_JOB_CIRCULAR_VISIT'
     | 'GET_JOB_VISITS'
     | 'CLEAR_JOB_VISITS'
@@ -541,8 +542,11 @@ export class MessageRouter {
       case 'CRED_VAULT_FILL_TAB': {
         (async () => {
           const originUrl = sender.tab?.url || sender.url || '';
-          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
-            sendResponse({ status: 'denied', error: 'Credential fill trigger restricted to extension UI.' });
+          const isExtensionUI = originUrl.startsWith('chrome-extension://');
+          const isAuthorizedPortalTab = Boolean(sender.tab && sender.tab.id && originUrl.startsWith('https://'));
+
+          if (!isExtensionUI && !isAuthorizedPortalTab) {
+            sendResponse({ status: 'denied', error: 'Credential fill trigger restricted to extension UI or authorized portal tab.' });
             return;
           }
           if (!message.payload?.explicitUserInitiated) {
@@ -553,10 +557,15 @@ export class MessageRouter {
             sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
             return;
           }
-          const tabId = Number(message.payload?.tabId);
-          const tabUrl = String(message.payload?.tabUrl || '');
+          const targetTabId = Number(message.payload?.tabId) || sender.tab?.id;
+          const targetUrl = String(message.payload?.tabUrl || sender.tab?.url || '');
           const credentialId = String(message.payload?.credentialId || '');
-          const fillMode = message.payload?.fillMode || 'username_only';
+          const fillMode = message.payload?.fillMode || 'both';
+
+          if (!targetTabId) {
+            sendResponse({ status: 'error', error: 'Target tab ID missing.' });
+            return;
+          }
 
           const allCreds = await CredentialVaultRepository.listDecryptedCredentials();
           const entry = allCreds.find((c) => c.id === credentialId);
@@ -564,12 +573,16 @@ export class MessageRouter {
             sendResponse({ status: 'error', error: 'Credential not found.' });
             return;
           }
-          const originCheck = isStrictOriginMatch(entry.origin, tabUrl);
+          const originCheck = isStrictOriginMatch(entry.origin, targetUrl);
           if (!originCheck.matched) {
             sendResponse({ status: 'denied', error: originCheck.reason });
             return;
           }
-          const fillResponse = await chrome.tabs.sendMessage(tabId, {
+          if (sender.tab?.url && !isStrictOriginMatch(entry.origin, sender.tab.url).matched) {
+            sendResponse({ status: 'denied', error: 'Sender tab origin does not match credential origin.' });
+            return;
+          }
+          const fillResponse = await chrome.tabs.sendMessage(targetTabId, {
             action: 'FILL_CREDENTIAL_LOGIN',
             explicitUserInitiated: true,
             payload: {
@@ -585,6 +598,41 @@ export class MessageRouter {
           sendResponse({ status: 'ok', result: fillResponse });
         })().catch((err) => {
           sendResponse({ status: 'error', error: err?.message || 'Credential fill failed.' });
+        });
+        return true;
+      }
+
+      case 'OPEN_APPLICATION_PORTAL_TAB': {
+        (async () => {
+          const rawUrl = String(message.payload?.url || '').trim();
+          const check = ApplicationRepository.sanitizeAndValidateUrl(rawUrl);
+          if (!check.isValid || check.isPdfCircular) {
+            sendResponse({ status: 'error', error: check.reason || 'Invalid portal URL' });
+            return;
+          }
+
+          // Save active portal context
+          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+            await chrome.storage.local.set({
+              jobfill_active_portal_login_context: {
+                jobId: message.payload?.jobId || '',
+                jobTitle: message.payload?.jobTitle || '',
+                organization: message.payload?.organization || '',
+                loginUrl: check.normalizedUrl,
+                credentialId: message.payload?.credentialId || null,
+                openedAt: Date.now(),
+              },
+            });
+          }
+
+          if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+            const tab = await chrome.tabs.create({ url: check.normalizedUrl, active: true });
+            sendResponse({ status: 'ok', tabId: tab.id });
+          } else {
+            sendResponse({ status: 'ok', tabId: null });
+          }
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message });
         });
         return true;
       }

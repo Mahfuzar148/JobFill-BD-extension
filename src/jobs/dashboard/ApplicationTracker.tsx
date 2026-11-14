@@ -1,7 +1,7 @@
 // JobFill BD - Local Application Tracker Component
 // Tracks user application statuses without ever auto-marking Applied or auto-submitting.
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Briefcase,
   Calendar,
@@ -20,6 +20,14 @@ import {
   X,
   AlertTriangle,
   Wrench,
+  Globe,
+  KeyRound,
+  Lock,
+  Unlock,
+  Link2,
+  Undo2,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   ApplicationTrackerRecord,
@@ -30,6 +38,11 @@ import {
 import { ApplicationRepository } from '../database/application-repository';
 import { JobVisitRepository } from '../database/job-visit-repository';
 import { verifyJobUrl } from '../services/source-verifier';
+import { openApplicationPortalLoginTab } from '../services/job-ui-actions';
+import {
+  CredentialVaultRepository,
+  CredentialPortalSummary,
+} from '../../credentials/credential-repository';
 
 function toLocalDatetimeInputValue(ts?: number | null): string {
   if (!ts || !Number.isFinite(ts)) return '';
@@ -104,6 +117,57 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   const [newStatus, setNewStatus] = useState<ApplicationStatus>('Interested');
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const [backupNotice, setBackupNotice] = useState('');
+  const [portalModalRecord, setPortalModalRecord] = useState<ApplicationTrackerRecord | null>(null);
+  const [vaultCredentials, setVaultCredentials] = useState<CredentialPortalSummary[]>([]);
+
+  const loadVaultCredentials = async () => {
+    try {
+      const list = await CredentialVaultRepository.listPortalSummaries();
+      setVaultCredentials(list);
+    } catch {
+      // safe fallback in unit or restricted context
+    }
+  };
+
+  useEffect(() => {
+    void loadVaultCredentials();
+  }, []);
+
+  const getPortalDomain = (url?: string | null): string => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+      return parsed.hostname.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  };
+
+  const getMatchingCredentialsForRecord = (
+    rec: ApplicationTrackerRecord
+  ): CredentialPortalSummary[] => {
+    if (rec.credentialId) {
+      const direct = vaultCredentials.find((c) => c.id === rec.credentialId);
+      if (direct) return [direct];
+    }
+    const targetUrl = rec.loginUrl || rec.applicationUrl;
+    if (!targetUrl) return [];
+    const domain = getPortalDomain(targetUrl);
+    if (!domain) return [];
+    return vaultCredentials.filter((c) => {
+      const credDomain = getPortalDomain(c.origin || c.portalUrl);
+      return credDomain && (credDomain === domain || credDomain.endsWith(`.${domain}`) || domain.endsWith(`.${credDomain}`));
+    });
+  };
+
+  const handleLoginToPortal = async (rec: ApplicationTrackerRecord) => {
+    await openApplicationPortalLoginTab(
+      rec,
+      (msg) => setBackupNotice(msg),
+      bn,
+      (missingApp) => setPortalModalRecord(missingApp)
+    );
+  };
 
   const organizations = useMemo(
     () => Array.from(new Set(records.map((r) => r.organization).filter(Boolean))).sort(),
@@ -596,6 +660,10 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
         <div className="space-y-3">
           {filtered.map((rec) => {
             const isEditing = editingId === rec.jobId && draft;
+            const portalDomain = getPortalDomain(rec.loginUrl || rec.applicationUrl);
+            const matchingCreds = getMatchingCredentialsForRecord(rec);
+            const hasCredential = Boolean(rec.credentialId || matchingCreds.length > 0);
+
             return (
               <div
                 key={rec.jobId}
@@ -617,6 +685,30 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Primary Action Button: পোর্টালে লগইন করুন */}
+                    {rec.loginUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => handleLoginToPortal(rec)}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        title={bn ? 'সংরক্ষিত পোর্টালে লগইন করুন' : 'Open portal login page and autofill'}
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>{bn ? 'পোর্টালে লগইন করুন' : 'Login to Portal'}</span>
+                        <ExternalLink className="w-3 h-3 opacity-80" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPortalModalRecord(rec)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/40 flex items-center gap-1.5 cursor-pointer"
+                        title={bn ? 'অফিশিয়াল পোর্টাল লগইন লিংক যোগ করুন' : 'Add official portal login link'}
+                      >
+                        <Link2 className="w-3.5 h-3.5 text-sky-600" />
+                        <span>{bn ? 'পোর্টাল লিংক যোগ করুন' : 'Add Portal Link'}</span>
+                      </button>
+                    )}
+
                     <select
                       value={rec.status}
                       onChange={(e) => onUpdateRecord({ ...rec, status: e.target.value as ApplicationStatus })}
@@ -627,15 +719,13 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                       ))}
                     </select>
 
-                    {onOpenJob && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenJob(rec.jobId)}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 cursor-pointer"
-                      >
-                        {bn ? 'বিস্তারিত' : 'Details'}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPortalModalRecord(rec)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 cursor-pointer flex items-center gap-1"
+                    >
+                      {bn ? 'বিস্তারিত' : 'Details'}
+                    </button>
 
                     <button
                       type="button"
@@ -654,6 +744,44 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Portal Domain & Credential Vault Row */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  {portalDomain ? (
+                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                      <Globe className="w-3.5 h-3.5 text-petro-600 dark:text-petro-400" />
+                      <span className="text-[11px] font-medium text-slate-500">{bn ? 'পোর্টাল:' : 'Portal:'}</span>
+                      <strong className="font-mono text-slate-800 dark:text-slate-200">{portalDomain}</strong>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPortalModalRecord(rec)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-sky-600 cursor-pointer"
+                    >
+                      <Globe className="w-3 h-3" />
+                      <span>{bn ? 'পোর্টাল ডোমেন নেই (যোগ করুন)' : 'No portal domain (click to add)'}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setPortalModalRecord(rec)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border cursor-pointer text-xs transition-colors ${
+                      hasCredential
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
+                    title={bn ? 'ক্রেডেনশিয়াল ভল্ট সংযোগ পরিচালনা করুন' : 'Manage linked vault credential'}
+                  >
+                    <Lock className={`w-3.5 h-3.5 ${hasCredential ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <span className="font-semibold">
+                      {hasCredential
+                        ? (bn ? 'Credential Vault · এনক্রিপ্টেড' : 'Credential Vault · Encrypted')
+                        : (bn ? 'লগইন তথ্য যোগ করুন' : 'Link Login Credential')}
+                    </span>
+                  </button>
                 </div>
 
                 {Boolean(rec.needsReview || rec.status === 'Needs Manual Confirmation') && (
@@ -1144,6 +1272,562 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
           </form>
         </div>
       )}
+
+      {/* Application Portal & Credential Vault Management Modal */}
+      {portalModalRecord && (
+        <ApplicationPortalModal
+          record={portalModalRecord}
+          language={language}
+          vaultCredentials={vaultCredentials}
+          onClose={() => setPortalModalRecord(null)}
+          onSave={async (updated) => {
+            await onUpdateRecord(updated);
+            setBackupNotice(
+              bn
+                ? `✅ "${updated.organization}"-এর পোর্টাল ও লগইন তথ্য সংরক্ষিত হয়েছে।`
+                : `✅ Portal and login settings saved for "${updated.organization}".`
+            );
+          }}
+          onRefreshCredentials={loadVaultCredentials}
+        />
+      )}
+    </div>
+  );
+};
+
+interface ApplicationPortalModalProps {
+  record: ApplicationTrackerRecord;
+  language: 'bn' | 'en';
+  onClose: () => void;
+  onSave: (updated: ApplicationTrackerRecord) => Promise<void>;
+  vaultCredentials: CredentialPortalSummary[];
+  onRefreshCredentials?: () => Promise<void>;
+}
+
+export const ApplicationPortalModal: React.FC<ApplicationPortalModalProps> = ({
+  record,
+  language,
+  onClose,
+  onSave,
+  vaultCredentials,
+  onRefreshCredentials,
+}) => {
+  const bn = language === 'bn';
+  const [loginUrl, setLoginUrl] = useState(record.loginUrl || '');
+  const [applicationUrl, setApplicationUrl] = useState(record.applicationUrl || '');
+  const [circularUrl, setCircularUrl] = useState(record.circularUrl || '');
+  const [organizationUrl, setOrganizationUrl] = useState(record.organizationUrl || '');
+  const [selectedCredId, setSelectedCredId] = useState(record.credentialId || '');
+  const [isAddingNewCred, setIsAddingNewCred] = useState(false);
+  const [newUserId, setNewUserId] = useState(record.teletalkUserId || record.applicantId || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [newAccountType, setNewAccountType] = useState('Job-Specific Account');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Derive domain from loginUrl or applicationUrl
+  const portalDomain = useMemo(() => {
+    const raw = loginUrl || applicationUrl;
+    if (!raw) return '';
+    try {
+      const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+      return u.hostname.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  }, [loginUrl, applicationUrl]);
+
+  // Matching credentials for this portal
+  const matchingCreds = useMemo(() => {
+    if (!portalDomain) return vaultCredentials;
+    return vaultCredentials.filter((c) => {
+      try {
+        const u = new URL(c.origin || c.portalUrl);
+        const d = u.hostname.replace(/^www\./, '');
+        return d === portalDomain || d.endsWith(`.${portalDomain}`) || portalDomain.endsWith(`.${d}`);
+      } catch {
+        return false;
+      }
+    });
+  }, [portalDomain, vaultCredentials]);
+
+  const linkedCredentialSummary = useMemo(() => {
+    if (!selectedCredId) return null;
+    return vaultCredentials.find((c) => c.id === selectedCredId) || null;
+  }, [selectedCredId, vaultCredentials]);
+
+  const handleTestOpen = (url: string) => {
+    if (!url.trim()) return;
+    const check = ApplicationRepository.sanitizeAndValidateUrl(url);
+    if (!check.isValid) {
+      setErrorMessage(check.reason || 'Invalid URL');
+      return;
+    }
+    if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+      chrome.tabs.create({ url: check.normalizedUrl });
+    } else {
+      window.open(check.normalizedUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleUndoLoginUrl = () => {
+    if (record.previousLoginUrl !== undefined) {
+      setLoginUrl(record.previousLoginUrl || '');
+      setErrorMessage('');
+      setSuccessMessage(bn ? 'পূর্বাবস্থায় ফেরত আনা হয়েছে।' : 'Reverted to previous URL.');
+    }
+  };
+
+  const handleCreateAndLinkCredential = async () => {
+    setErrorMessage('');
+    if (!newUserId.trim() || !newPassword) {
+      setErrorMessage(bn ? 'ইউজার আইডি এবং পাসওয়ার্ড উভয়ই প্রদান করুন।' : 'Provide both User ID and password.');
+      return;
+    }
+    const targetUrl = loginUrl.trim() || applicationUrl.trim();
+    if (!targetUrl) {
+      setErrorMessage(bn ? 'প্রথমে একটি পোর্টাল লগইন লিংক প্রদান করুন।' : 'Enter a portal login URL first.');
+      return;
+    }
+    const check = ApplicationRepository.sanitizeAndValidateUrl(targetUrl);
+    if (!check.isValid || check.isPdfCircular) {
+      setErrorMessage(check.reason || 'Invalid portal URL');
+      return;
+    }
+
+    try {
+      const newCred = await CredentialVaultRepository.saveCredential({
+        portalName: record.organization,
+        portalUrl: check.normalizedUrl,
+        organization: record.organization,
+        jobTitle: record.jobTitle,
+        username: newUserId.trim(),
+        userId: newUserId.trim(),
+        applicantId: newUserId.trim(),
+        password: newPassword,
+        accountType: newAccountType as any,
+        linkedApplicationIds: [record.jobId],
+        notes: `Created from tracker for ${record.jobTitle}`,
+      });
+      setSelectedCredId(newCred.id);
+      setIsAddingNewCred(false);
+      setNewPassword('');
+      if (onRefreshCredentials) {
+        await onRefreshCredentials();
+      }
+      setSuccessMessage(bn ? '✅ ক্রেডেনশিয়াল ভল্টে সংরক্ষিত ও সংযুক্ত করা হয়েছে।' : '✅ Credential saved into vault and linked.');
+    } catch (err: any) {
+      setErrorMessage(`Vault error: ${err?.message || 'Failed'}`);
+    }
+  };
+
+  const handleSaveModal = async () => {
+    setErrorMessage('');
+    setIsSaving(true);
+    try {
+      let cleanLogin: string | null = null;
+      let loginVerified = record.loginUrlVerified || false;
+      let provenance = record.loginUrlProvenance || 'manual';
+
+      if (loginUrl.trim()) {
+        const check = ApplicationRepository.sanitizeAndValidateUrl(loginUrl.trim());
+        if (check.isPdfCircular) {
+          setErrorMessage(
+            bn
+              ? '⚠️ সার্কুলার পিডিএফ ফাইল কখনো লগইন পেজ হতে পারে না। অনুগ্রহ করে প্রকৃত প্রার্থীর লগইন লিংক প্রদান করুন।'
+              : '⚠️ Circular PDF cannot be used as a Login URL. Please enter the actual candidate login portal.'
+          );
+          setIsSaving(false);
+          return;
+        }
+        if (!check.isValid) {
+          setErrorMessage(check.reason || (bn ? 'অবৈধ পোর্টাল লগইন লিংক' : 'Invalid portal URL'));
+          setIsSaving(false);
+          return;
+        }
+        cleanLogin = check.normalizedUrl;
+        loginVerified = check.isHttps;
+        provenance = 'manual';
+      }
+
+      const updatedRecord: ApplicationTrackerRecord = {
+        ...record,
+        loginUrl: cleanLogin,
+        previousLoginUrl: cleanLogin !== record.loginUrl ? (record.loginUrl ?? null) : (record.previousLoginUrl ?? null),
+        loginUrlVerified: loginVerified,
+        loginUrlProvenance: provenance,
+        applicationUrl: applicationUrl.trim() || null,
+        circularUrl: circularUrl.trim() || undefined,
+        organizationUrl: organizationUrl.trim() || null,
+        credentialId: selectedCredId || null,
+        credentialLinkedAt: selectedCredId ? (record.credentialLinkedAt || Date.now()) : undefined,
+        updatedAt: Date.now(),
+      };
+
+      await ApplicationRepository.upsert(updatedRecord);
+      await onSave(updatedRecord);
+      onClose();
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl shadow-2xl overflow-hidden text-xs flex flex-col max-h-[90vh]">
+        {/* Modal Header */}
+        <div className="px-5 py-3.5 bg-petro-700 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-emerald-300" />
+            <div>
+              <h3 className="font-bold text-sm">
+                {bn ? 'পোর্টাল লিংক ও ক্রেডেনশিয়াল ব্যবস্থাপনা' : 'Portal Links & Credential Management'}
+              </h3>
+              <p className="text-[11px] text-petro-200">
+                {record.organization} — {record.jobTitle}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg hover:bg-white/10 text-white cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* Section 1: Distinct URL Architecture */}
+          <div className="space-y-3">
+            <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-1.5">
+              <Globe className="w-3.5 h-3.5 text-petro-600" />
+              <span>{bn ? '১. আলাদা ইউআরএল রেফারেন্স (Distinct URLs)' : '1. Distinct Job Portal URLs'}</span>
+            </h4>
+
+            {/* Login URL */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-700 dark:text-slate-300">
+                  {bn ? 'পোর্টালে লগইন লিংক (Login URL) *' : 'Portal Login URL *'}
+                </label>
+                <div className="flex items-center gap-2">
+                  {record.previousLoginUrl !== undefined && record.previousLoginUrl !== null && (
+                    <button
+                      type="button"
+                      onClick={handleUndoLoginUrl}
+                      className="text-[11px] font-bold text-petro-600 dark:text-petro-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      title={bn ? 'পূর্বে সংরক্ষিত লিংকে ফিরে যান' : 'Revert to previous login URL'}
+                    >
+                      <Undo2 className="w-3 h-3" />
+                      <span>{bn ? 'পূর্বাবস্থায় ফেরত' : 'Undo Edit'}</span>
+                    </button>
+                  )}
+                  {loginUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleTestOpen(loginUrl)}
+                      className="text-[11px] font-bold text-petro-600 dark:text-petro-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{bn ? 'খুলুন' : 'Open'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <input
+                type="url"
+                value={loginUrl}
+                onChange={(e) => {
+                  setLoginUrl(e.target.value);
+                  setErrorMessage('');
+                }}
+                placeholder="https://bpsc.teletalk.com.bd/login or portal login URL..."
+                className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono text-slate-800 dark:text-white"
+              />
+              <p className="text-[10.5px] text-slate-400">
+                {bn
+                  ? 'নিরাপত্তা নিশ্চিতকরণ: কখনো সার্কুলার পিডিএফ ফাইল বা অস্থায়ী সেশন লিংক এখানে রাখবেন না।'
+                  : 'Notice: Never use PDF circular notices as login URLs. Only enter the candidate login page.'}
+              </p>
+            </div>
+
+            {/* Application URL */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  {bn ? 'সরাসরি আবেদন পেজ (Application URL)' : 'Direct Application URL'}
+                </label>
+                {applicationUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleTestOpen(applicationUrl)}
+                    className="text-[11px] font-bold text-petro-600 dark:text-petro-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{bn ? 'খুলুন' : 'Open'}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <input
+                type="url"
+                value={applicationUrl}
+                onChange={(e) => setApplicationUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono text-slate-800 dark:text-white"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Circular URL */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    {bn ? 'সার্কুলার নোটিশ / PDF (Circular URL)' : 'Circular Notice / PDF'}
+                  </label>
+                  {circularUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleTestOpen(circularUrl)}
+                      className="text-[11px] font-bold text-petro-600 dark:text-petro-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{bn ? 'খুলুন' : 'Open'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={circularUrl}
+                  onChange={(e) => setCircularUrl(e.target.value)}
+                  placeholder="https://...circular.pdf"
+                  className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono text-slate-800 dark:text-white"
+                />
+              </div>
+
+              {/* Organization URL */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    {bn ? 'প্রতিষ্ঠানের ওয়েবসাইট (Organization URL)' : 'Organization Website URL'}
+                  </label>
+                  {organizationUrl && (
+                    <button
+                      type="button"
+                      onClick={() => handleTestOpen(organizationUrl)}
+                      className="text-[11px] font-bold text-petro-600 dark:text-petro-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{bn ? 'খুলুন' : 'Open'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={organizationUrl}
+                  onChange={(e) => setOrganizationUrl(e.target.value)}
+                  placeholder="https://bpsc.gov.bd"
+                  className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono text-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Credential Vault Linking */}
+          <div className="space-y-3 pt-2">
+            <h4 className="font-bold text-slate-800 dark:text-white flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{bn ? '২. ক্রেডেনশিয়াল ভল্ট সংযোগ (Credential Vault)' : '2. Credential Vault Link'}</span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-normal">
+                {bn ? 'AES-256-GCM এনক্রিপ্টেড' : 'AES-256-GCM Encrypted'}
+              </span>
+            </h4>
+
+            {/* Currently Linked Account */}
+            {selectedCredId && linkedCredentialSummary ? (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-emerald-900 dark:text-emerald-200">
+                      {bn ? 'সংযুক্ত অ্যাকাউন্ট:' : 'Linked Account:'}
+                    </span>
+                    <span className="font-mono font-semibold text-emerald-800 dark:text-emerald-300">
+                      {linkedCredentialSummary.portalName}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400 mt-0.5">
+                    {linkedCredentialSummary.accountType || 'General Account'} • Origin: {linkedCredentialSummary.origin}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCredId('')}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800 cursor-pointer"
+                >
+                  {bn ? 'সংযোগ বিচ্ছিন্ন করুন' : 'Unlink'}
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                <p className="text-xs">
+                  {bn
+                    ? 'এই চাকরির জন্য নির্দিষ্ট কোনো ক্রেডেনশিয়াল যুক্ত নেই। নিচের তালিকা থেকে নির্বাচন করুন অথবা নতুন যোগ করুন।'
+                    : 'No specific login credential is linked to this job yet. Select an existing account or create a new one.'}
+                </p>
+              </div>
+            )}
+
+            {/* Select existing matching credential */}
+            {matchingCreds.length > 0 && (
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  {bn ? 'ভল্ট থেকে অ্যাকাউন্ট নির্বাচন করুন:' : 'Select account from Credential Vault:'}
+                </label>
+                <select
+                  value={selectedCredId}
+                  onChange={(e) => setSelectedCredId(e.target.value)}
+                  className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
+                >
+                  <option value="">{bn ? '-- কোনো অ্যাকাউন্ট সংযুক্ত নয় --' : '-- No Account Linked --'}</option>
+                  {matchingCreds.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.portalName} — {c.organization || c.jobTitle || c.origin} ({c.accountType || 'Account'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Toggle Add New Credential */}
+            {!isAddingNewCred ? (
+              <button
+                type="button"
+                onClick={() => setIsAddingNewCred(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-petro-300 dark:border-petro-700 text-petro-700 dark:text-petro-300 hover:bg-petro-50 dark:hover:bg-petro-950/40 font-bold cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{bn ? 'নতুন ক্রেডেনশিয়াল ভল্টে যোগ করুন' : 'Add New Account to Vault'}</span>
+              </button>
+            ) : (
+              <div className="p-3.5 rounded-xl border border-petro-200 dark:border-petro-800 bg-petro-50/50 dark:bg-petro-950/20 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-petro-900 dark:text-petro-200">
+                    {bn ? 'নতুন ভল্ট অ্যাকাউন্ট তৈরি করুন' : 'Create New Vault Account'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewCred(false)}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block font-semibold mb-1">
+                      {bn ? 'ইউজার আইডি / Applicant ID *' : 'User ID / Applicant ID *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={newUserId}
+                      onChange={(e) => setNewUserId(e.target.value)}
+                      placeholder="e.g. NIZJARPKQP"
+                      className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold mb-1">
+                      {bn ? 'পাসওয়ার্ড *' : 'Password *'}
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter portal password..."
+                      className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">
+                    {bn ? 'অ্যাকাউন্টের ধরন' : 'Account Type'}
+                  </label>
+                  <select
+                    value={newAccountType}
+                    onChange={(e) => setNewAccountType(e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800"
+                  >
+                    <option value="Job-Specific Account">Job-Specific Account (নির্দিষ্ট চাকরির অ্যাকাউন্ট)</option>
+                    <option value="Organization Account">Organization Account (প্রতিষ্ঠানের সাধারণ অ্যাকাউন্ট)</option>
+                    <option value="General Portal Account">General Portal Account (সাধারণ পোর্টাল)</option>
+                  </select>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewCred(false)}
+                    className="px-3 py-1 rounded-lg border border-slate-300 font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateAndLinkCredential}
+                    className="px-3.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                  >
+                    {bn ? 'ভল্টে সংরক্ষণ ও সংযুক্ত' : 'Save & Link to Vault'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-5 py-3 bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+          <span className="text-[11px] text-slate-400">
+            {bn ? '🔒 পাসওয়ার্ড সবসময় এনক্রিপ্ট থাকবে, কখনোই কার্ড বা ইউআরএলে দেখা যাবে না।' : '🔒 Passwords remain encrypted and are never exposed.'}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 font-semibold cursor-pointer text-slate-700 dark:text-slate-300"
+            >
+              {bn ? 'বন্ধ' : 'Close'}
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={handleSaveModal}
+              className="px-4 py-1.5 rounded-lg bg-petro-600 hover:bg-petro-700 text-white font-bold cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (bn ? 'সংরক্ষণ হচ্ছে...' : 'Saving...') : (bn ? 'পরিবর্তন সংরক্ষণ' : 'Save Changes')}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
