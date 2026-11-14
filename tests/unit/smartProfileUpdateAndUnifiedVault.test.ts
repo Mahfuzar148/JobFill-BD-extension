@@ -343,5 +343,68 @@ describe('JobFill BD - Smart Profile Update Engine & Unified Credential Manager 
       expect(undoRes.reverted).toBe(true);
       expect(undoRes.updatedProfile.personal.mobile).toBe(profile.personal.mobile);
     });
+
+    it('9. Detects and routes new Education (Masters) and Job Experience records to their dedicated destinations', async () => {
+      // Profile initially has no masters and empty job experiences
+      delete (profile as any).masters;
+      profile.hasMasters = false;
+      profile.jobExperiences = [];
+      profile.hasJobExperience = false;
+
+      const scannedInputs = [
+        { canonicalKey: 'education.masters.examination', value: 'M.Sc in Computer Science', label: 'Masters Degree' },
+        { canonicalKey: 'education.masters.passingYear', value: '2023', label: 'Masters Passing Year' },
+        { canonicalKey: 'experience.organization', value: 'Bangladesh Computer Council', label: 'Organization' },
+        { canonicalKey: 'experience.designation', value: 'Assistant Programmer', label: 'Designation' },
+      ];
+
+      const diffs = ProfileDiffEngine.detectFormDiffs(scannedInputs, profile);
+      expect(diffs).toHaveLength(4);
+
+      const mastersExam = diffs.find((d) => d.canonicalKey === 'education.masters.examination');
+      expect(mastersExam).toBeDefined();
+      expect(mastersExam!.destination).toBe('education');
+      expect(mastersExam!.diffType).toBe('NEW');
+
+      const expOrg = diffs.find((d) => d.canonicalKey === 'experience.organization');
+      expect(expOrg).toBeDefined();
+      expect(expOrg!.destination).toBe('experience');
+      expect(expOrg!.diffType).toBe('NEW');
+
+      // Apply approved diffs
+      const result = await ProfileDiffEngine.applyApprovedDiffs(profile, diffs, 'https://alljobs.teletalk.com.bd');
+      expect(result.appliedCount).toBe(4);
+      expect(result.updatedProfile.masters.examination).toBe('M.Sc in Computer Science');
+      expect(result.updatedProfile.masters.passingYear).toBe('2023');
+      expect(result.updatedProfile.hasMasters).toBe(true);
+      expect(result.updatedProfile.jobExperiences).toHaveLength(1);
+      expect(result.updatedProfile.jobExperiences[0].organization).toBe('Bangladesh Computer Council');
+      expect(result.updatedProfile.jobExperiences[0].designation).toBe('Assistant Programmer');
+      expect(result.updatedProfile.hasJobExperience).toBe(true);
+    });
+
+    it('10. Enforces strict exact HTTPS origin matching and blocks lookalike or HTTP origin queries', async () => {
+      await CredentialVaultRepository.initializeVault('Master#Vault2026', 15);
+
+      await CredentialVaultRepository.saveCredential({
+        portalName: 'Official Govt Portal',
+        portalUrl: 'https://official.gov.bd/login',
+        username: 'gov_user_1',
+        password: 'Secure#Password123',
+      });
+
+      // Query from insecure HTTP URL
+      const httpMatches = await CredentialVaultRepository.findMatchingForPageUrl('http://official.gov.bd/login');
+      expect(httpMatches).toHaveLength(0);
+
+      // Query from lookalike phishing URL
+      const lookalikeMatches = await CredentialVaultRepository.findMatchingForPageUrl('https://official.gov.bd.attacker.com/login');
+      expect(lookalikeMatches).toHaveLength(0);
+
+      // Query from exact HTTPS origin succeeds
+      const exactMatches = await CredentialVaultRepository.findMatchingForPageUrl('https://official.gov.bd/application-form');
+      expect(exactMatches).toHaveLength(1);
+      expect(exactMatches[0].username).toBe('gov_user_1');
+    });
   });
 });

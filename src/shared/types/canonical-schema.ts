@@ -333,29 +333,37 @@ export function resolveCanonicalValue(profile: MasterCanonicalProfile, canonical
     // Primary Job Experience
     case 'employment.experiences[0].employedOn':
     case 'experience.0.employedOn':
+    case 'experience.employedOn':
       return profile.experiences[0]?.employedOn || '';
     case 'employment.experiences[0].organization':
     case 'experience.0.organization':
+    case 'experience.organization':
       return profile.experiences[0]?.organization || '';
     case 'employment.experiences[0].designation':
     case 'experience.0.designation':
+    case 'experience.designation':
       return profile.experiences[0]?.designation || '';
     case 'employment.experiences[0].address':
     case 'experience.0.address':
+    case 'experience.address':
       return profile.experiences[0]?.address || '';
     case 'employment.experiences[0].startDate':
     case 'experience.0.startDate':
+    case 'experience.startDate':
       return profile.experiences[0]?.startDate || '';
     case 'employment.experiences[0].endDate':
     case 'experience.0.endDate':
+    case 'experience.endDate':
       return profile.experiences[0]?.endDate || '';
     case 'employment.experiences[0].jobDescription':
     case 'experience.0.jobDescription':
+    case 'experience.jobDescription':
     case 'experience.0.responsibilities':
       return profile.experiences[0]?.jobDescription || '';
     case 'employment.experiences[0].currentlyWorking':
     case 'employment.currentlyWorking':
     case 'experience.0.currentlyWorking':
+    case 'experience.currentlyWorking':
       return profile.experiences[0]?.currentlyWorking ? 'true' : 'false';
 
     // Circular / Preferences

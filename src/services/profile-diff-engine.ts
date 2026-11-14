@@ -422,6 +422,87 @@ export const FIELD_METADATA_MAP: Record<
     categoryEn: 'Education Records',
     categoryBn: 'শিক্ষাগত যোগ্যতা',
   },
+
+  // Education Masters
+  'education.masters.degree': {
+    destination: 'education',
+    labelEn: 'Masters Degree',
+    labelBn: 'মাস্টার্স ডিগ্রির নাম',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.examination': {
+    destination: 'education',
+    labelEn: 'Masters Examination',
+    labelBn: 'মাস্টার্স পরীক্ষার নাম',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.subject': {
+    destination: 'education',
+    labelEn: 'Masters Subject',
+    labelBn: 'মাস্টার্স বিষয়',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.institution': {
+    destination: 'education',
+    labelEn: 'Masters University / Institute',
+    labelBn: 'মাস্টার্স বিশ্ববিদ্যালয়/ইনস্টিটিউট',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.gpa': {
+    destination: 'education',
+    labelEn: 'Masters CGPA / Class',
+    labelBn: 'মাস্টার্স সিজিপিএ / ফলাফল',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.cgpa': {
+    destination: 'education',
+    labelEn: 'Masters CGPA / Class',
+    labelBn: 'মাস্টার্স সিজিপিএ / ফলাফল',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+  'education.masters.passingYear': {
+    destination: 'education',
+    labelEn: 'Masters Passing Year',
+    labelBn: 'মাস্টার্স পাসের সন',
+    categoryEn: 'Education Records',
+    categoryBn: 'শিক্ষাগত যোগ্যতা',
+  },
+
+  // Job Experience
+  'experience.organization': {
+    destination: 'experience',
+    labelEn: 'Organization / Company Name',
+    labelBn: 'প্রতিষ্ঠানের নাম',
+    categoryEn: 'Experience Records',
+    categoryBn: 'চাকরির অভিজ্ঞতা',
+  },
+  'experience.designation': {
+    destination: 'experience',
+    labelEn: 'Designation / Post Name',
+    labelBn: 'পদের নাম',
+    categoryEn: 'Experience Records',
+    categoryBn: 'চাকরির অভিজ্ঞতা',
+  },
+  'experience.startDate': {
+    destination: 'experience',
+    labelEn: 'Experience Start Date',
+    labelBn: 'শুরুর তারিখ',
+    categoryEn: 'Experience Records',
+    categoryBn: 'চাকরির অভিজ্ঞতা',
+  },
+  'experience.endDate': {
+    destination: 'experience',
+    labelEn: 'Experience End Date',
+    labelBn: 'সমাপ্তির তারিখ',
+    categoryEn: 'Experience Records',
+    categoryBn: 'চাকরির অভিজ্ঞতা',
+  },
 };
 
 export class ProfileDiffEngine {

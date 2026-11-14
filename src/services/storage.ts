@@ -928,6 +928,29 @@ export async function saveGeneralSettings(settings: Partial<AppGeneralSettings>)
   await storageAdapter.set({ [STORAGE_KEY_GENERAL_SETTINGS]: updated });
 }
 
+function ensureMasters(t: UserProfile): void {
+  if (!t.masters) {
+    t.masters = {
+      examination: 'M.Sc',
+      subjectDegree: '',
+      universityInstitute: '',
+      college: '',
+      studentId: '',
+      registrationNumber: '',
+      rollNumber: '',
+      session: '',
+      resultType: 'CGPA (out of 4)',
+      gpa: '',
+      gpaScale: '4.00',
+      passingYear: '',
+      courseDuration: '1.5 Years',
+      appearedStatus: false,
+      examStartDate: '',
+      examEndDate: '',
+    };
+  }
+}
+
 const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string) => void> = {
   'applicant.fullName.english': (t, v) => { t.personal.applicantNameEn = v; },
   'applicant.fullName.bangla': (t, v) => { t.personal.applicantNameBn = v; },
@@ -987,6 +1010,62 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.graduation.gpa': (t, v) => { t.graduation.gpa = v; },
   'education.graduation.cgpa': (t, v) => { t.graduation.gpa = v; },
   'education.graduation.passingYear': (t, v) => { t.graduation.passingYear = v; },
+  'education.masters.degree': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
+  'education.masters.examination': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
+  'education.masters.subject': (t, v) => { ensureMasters(t); t.masters.subjectDegree = v; t.hasMasters = true; },
+  'education.masters.institution': (t, v) => { ensureMasters(t); t.masters.universityInstitute = v; t.hasMasters = true; },
+  'education.masters.result': (t, v) => { ensureMasters(t); t.masters.resultType = v as any; t.hasMasters = true; },
+  'education.masters.gpa': (t, v) => { ensureMasters(t); t.masters.gpa = v; t.hasMasters = true; },
+  'education.masters.cgpa': (t, v) => { ensureMasters(t); t.masters.gpa = v; t.hasMasters = true; },
+  'education.masters.passingYear': (t, v) => { ensureMasters(t); t.masters.passingYear = v; t.hasMasters = true; },
+  'experience.organization': (t, v) => {
+    t.hasJobExperience = true;
+    if (!t.jobExperiences || t.jobExperiences.length === 0) {
+      t.jobExperiences = [{
+        id: `exp_${Date.now()}`,
+        employedOn: 'Government',
+        organization: v,
+        designation: '',
+        address: '',
+        startDate: '',
+        endDate: '',
+        currentlyWorking: false,
+        salary: '',
+        jobDescription: '',
+      }];
+    } else {
+      t.jobExperiences[0].organization = v;
+    }
+  },
+  'experience.designation': (t, v) => {
+    t.hasJobExperience = true;
+    if (!t.jobExperiences || t.jobExperiences.length === 0) {
+      t.jobExperiences = [{
+        id: `exp_${Date.now()}`,
+        employedOn: 'Government',
+        organization: '',
+        designation: v,
+        address: '',
+        startDate: '',
+        endDate: '',
+        currentlyWorking: false,
+        salary: '',
+        jobDescription: '',
+      }];
+    } else {
+      t.jobExperiences[0].designation = v;
+    }
+  },
+  'experience.startDate': (t, v) => {
+    if (t.jobExperiences && t.jobExperiences.length > 0) {
+      t.jobExperiences[0].startDate = v;
+    }
+  },
+  'experience.endDate': (t, v) => {
+    if (t.jobExperiences && t.jobExperiences.length > 0) {
+      t.jobExperiences[0].endDate = v;
+    }
+  },
   'circular.orgChoice1': (t, v) => { t.special.orgChoice1 = v; },
   'circular.orgChoice2': (t, v) => { t.special.orgChoice2 = v; },
 };
