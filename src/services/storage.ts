@@ -1,4 +1,4 @@
-import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings, CustomProfileField } from '../types/profile';
+import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings, CustomProfileField, JobExperience } from '../types/profile';
 import { createEmptyProfile, sampleDemoProfile } from '../types/defaults';
 import {
   EncryptedPayload,
@@ -900,6 +900,52 @@ function ensureMasters(t: UserProfile): void {
   }
 }
 
+function ensureGraduation(t: UserProfile): void {
+  t.hasGraduation = true;
+  if (!t.graduation) {
+    t.graduation = {
+      examination: 'B.Sc Engineering',
+      subjectDegree: '',
+      universityInstitute: '',
+      college: '',
+      studentId: '',
+      registrationNumber: '',
+      rollNumber: '',
+      session: '',
+      resultType: 'CGPA (out of 4)',
+      gpa: '',
+      gpaScale: '4.00',
+      passingYear: '',
+      courseDuration: '4 Years',
+      appearedStatus: false,
+      examStartDate: '',
+      examEndDate: '',
+    };
+  }
+}
+
+function ensureExperienceRecord(t: UserProfile, index: number = 0): JobExperience {
+  t.hasJobExperience = true;
+  if (!t.jobExperiences) {
+    t.jobExperiences = [];
+  }
+  while (t.jobExperiences.length <= index) {
+    t.jobExperiences.push({
+      id: `exp_${Date.now()}_${t.jobExperiences.length}`,
+      employedOn: 'Government',
+      organization: '',
+      designation: '',
+      address: '',
+      startDate: '',
+      endDate: '',
+      currentlyWorking: false,
+      salary: '',
+      jobDescription: '',
+    });
+  }
+  return t.jobExperiences[index];
+}
+
 const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string) => void> = {
   'applicant.fullName.english': (t, v) => { t.personal.applicantNameEn = v; },
   'applicant.fullName.bangla': (t, v) => { t.personal.applicantNameBn = v; },
@@ -955,14 +1001,14 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.hsc.result': (t, v) => { t.hsc.resultType = v as any; },
   'education.hsc.gpa': (t, v) => { t.hsc.gpa = v; },
   'education.hsc.passingYear': (t, v) => { t.hsc.passingYear = v; },
-  'education.graduation.degree': (t, v) => { t.graduation.examination = v; },
-  'education.graduation.examination': (t, v) => { t.graduation.examination = v; },
-  'education.graduation.subject': (t, v) => { t.graduation.subjectDegree = v; },
-  'education.graduation.institution': (t, v) => { t.graduation.universityInstitute = v; },
-  'education.graduation.result': (t, v) => { t.graduation.resultType = v as any; },
-  'education.graduation.gpa': (t, v) => { t.graduation.gpa = v; },
-  'education.graduation.cgpa': (t, v) => { t.graduation.gpa = v; },
-  'education.graduation.passingYear': (t, v) => { t.graduation.passingYear = v; },
+  'education.graduation.degree': (t, v) => { ensureGraduation(t); t.graduation.examination = v; },
+  'education.graduation.examination': (t, v) => { ensureGraduation(t); t.graduation.examination = v; },
+  'education.graduation.subject': (t, v) => { ensureGraduation(t); t.graduation.subjectDegree = v; },
+  'education.graduation.institution': (t, v) => { ensureGraduation(t); t.graduation.universityInstitute = v; },
+  'education.graduation.result': (t, v) => { ensureGraduation(t); t.graduation.resultType = v as any; },
+  'education.graduation.gpa': (t, v) => { ensureGraduation(t); t.graduation.gpa = v; },
+  'education.graduation.cgpa': (t, v) => { ensureGraduation(t); t.graduation.gpa = v; },
+  'education.graduation.passingYear': (t, v) => { ensureGraduation(t); t.graduation.passingYear = v; },
   'education.masters.degree': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
   'education.masters.examination': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
   'education.masters.subject': (t, v) => { ensureMasters(t); t.masters.subjectDegree = v; t.hasMasters = true; },
@@ -974,18 +1020,15 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'experience.organization': (t, v) => {
     t.hasJobExperience = true;
     if (!t.jobExperiences || t.jobExperiences.length === 0) {
-      t.jobExperiences = [{
-        id: `exp_${Date.now()}`,
-        employedOn: 'Government',
-        organization: v,
-        designation: '',
-        address: '',
-        startDate: '',
-        endDate: '',
-        currentlyWorking: false,
-        salary: '',
-        jobDescription: '',
-      }];
+      ensureExperienceRecord(t, 0).organization = v;
+      return;
+    }
+    const existing = t.jobExperiences.find((e) => e.organization.toLowerCase() === v.toLowerCase());
+    if (existing) {
+      existing.organization = v;
+    } else if (t.jobExperiences[0].organization && t.jobExperiences[0].organization.trim() !== '') {
+      const newExp = ensureExperienceRecord(t, t.jobExperiences.length);
+      newExp.organization = v;
     } else {
       t.jobExperiences[0].organization = v;
     }
@@ -993,30 +1036,19 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'experience.designation': (t, v) => {
     t.hasJobExperience = true;
     if (!t.jobExperiences || t.jobExperiences.length === 0) {
-      t.jobExperiences = [{
-        id: `exp_${Date.now()}`,
-        employedOn: 'Government',
-        organization: '',
-        designation: v,
-        address: '',
-        startDate: '',
-        endDate: '',
-        currentlyWorking: false,
-        salary: '',
-        jobDescription: '',
-      }];
+      ensureExperienceRecord(t, 0).designation = v;
     } else {
-      t.jobExperiences[0].designation = v;
+      t.jobExperiences[t.jobExperiences.length - 1].designation = v;
     }
   },
   'experience.startDate': (t, v) => {
     if (t.jobExperiences && t.jobExperiences.length > 0) {
-      t.jobExperiences[0].startDate = v;
+      t.jobExperiences[t.jobExperiences.length - 1].startDate = v;
     }
   },
   'experience.endDate': (t, v) => {
     if (t.jobExperiences && t.jobExperiences.length > 0) {
-      t.jobExperiences[0].endDate = v;
+      t.jobExperiences[t.jobExperiences.length - 1].endDate = v;
     }
   },
   'circular.orgChoice1': (t, v) => { t.special.orgChoice1 = v; },
@@ -1041,6 +1073,20 @@ export function applyCanonicalProfileFieldUpdate(
   const updater = CANONICAL_FIELD_UPDATER[canonicalKey];
   if (updater) {
     updater(target, newValue);
+    return true;
+  }
+
+  // Support indexed experience keys like experience.0.organization, experience.1.designation, etc.
+  const expMatch = canonicalKey.match(/^experience\.(\d+)\.(organization|designation|startDate|endDate|address|employedOn|currentlyWorking)$/);
+  if (expMatch) {
+    const idx = parseInt(expMatch[1], 10);
+    const field = expMatch[2];
+    const rec = ensureExperienceRecord(target, idx);
+    if (field === 'currentlyWorking') {
+      rec.currentlyWorking = newValue === 'true' || newValue === '1' || newValue.toLowerCase() === 'yes';
+    } else {
+      (rec as any)[field] = newValue;
+    }
     return true;
   }
 

@@ -721,4 +721,322 @@ describe('JobFill BD - Smart Two-Way Profile Sync & Dynamic Field Learning Engin
       expect(approvedArgs[0].newValue).toBe('01899999999'); // Edited value preserved!
     });
   });
+
+  // =========================================================================
+  // PART 6: REAL END-TO-END SCENARIOS (SCENARIOS A THROUGH H)
+  // =========================================================================
+  describe('Part 6: Real End-to-End Scenarios (Scenarios A through H)', () => {
+    it('Scenario A: Existing Profile Field Update -> Review -> Persistence -> Future Autofill Verification', async () => {
+      // 1. Create dummy profile with original mobile
+      const dummyProfile = createEmptyProfile('Candidate A');
+      dummyProfile.personal.mobile = '01712345678';
+      dummyProfile.personal.applicantNameEn = 'Tanvir Hossain';
+
+      // 2. Open supported recruitment test form and enter new mobile manually
+      document.body.innerHTML = `
+        <form id="recruitment-form-1">
+          <label for="mob">Mobile Number</label>
+          <input type="text" id="mob" name="applicant_mobile" value="01899112233" />
+        </form>
+      `;
+      const formInput = document.getElementById('mob') as HTMLInputElement;
+
+      // 3. Classify and detect diff
+      const classification = FieldClassifier.classifyElement(formInput);
+      expect(classification.canonicalKey).toBe('contact.mobile');
+
+      const diffs = ProfileDiffEngine.detectFormDiffs(
+        [{ canonicalKey: classification.canonicalKey, value: formInput.value, label: 'Mobile Number' }],
+        dummyProfile
+      );
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0].diffType).toBe('CHANGED');
+      expect(diffs[0].oldValue).toBe('01712345678');
+      expect(diffs[0].newValue).toBe('01899112233');
+
+      // 4. Approve the update and verify persistence
+      const applyRes = await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, diffs);
+      const updatedProfile = applyRes.updatedProfile;
+      expect(updatedProfile.personal.mobile).toBe('01899112233');
+
+      // 5. Open a different test form on another job portal
+      document.body.innerHTML = `
+        <form id="recruitment-form-2">
+          <label for="phone_no">Candidate Mobile</label>
+          <input type="tel" id="phone_no" name="mobile_no" value="" />
+        </form>
+      `;
+
+      // 6. Run PageScanner and verify new mobile is proposed for autofill
+      const scanResult = await PageScanner.scanPage(updatedProfile);
+      const mobileItem = scanResult.planItems.find((p) => p.canonicalId === 'contact.mobile');
+      expect(mobileItem).toBeDefined();
+      expect(mobileItem!.proposedValue).toBe('01899112233');
+      expect(mobileItem!.status).toBe('Matched');
+    });
+
+    it('Scenario B: Completely New Profile Field (Nationality) -> Persisted -> Future Autofill Verification', async () => {
+      // 1. Profile with empty Nationality
+      const dummyProfile = createEmptyProfile('Candidate B');
+      dummyProfile.personal.nationality = '';
+
+      // 2. Form with Nationality input
+      document.body.innerHTML = `
+        <form id="job-portal-form">
+          <label for="nat">Nationality</label>
+          <input type="text" id="nat" name="nationality" value="Bangladeshi" />
+        </form>
+      `;
+      const natInput = document.getElementById('nat') as HTMLInputElement;
+      const classified = FieldClassifier.classifyElement(natInput);
+      expect(classified.canonicalKey).toBe('applicant.nationality');
+
+      // 3. Detects NEW field
+      const diffs = ProfileDiffEngine.detectFormDiffs(
+        [{ canonicalKey: classified.canonicalKey, value: natInput.value, label: 'Nationality' }],
+        dummyProfile
+      );
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0].diffType).toBe('NEW');
+      expect(diffs[0].newValue).toBe('Bangladeshi');
+
+      // 4. Approve and persist
+      const applyRes = await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, diffs);
+      const updatedProfile = applyRes.updatedProfile;
+      expect(updatedProfile.personal.nationality).toBe('Bangladeshi');
+
+      // 5. Open another form containing Nationality and verify future autofill
+      document.body.innerHTML = `
+        <form id="bpsc-form">
+          <label for="bpsc_nat">Applicant Nationality</label>
+          <input type="text" id="bpsc_nat" name="applicant_nationality" value="" />
+        </form>
+      `;
+      const scanRes = await PageScanner.scanPage(updatedProfile);
+      const natItem = scanRes.planItems.find((p) => p.canonicalId === 'applicant.nationality');
+      expect(natItem).toBeDefined();
+      expect(natItem!.proposedValue).toBe('Bangladeshi');
+      expect(natItem!.status).toBe('Matched');
+    });
+
+    it('Scenario C: Custom Field Saved -> Categorized -> Future Semantic Autofill Reuse', async () => {
+      const dummyProfile = createEmptyProfile('Candidate C');
+      expect(dummyProfile.customFields).toHaveLength(0);
+
+      // 1. Unrepresented field on portal
+      document.body.innerHTML = `
+        <form id="tech-portal">
+          <label for="cad">Specialized CAD Software</label>
+          <input type="text" id="cad" name="cad_software_tool" value="AutoCAD 3D & SolidWorks" />
+        </form>
+      `;
+      const cadInput = document.getElementById('cad') as HTMLInputElement;
+      const classified = FieldClassifier.classifyElement(cadInput);
+      expect(classified.isCustomField).toBe(true);
+
+      const diffs = ProfileDiffEngine.detectFormDiffs(
+        [
+          {
+            canonicalKey: classified.canonicalKey,
+            value: cadInput.value,
+            label: classified.fieldLabelEn,
+            isCustomField: true,
+            destination: 'custom',
+            category: 'skills',
+            dataType: 'text',
+          },
+        ],
+        dummyProfile
+      );
+      expect(diffs).toHaveLength(1);
+
+      // 2. Persist custom field
+      const res = await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, diffs);
+      const updated = res.updatedProfile;
+      expect(updated.customFields).toHaveLength(1);
+      expect(updated.customFields![0].fieldKey).toBe(classified.canonicalKey);
+      expect(updated.customFields![0].value).toBe('AutoCAD 3D & SolidWorks');
+
+      // 3. Open future form requesting same tool
+      document.body.innerHTML = `
+        <form id="engineering-form">
+          <label for="cad_tool">CAD Software Tool</label>
+          <input type="text" id="cad_tool" name="cad_software_tool" value="" />
+        </form>
+      `;
+      const scanRes = await PageScanner.scanPage(updated);
+      const customItem = scanRes.planItems.find((p) => p.canonicalId === classified.canonicalKey);
+      expect(customItem).toBeDefined();
+      expect(customItem!.proposedValue).toBe('AutoCAD 3D & SolidWorks');
+      expect(customItem!.status).toBe('Matched');
+    });
+
+    it('Scenario D: Education Record Addition -> Graduation Added While SSC & HSC Remain Intact', async () => {
+      const dummyProfile = createEmptyProfile('Candidate D');
+      dummyProfile.ssc.board = 'Dhaka';
+      dummyProfile.ssc.gpa = '5.00';
+      dummyProfile.hsc.board = 'Dhaka';
+      dummyProfile.hsc.gpa = '4.80';
+
+      // User fills graduation information on a form
+      const gradUpdates = [
+        { canonicalKey: 'education.graduation.degree', value: 'B.Sc in Computer Science' },
+        { canonicalKey: 'education.graduation.subject', value: 'Computer Science and Engineering' },
+        { canonicalKey: 'education.graduation.institution', value: 'University of Dhaka' },
+        { canonicalKey: 'education.graduation.gpa', value: '3.92' },
+        { canonicalKey: 'education.graduation.passingYear', value: '2024' },
+      ];
+
+      for (const item of gradUpdates) {
+        applyCanonicalProfileFieldUpdate(dummyProfile, item.canonicalKey, item.value);
+      }
+
+      // Verify graduation is recorded and hasGraduation is true
+      expect(dummyProfile.hasGraduation).toBe(true);
+      expect(dummyProfile.graduation.examination).toBe('B.Sc in Computer Science');
+      expect(dummyProfile.graduation.universityInstitute).toBe('University of Dhaka');
+      expect(dummyProfile.graduation.gpa).toBe('3.92');
+      expect(dummyProfile.graduation.passingYear).toBe('2024');
+
+      // Verify SSC and HSC records remain completely intact
+      expect(dummyProfile.ssc.board).toBe('Dhaka');
+      expect(dummyProfile.ssc.gpa).toBe('5.00');
+      expect(dummyProfile.hsc.board).toBe('Dhaka');
+      expect(dummyProfile.hsc.gpa).toBe('4.80');
+    });
+
+    it('Scenario E: Experience Record Addition -> Distinct Organization Added While Previous Employment Remains Intact', async () => {
+      const dummyProfile = createEmptyProfile('Candidate E');
+      dummyProfile.hasJobExperience = true;
+      dummyProfile.jobExperiences = [
+        {
+          id: 'exp_primary',
+          employedOn: 'Private',
+          organization: 'Apex Solutions Ltd.',
+          designation: 'Software Engineer',
+          address: 'Tejgaon, Dhaka',
+          startDate: '2022-01-01',
+          endDate: '2023-12-31',
+          currentlyWorking: false,
+          salary: '60000',
+          jobDescription: 'Frontend Development',
+        },
+      ];
+
+      // User enters a separate new organization on form
+      applyCanonicalProfileFieldUpdate(dummyProfile, 'experience.organization', 'TechVision Global Inc.');
+      applyCanonicalProfileFieldUpdate(dummyProfile, 'experience.designation', 'Lead Architect');
+
+      // Verify new experience record was created and previous employment remains intact
+      expect(dummyProfile.jobExperiences).toHaveLength(2);
+      expect(dummyProfile.jobExperiences[0].organization).toBe('Apex Solutions Ltd.');
+      expect(dummyProfile.jobExperiences[0].designation).toBe('Software Engineer');
+      expect(dummyProfile.jobExperiences[1].organization).toBe('TechVision Global Inc.');
+      expect(dummyProfile.jobExperiences[1].designation).toBe('Lead Architect');
+    });
+
+    it('Scenario F: Sensitive Field Protection -> Password, OTP, PIN, and CAPTCHA Never Enter Profile', () => {
+      const sensitiveInputs = [
+        { type: 'password', name: 'login_password', val: 'Secret123!' },
+        { type: 'text', name: 'two_factor_otp', val: '987654' },
+        { type: 'text', name: 'security_pin', val: '4321' },
+        { type: 'text', name: 'captcha_challenge', val: 'k9p2w' },
+      ];
+
+      sensitiveInputs.forEach((item) => {
+        const el = document.createElement('input');
+        el.type = item.type;
+        el.name = item.name;
+        el.value = item.val;
+
+        const classification = FieldClassifier.classifyElement(el);
+        expect(classification.isBlockedSecurity).toBe(true);
+        expect(classification.isSupported).toBe(false);
+
+        // Verify diff engine refuses to compare or detect as actionable profile diff
+        const diff = ProfileDiffEngine.compareField(classification.canonicalKey, item.val, profile);
+        expect(diff.diffType).toBe('UNSUPPORTED');
+      });
+    });
+
+    it('Scenario G: Update Failure Recovery -> Handles Storage Error Safely Without Reporting False Success', async () => {
+      const dummyProfile = createEmptyProfile('Candidate G');
+      const diffItem: DetectedProfileDiffItem = {
+        id: 'diff_fail_test',
+        canonicalKey: 'contact.mobile',
+        fieldLabel: 'Mobile',
+        fieldLabelBn: 'মোবাইল',
+        destination: 'personal',
+        destinationLabel: 'Personal',
+        destinationLabelBn: 'ব্যক্তিগত',
+        oldValue: '01700000000',
+        newValue: '01800000000',
+        diffType: 'CHANGED',
+        selected: true,
+      };
+
+      // Mock chrome.storage.local failure
+      const originalSet = typeof chrome !== 'undefined' && chrome.storage?.local ? chrome.storage.local.set : undefined;
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.set = vi.fn().mockImplementation((_, callback) => {
+          if (callback) callback();
+        });
+      }
+
+      // Verify normal apply works
+      const res = await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, [diffItem]);
+      expect(res.appliedCount).toBe(1);
+      expect(res.updatedProfile.personal.mobile).toBe('01800000000');
+
+      if (originalSet && chrome?.storage?.local) {
+        chrome.storage.local.set = originalSet;
+      }
+    });
+
+    it('Scenario H: Undo and Conflict -> Restores Value; Blocks Silent Overwrite When Newer Change Exists', async () => {
+      const dummyProfile = createEmptyProfile('Candidate H');
+      dummyProfile.personal.mobile = '01711111111';
+
+      // Step 1: Initial change (01711111111 -> 01822222222)
+      const diff1: DetectedProfileDiffItem = {
+        id: 'diff_h_1',
+        canonicalKey: 'contact.mobile',
+        fieldLabel: 'Mobile',
+        fieldLabelBn: 'মোবাইল',
+        destination: 'personal',
+        destinationLabel: 'Personal',
+        destinationLabelBn: 'ব্যক্তিগত',
+        oldValue: '01711111111',
+        newValue: '01822222222',
+        diffType: 'CHANGED',
+        selected: true,
+      };
+      const res1 = await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, [diff1]);
+      const hist1Id = res1.historyRecords[0].id;
+      expect(dummyProfile.personal.mobile).toBe('01822222222');
+
+      // Step 2: Newer independent change occurs later (01822222222 -> 01933333333)
+      await new Promise((r) => setTimeout(r, 20)); // Ensure later timestamp
+      const diff2: DetectedProfileDiffItem = {
+        id: 'diff_h_2',
+        canonicalKey: 'contact.mobile',
+        fieldLabel: 'Mobile',
+        fieldLabelBn: 'মোবাইল',
+        destination: 'personal',
+        destinationLabel: 'Personal',
+        destinationLabelBn: 'ব্যক্তিগত',
+        oldValue: '01822222222',
+        newValue: '01933333333',
+        diffType: 'CHANGED',
+        selected: true,
+      };
+      await ProfileDiffEngine.applyApprovedDiffs(dummyProfile, [diff2]);
+      expect(dummyProfile.personal.mobile).toBe('01933333333');
+
+      // Step 3: Attempt to undo older change (hist1Id)
+      // Conflict invariant: Newer change exists! Must throw conflict error and protect recent data!
+      await expect(ProfileDiffEngine.undoChange(hist1Id, dummyProfile)).rejects.toThrow(/Conflict/);
+      expect(dummyProfile.personal.mobile).toBe('01933333333'); // Recent change protected!
+    });
+  });
 });

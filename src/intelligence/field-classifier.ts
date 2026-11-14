@@ -96,22 +96,33 @@ export class FieldClassifier {
     const combinedTokens = `${id} ${name} ${placeholder} ${ariaLabel} ${labelText} ${parentRowText} ${externalContext}`.toLowerCase();
 
     // 3. Application Tracker Identification (Applicant ID, Tracking No, Roll No, Ref No)
+    const isContactOrIdentity =
+      combinedTokens.includes('mobile') ||
+      combinedTokens.includes('phone') ||
+      combinedTokens.includes('email') ||
+      combinedTokens.includes('nid') ||
+      combinedTokens.includes('national_id') ||
+      combinedTokens.includes('birth') ||
+      combinedTokens.includes('passport');
+
     if (
-      (combinedTokens.includes('applicant') && (combinedTokens.includes('id') || combinedTokens.includes('number'))) ||
-      combinedTokens.includes('user_id') ||
-      combinedTokens.includes('userid') ||
-      combinedTokens.includes('tracking_no') ||
-      combinedTokens.includes('tracking_num') ||
-      combinedTokens.includes('app_id') ||
-      combinedTokens.includes('application_id') ||
-      combinedTokens.includes('invoice_no') ||
-      combinedTokens.includes('invoice_num') ||
-      combinedTokens.includes('transaction_id') ||
-      combinedTokens.includes('txnid') ||
-      combinedTokens.includes('roll_no') ||
-      combinedTokens.includes('roll_number') ||
-      combinedTokens.includes('রেজিস্ট্রেশন নম্বর') ||
-      combinedTokens.includes('আবেদন আইডি')
+      !isContactOrIdentity &&
+      ((combinedTokens.includes('applicant') && (combinedTokens.includes('id') || combinedTokens.includes('app_no') || combinedTokens.includes('tracking'))) ||
+        combinedTokens.includes('user_id') ||
+        combinedTokens.includes('userid') ||
+        combinedTokens.includes('tracking_no') ||
+        combinedTokens.includes('tracking_num') ||
+        combinedTokens.includes('app_id') ||
+        combinedTokens.includes('application_id') ||
+        combinedTokens.includes('application_no') ||
+        combinedTokens.includes('invoice_no') ||
+        combinedTokens.includes('invoice_num') ||
+        combinedTokens.includes('transaction_id') ||
+        combinedTokens.includes('txnid') ||
+        combinedTokens.includes('roll_no') ||
+        combinedTokens.includes('roll_number') ||
+        combinedTokens.includes('রেজিস্ট্রেশন নম্বর') ||
+        combinedTokens.includes('আবেদন আইডি'))
     ) {
       return {
         isSupported: true,

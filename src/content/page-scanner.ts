@@ -252,16 +252,32 @@ export class PageScanner {
           .join(' ')
           .toLowerCase();
 
+        const elNameClean = (evidence.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+        const elIdClean = (evidence.id || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+
         for (const cf of profile.customFields) {
           if (cf.reuseInAutofill === false) continue;
-          const keyRaw = cf.fieldKey.replace(/^custom_/, '').replace(/_/g, ' ').toLowerCase();
+          const cleanKey = cf.fieldKey.replace(/^custom_/, '').toLowerCase();
+          const keyRaw = cleanKey.replace(/_/g, ' ');
           const labelEn = cf.labelEn ? cf.labelEn.toLowerCase() : '';
           const labelBn = cf.labelBn ? cf.labelBn.trim() : '';
 
+          // Significant words (length >= 3, excluding common stopwords)
+          const stopWords = new Set(['the', 'and', 'for', 'with', 'your', 'from']);
+          const keyWords = keyRaw.split(' ').filter((w) => w.length >= 3 && !stopWords.has(w));
+          const labelWords = labelEn.split(' ').filter((w) => w.length >= 3 && !stopWords.has(w));
+          const wordsToTest = Array.from(new Set([...keyWords, ...labelWords]));
+          const matchedWords = wordsToTest.filter((w) => textToMatch.includes(w));
+          const hasSemanticWordOverlap =
+            wordsToTest.length >= 2 ? matchedWords.length >= 2 : matchedWords.length >= 1;
+
           if (
+            (cleanKey && (cleanKey === elNameClean || cleanKey === elIdClean)) ||
             (keyRaw && textToMatch.includes(keyRaw)) ||
+            (cleanKey && textToMatch.includes(cleanKey)) ||
             (labelEn && textToMatch.includes(labelEn)) ||
-            (labelBn && textToMatch.includes(labelBn))
+            (labelBn && textToMatch.includes(labelBn)) ||
+            hasSemanticWordOverlap
           ) {
             matchedCanonicalId = cf.fieldKey;
             break;

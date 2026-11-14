@@ -705,6 +705,13 @@ export class ProfileDiffEngine {
    * Retrieves the current saved string value of a canonical key from UserProfile.
    */
   public static getSavedValue(profile: UserProfile, canonicalKey: string): string {
+    const expMatch = canonicalKey.match(/^experience\.(\d+)\.(organization|designation|startDate|endDate|address|employedOn|currentlyWorking)$/);
+    if (expMatch) {
+      const idx = parseInt(expMatch[1], 10);
+      const field = expMatch[2];
+      const val = (profile.jobExperiences?.[idx] as any)?.[field];
+      return val !== undefined ? String(val).trim() : '';
+    }
     if (canonicalKey.startsWith('custom_') || canonicalKey.startsWith('custom.')) {
       const cleanKey = canonicalKey.replace(/^custom\./, 'custom_');
       const found = profile.customFields?.find(
@@ -791,10 +798,14 @@ export class ProfileDiffEngine {
     // Passwords, tokens, CAPTCHA, hidden are rejected
     const lowerKey = canonicalKey.toLowerCase();
     if (
+      lowerKey.startsWith('security.') ||
+      lowerKey.startsWith('vault.') ||
       lowerKey.includes('password') ||
       lowerKey.includes('token') ||
       lowerKey.includes('captcha') ||
       lowerKey.includes('otp') ||
+      /(^|[_.-])pin([_.-]|$)/.test(lowerKey) ||
+      lowerKey.includes('security_pin') ||
       lowerKey.includes('csrf') ||
       lowerKey.includes('submit')
     ) {
@@ -1022,6 +1033,16 @@ export class ProfileDiffEngine {
     const entry = history[entryIndex];
     if (entry.reverted) {
       throw new Error('Change has already been reverted.');
+    }
+
+    // Conflict Detection: Check if a newer, unreverted change exists for the same fieldKey
+    const hasNewerChange = history.some(
+      (h) => h.fieldKey === entry.fieldKey && h.updatedAt > entry.updatedAt && !h.reverted
+    );
+    if (hasNewerChange) {
+      throw new Error(
+        `Conflict: A newer change exists for "${entry.fieldKey}". Undo the newer change first to prevent overwriting recent updates.`
+      );
     }
 
     const profile = activeProfile || (await getActiveProfile());
