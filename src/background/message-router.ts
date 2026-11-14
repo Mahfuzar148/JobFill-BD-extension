@@ -245,7 +245,7 @@ export class MessageRouter {
           try {
             const documents: Record<string, any> = {};
             for (const docType of requestedTypes) {
-              const found = await DocumentRepository.getByCategory(profileId, docType, false);
+              const found = await DocumentRepository.getByCategory(profileId, docType, true);
               if (found) {
                 documents[docType] = {
                   metadata: found.metadata,

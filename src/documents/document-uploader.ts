@@ -222,8 +222,31 @@ export class DocumentUploader {
         tracker.setValue('');
       }
 
-      fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      // Dispatch comprehensive event sequence for React, Vue, jQuery, inline onchange, and plain DOM
+      fileInput.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+      fileInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      fileInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+
+      // Trigger inline onchange if defined on the element
+      if (typeof (fileInput as any).onchange === 'function') {
+        try {
+          (fileInput as any).onchange.call(fileInput, new Event('change'));
+        } catch {
+          // ignore site script exceptions
+        }
+      }
+
+      // Trigger jQuery change event if host page utilizes jQuery
+      try {
+        const jq = (window as any).$ || (window as any).jQuery;
+        if (jq && typeof jq(fileInput).trigger === 'function') {
+          jq(fileInput).trigger('change');
+        }
+      } catch {
+        // safe fallback
+      }
+
+      fileInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
 
       // Allow host scripts/FileReader/React handlers time to validate and render preview
       await new Promise((r) => setTimeout(r, 150));

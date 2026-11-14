@@ -395,6 +395,8 @@ interface TwoPassExecutionSummary {
   confirmationRequired: number;
   completenessReport: FieldCompletenessEntry[];
   allItems: FillPlanItem[];
+  imagesAttached: number;
+  pendingDocsCount: number;
 }
 
 const approvedInsecureHttpOrigins = new Set<string>();
@@ -548,6 +550,23 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
   const ambiguous = mergedItems.filter((i) => i.status === 'Ambiguous Field').length;
   const conflicts = mergedItems.filter((i) => i.status === 'Existing Value Conflict').length;
 
+  // Pass 3: Automatic Document & Image Attachment (Photo, Signature, etc.)
+  let imagesAttached = 0;
+  let pendingDocsCount = 0;
+  try {
+    const docResult = await DocumentUploadCoordinator.autoAttachEligibleDocuments(
+      document,
+      fetchDocumentForActiveProfile
+    );
+    imagesAttached = docResult.attachedCount;
+    pendingDocsCount = docResult.pendingManualReview.length;
+    if (docResult.results.length > 0) {
+      lastDocResults = docResult.results;
+    }
+  } catch (docErr) {
+    console.warn('JobFill BD: Auto document attach notice:', docErr);
+  }
+
   return {
     scan: currentScanResult,
     totalFilled,
@@ -559,6 +578,8 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     confirmationRequired,
     completenessReport,
     allItems: mergedItems,
+    imagesAttached,
+    pendingDocsCount,
   };
 }
 
@@ -625,30 +646,34 @@ async function executeQuickFill() {
 
   const detectedDocs = DocumentFieldDetector.scanDocumentFields(document);
   const attentionPending = summary.confirmationRequired + summary.missingInfo + summary.totalFailed;
+  const imagesAttached = summary.imagesAttached || 0;
+  const pendingDocFields = detectedDocs.filter(
+    (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
+  );
+  const imgSuccessText = imagesAttached > 0 ? ` ও ${imagesAttached}টি ছবি/স্বাক্ষর` : '';
 
-  if (summary.totalFilled === 0 && summary.alreadyCorrect > 0 && attentionPending === 0) {
+  if (summary.totalFilled === 0 && imagesAttached > 0 && attentionPending === 0) {
+    showToast(`✅ ছবি ও স্বাক্ষর (${imagesAttached}টি) সফলভাবে সংযুক্ত করা হয়েছে!`);
+  } else if (summary.totalFilled === 0 && summary.alreadyCorrect > 0 && attentionPending === 0 && imagesAttached === 0) {
     showToast(`ℹ️ ফর্মের ${summary.alreadyCorrect}টি ফিল্ড আগেই সঠিক তথ্য দিয়ে পূরণ করা রয়েছে।`);
   } else if (summary.totalFilled === 0 && attentionPending > 0) {
     showToast(`⚠️ ${attentionPending}টি ফিল্ডে আপনার নিশ্চিতকরণ বা তথ্য প্রয়োজন — [Review] দেখুন।`);
-  } else if (detectedDocs.length > 0 && attentionPending > 0) {
+  } else if (pendingDocFields.length > 0 && attentionPending > 0) {
     showToast(
-      `✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ডের জন্য Review এবং ছবির জন্য [📷 Photo & Sig] দেখুন।`
+      `✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ডের জন্য Review এবং বাকি ছবির জন্য [📷 Photo & Sig] দেখুন।`
     );
-  } else if (detectedDocs.length > 0) {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! 📷 ছবি ও স্বাক্ষর আপলোড অনুমোদনের জন্য [📷 Photo & Sig] ক্লিক করুন।`);
+  } else if (pendingDocFields.length > 0) {
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! 📷 বাকি ছবি ও স্বাক্ষর অনুমোদনের জন্য [📷 Photo & Sig] ক্লিক করুন।`);
   } else if (attentionPending > 0) {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড (যেমন Quota/Missing Info) নিশ্চিত করতে [Review] দেখুন।`);
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড (যেমন Quota/Missing Info) নিশ্চিত করতে [Review] দেখুন।`);
   } else {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড সফলভাবে স্বয়ংক্রিয় পূরণ ও যাচাই হয়েছে!`);
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} সফলভাবে স্বয়ংক্রিয় পূরণ ও যাচাই হয়েছে!`);
   }
 
   // Record to Application History
   await recordAutofillHistoryEntry(summary);
 
-  // Auto-open the Smart Photo & Signature Approval Modal when empty file upload fields are detected
-  const pendingDocFields = detectedDocs.filter(
-    (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
-  );
+  // Auto-open the Smart Photo & Signature Approval Modal when empty file upload fields remain
   if (pendingDocFields.length > 0) {
     await openDocumentApprovalModal();
   }
@@ -1530,22 +1555,49 @@ async function fetchDocumentForActiveProfile(docType: DocumentCategory): Promise
     }
 
     if (response && response.status === 'ok') {
-      return response.documents?.[docType] || null;
+      const doc = response.documents?.[docType];
+      if (doc && doc.dataUrl) return doc;
     }
 
     if (isExtensionRuntime() && response?.status !== 'runtime_error') {
-      return null;
+      // Background was reached and responded cleanly
     }
   }
 
   try {
-    return await DocumentRepository.getByCategory(currentProfile.id, docType, false);
+    const directDoc = await DocumentRepository.getByCategory(currentProfile.id, docType, true);
+    if (directDoc && directDoc.dataUrl) return directDoc;
   } catch (err: any) {
     if (String(err?.message || '').includes('VAULT_LOCKED')) {
       throw err;
     }
-    return null;
   }
+
+  // 3. Fallback to in-memory profile documents if embedded
+  const normType = docType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const inMemDoc = currentProfile?.documents?.find((d) => {
+    const dType = (d.type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return (dType === normType || dType.includes(normType) || normType.includes(dType)) && d.dataUrl;
+  });
+  if (inMemDoc && inMemDoc.dataUrl) {
+    return {
+      metadata: {
+        documentId: inMemDoc.id,
+        documentType: inMemDoc.type,
+        profileId: currentProfile.id,
+        title: inMemDoc.title,
+        fileName: inMemDoc.fileName,
+        mimeType: inMemDoc.mimeType,
+        fileSize: inMemDoc.fileSize || Math.round((inMemDoc.fileSizeKb || 0) * 1024),
+        width: inMemDoc.dimensions?.width || 0,
+        height: inMemDoc.dimensions?.height || 0,
+        createdAt: inMemDoc.uploadedAt || new Date().toISOString(),
+      },
+      dataUrl: inMemDoc.dataUrl,
+    };
+  }
+
+  return null;
 }
 
 async function readLocalDocumentFile(file: File): Promise<{
@@ -2209,19 +2261,28 @@ if (
           } else {
             await recordAutofillHistoryEntry(summary);
             const attentionPending = summary.confirmationRequired + summary.missingInfo + summary.totalFailed;
-            if (detectedDocs.length > 0 && attentionPending > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] এবং ছবি আপলোডের জন্য [📷 Photo & Sig] দেখুন।`);
-            } else if (detectedDocs.length > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! 📷 ছবি ও স্বাক্ষর অনুমোদন করে আপলোড করুন।`);
+            const imagesAttached = summary.imagesAttached || 0;
+            const pendingDocFields = detectedDocs.filter(
+              (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
+            );
+            const imgSuccessText = imagesAttached > 0 ? ` ও ${imagesAttached}টি ছবি/স্বাক্ষর` : '';
+
+            if (pendingDocFields.length > 0 && attentionPending > 0) {
+              showToast(
+                `✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] এবং বাকি ছবির জন্য [📷 Photo & Sig] দেখুন।`
+              );
+            } else if (pendingDocFields.length > 0) {
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! 📷 বাকি ছবি ও স্বাক্ষর অনুমোদন করে আপলোড করুন।`);
             } else if (attentionPending > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] দেখুন।`);
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] দেখুন।`);
             } else {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড সফলভাবে স্বয়ংক্রিয় পূরণ হয়েছে!`);
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} সফলভাবে স্বয়ংক্রিয় পূরণ হয়েছে!`);
             }
 
             sendResponse({
               status: 'ok',
               documentFieldCount: detectedDocs.length,
+              imagesAttached,
               report: {
                 successfullyFilled: summary.totalFilled,
                 alreadyCorrect: summary.alreadyCorrect,
@@ -2230,6 +2291,7 @@ if (
                 conflicts: summary.conflicts,
                 confirmationRequired: summary.confirmationRequired,
                 failed: summary.totalFailed,
+                imagesAttached,
                 completenessReport: summary.completenessReport,
               },
             });

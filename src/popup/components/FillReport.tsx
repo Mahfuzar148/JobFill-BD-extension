@@ -10,6 +10,7 @@ export interface FillReportData {
   conflicts: number;
   confirmationRequired?: number;
   failed: number;
+  imagesAttached?: number;
   completenessReport?: FieldCompletenessEntry[];
 }
 
@@ -59,6 +60,18 @@ export const FillReport: React.FC<FillReportProps> = ({
           <div className="text-[10.5px] font-semibold text-rose-700">Value Conflicts</div>
         </div>
       </div>
+
+      {typeof report.imagesAttached === 'number' && report.imagesAttached > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <span>📷</span>
+            <span>Photo & Signature Attached:</span>
+          </div>
+          <span className="font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+            {report.imagesAttached}
+          </span>
+        </div>
+      )}
 
       {(report.ambiguous > 0 || report.failed > 0 || (report.confirmationRequired || 0) > 0) && (
         <div className="flex flex-wrap gap-2">
