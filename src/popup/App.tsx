@@ -949,6 +949,29 @@ export const App: React.FC = () => {
           </div>
           <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 shrink-0" />
         </button>
+
+        {/* Password Manager & Credential Vault Quick Access */}
+        <button
+          type="button"
+          data-testid="popup-credential-vault-btn"
+          onClick={() => handleOpenDashboard('credentials')}
+          className="w-full bg-white hover:bg-petro-50/70 border border-slate-200 hover:border-petro-300 rounded-xl px-3 py-2 flex items-center justify-between gap-2 shadow-xs transition-colors cursor-pointer group"
+        >
+          <div className="flex items-center gap-2 text-left">
+            <span className="w-6 h-6 rounded-lg bg-petro-100 text-petro-700 flex items-center justify-center shrink-0">
+              <KeyRound className="w-3.5 h-3.5" />
+            </span>
+            <div>
+              <span className="text-xs font-extrabold text-slate-800 group-hover:text-petro-700 block leading-tight">
+                🔑 Password Manager & Vault
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                Teletalk, BPSC, BB পোর্টালের পাসওয়ার্ড ও লগইন ভল্ট
+              </span>
+            </div>
+          </div>
+          <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-petro-600 shrink-0" />
+        </button>
       </main>
 
       {/* 3. Footer */}

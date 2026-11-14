@@ -203,7 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'experience', labelEn: 'Job Experience', labelBn: 'চাকরির অভিজ্ঞতা', icon: Briefcase },
         { id: 'documents', labelEn: 'Documents & Photos', labelBn: 'ছবি ও সনদপত্র', icon: FileText },
         { id: 'cv_builder', labelEn: 'CV Builder', labelBn: 'সিভি বিল্ডার', icon: FileText, badge: 'A4' },
-        { id: 'credentials', labelEn: 'Credential Vault', labelBn: 'ক্রেডেনশিয়াল ভল্ট', icon: KeyRound, badge: 'Local' },
+        { id: 'credentials', labelEn: 'Password Manager & Vault', labelBn: 'পাসওয়ার্ড ম্যানেজার (ভল্ট)', icon: KeyRound, badge: 'Safe' },
       ],
     },
     {

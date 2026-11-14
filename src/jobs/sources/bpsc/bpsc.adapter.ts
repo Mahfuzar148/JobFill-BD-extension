@@ -28,9 +28,13 @@ export function parseBpscNoticeTableHtml(html: string, pageUrl: string): RawSour
     baseUrl: BPSC_BASE,
     pageUrl,
     category: 'Government',
-    recruitmentPattern: /নিয়োগ|নিয়োগ|বিজ্ঞপ্তি|বিসিএস|bcs|circular|appointment|পদ|ক্যাডার|নন-ক্যাডার|পরীক্ষা|result|ফলাফল/i,
+    recruitmentPattern:
+      /নিয়োগ|নিয়োগ|বিজ্ঞপ্তি|বিসিএস|bcs|circular|appointment|পদ|ক্যাডার|নন-ক্যাডার|পরীক্ষা|result|ফলাফল|সাব-রেজিস্ট্রার|রেজিস্ট্রার|registrar|নিবন্ধন/i,
     excludePattern: /ex-bangladesh|বহিঃবাংলাদেশ|ছুটি|ভ্রমণ|medical\s*leave|earned\s*leave|শোক/i,
-    qualificationDetector: (title) => (/bcs|বিসিএস|ক্যাডার|৯ম গ্রেড/i.test(title) ? 'Bachelor' : 'Any Qualification'),
+    qualificationDetector: (title) =>
+      /bcs|বিসিএস|ক্যাডার|৯ম গ্রেড|সাব-রেজিস্ট্রার|রেজিস্ট্রার|registrar/i.test(title)
+        ? 'Bachelor'
+        : 'Any Qualification',
   });
 }
 

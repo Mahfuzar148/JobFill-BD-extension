@@ -352,7 +352,11 @@ export const CredentialVaultPage: React.FC<CredentialVaultPageProps> = ({ showTo
         <div>
           <h1 className="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-petro-600" />
-            <span>{bn ? 'লোকাল ক্রেডেনশিয়াল ভল্ট (Credential Vault)' : 'Local Credential Vault'}</span>
+            <span>
+              {bn
+                ? 'পাসওয়ার্ড ম্যানেজার ও ক্রেডেনশিয়াল ভল্ট (Password Manager & Vault)'
+                : 'Password Manager & Credential Vault'}
+            </span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {bn
