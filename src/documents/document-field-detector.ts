@@ -93,6 +93,20 @@ export const DOCUMENT_SEMANTIC_RULES: DocumentFieldMappingRule[] = [
     labelKeywords: ['nid', 'national id', 'smart card', 'nid copy', 'জাতীয় পরিচয়পত্র', 'এনআইডি'],
   },
   {
+    canonicalKey: 'profile.documents.nidFront',
+    documentType: 'nid_front',
+    fieldNames: ['nid_front', 'nid_front_file', 'nid_part1', 'nid_face', 'national_id_front'],
+    fieldIds: ['nid_front', 'nid_front_file', 'nid_part1', 'national_id_front'],
+    labelKeywords: ['nid front', 'national id front', 'এনআইডি সম্মুখভাগ', 'এনআইডি সামনের অংশ', 'nid front side'],
+  },
+  {
+    canonicalKey: 'profile.documents.nidBack',
+    documentType: 'nid_back',
+    fieldNames: ['nid_back', 'nid_back_file', 'nid_part2', 'national_id_back'],
+    fieldIds: ['nid_back', 'nid_back_file', 'nid_part2', 'national_id_back'],
+    labelKeywords: ['nid back', 'national id back', 'এনআইডি বিপরীত ভাগ', 'এনআইডি পেছনের অংশ', 'nid back side'],
+  },
+  {
     canonicalKey: 'profile.documents.birthCertificate',
     documentType: 'birth_certificate',
     fieldNames: ['birth_cert', 'birth_certificate', 'breg_file', 'birth_doc'],
@@ -105,6 +119,27 @@ export const DOCUMENT_SEMANTIC_RULES: DocumentFieldMappingRule[] = [
     fieldNames: ['certificate', 'edu_cert', 'transcript', 'marksheet', 'ssc_cert', 'hsc_cert', 'grad_cert'],
     fieldIds: ['certificate', 'edu_cert', 'transcript', 'marksheet', 'ssc_cert', 'hsc_cert', 'grad_cert'],
     labelKeywords: ['educational certificate', 'certificate', 'transcript', 'marksheet', 'সনদ', 'মার্কশিট'],
+  },
+  {
+    canonicalKey: 'profile.documents.sscMarksheet',
+    documentType: 'ssc_marksheet',
+    fieldNames: ['ssc_marksheet', 'ssc_mark_sheet', 'ssc_transcript'],
+    fieldIds: ['ssc_marksheet', 'ssc_mark_sheet', 'ssc_transcript'],
+    labelKeywords: ['ssc marksheet', 'ssc mark sheet', 'ssc transcript', 'এসএসসি মার্কশিট', 'এসএসসি নম্বরপত্র'],
+  },
+  {
+    canonicalKey: 'profile.documents.hscMarksheet',
+    documentType: 'hsc_marksheet',
+    fieldNames: ['hsc_marksheet', 'hsc_mark_sheet', 'hsc_transcript'],
+    fieldIds: ['hsc_marksheet', 'hsc_mark_sheet', 'hsc_transcript'],
+    labelKeywords: ['hsc marksheet', 'hsc mark sheet', 'hsc transcript', 'এইচএসসি মার্কশিট', 'এইচএসসি নম্বরপত্র'],
+  },
+  {
+    canonicalKey: 'profile.documents.transcript',
+    documentType: 'transcript',
+    fieldNames: ['transcript', 'academic_transcript', 'grad_transcript', 'university_transcript'],
+    fieldIds: ['transcript', 'academic_transcript', 'grad_transcript'],
+    labelKeywords: ['academic transcript', 'official transcript', 'অ্যাকাডেমিক ট্রান্সক্রিপ্ট', 'ট্রান্সক্রিপ্ট'],
   },
   {
     canonicalKey: 'profile.documents.cv',

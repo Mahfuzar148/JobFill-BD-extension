@@ -65,6 +65,14 @@ export class VerificationEngine {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
+
+    try {
+      if (typeof (window as any).$ === 'function') {
+        (window as any).$(el).trigger('input').trigger('change');
+      }
+    } catch {
+      // Safe ignore in isolated/test environments
+    }
   }
 
   // Safely sets native select option by value, text, bilingual equivalence or fuzzy match
@@ -212,6 +220,20 @@ export class VerificationEngine {
     });
   }
 
+  private static getDependencyWeight(canonicalId: string): number {
+    const id = (canonicalId || '').toLowerCase();
+    if (id.includes('division')) return 10;
+    if (id.includes('district')) return 20;
+    if (id.includes('upazila') || id.includes('thana')) return 30;
+    if (id.includes('examination')) return 10;
+    if (id.includes('board')) return 15;
+    if (id.includes('group') || id.includes('subject')) return 20;
+    if (id.includes('result')) return 25;
+    if (id.includes('gpa') || id.includes('cgpa')) return 35;
+    if (id.startsWith('identity.') && id.includes('yesno')) return 10;
+    return 50;
+  }
+
   // Executes the approved plan in a controlled queue
   public static async executePlan(
     sessionId: string,
@@ -233,7 +255,12 @@ export class VerificationEngine {
 
     const undoRecords: Array<{ element: HTMLElement; originalValue: string; appliedValue?: string }> = [];
 
-    for (const item of planItems) {
+    // Stable sort to execute parent dependencies before child dependent controls
+    const executionQueue = [...planItems].sort(
+      (a, b) => this.getDependencyWeight(a.canonicalId) - this.getDependencyWeight(b.canonicalId)
+    );
+
+    for (const item of executionQueue) {
       if (item.status === 'Already Correct') {
         report.alreadyCorrect++;
         continue;
@@ -288,9 +315,17 @@ export class VerificationEngine {
           appliedValue: actualApplied,
         });
 
-        // Wait up to 500ms ONLY if the dependent child dropdown started empty (<= 1 option) and is still waiting for options
+        // Wait up to 1200ms ONLY if the dependent child dropdown started empty (<= 1 option) and is still waiting for options
         if (dependentSelect && initialDependentCount <= 1 && dependentSelect.options.length <= 1) {
-          await SelectHandler.waitForOptions(dependentSelect, initialDependentCount, 500);
+          await SelectHandler.waitForOptions(dependentSelect, initialDependentCount, 1200);
+
+          // Re-enable/re-approve child item if present in plan and currently unapproved due to previously missing options
+          const childItem = planItems.find((p) => p.element === dependentSelect);
+          if (childItem && childItem.proposedValue && (!childItem.isApproved || childItem.status === 'Unsupported Field')) {
+            childItem.status = 'Matched';
+            childItem.isApproved = true;
+            childItem.diagnosticStatus = 'Successfully Filled';
+          }
         }
       } else {
         report.failedVerification++;

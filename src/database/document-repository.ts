@@ -217,6 +217,20 @@ export class DocumentRepository {
   ): Promise<DocumentMetadata> {
     const docId = doc.documentId || doc.id || `doc_${doc.profileId}_${doc.documentType || doc.type || 'other'}_${Date.now()}`;
     const docType = doc.documentType || doc.type || 'other';
+
+    const normType = normalizeDocumentCategory(docType);
+    if (
+      (normType === 'educational_certificate' ||
+        docType === 'ssc_marksheet' ||
+        docType === 'hsc_marksheet' ||
+        docType === 'diploma_cert' ||
+        docType === 'transcript') &&
+      doc.expiresAt &&
+      doc.expiresAt.trim().length > 0
+    ) {
+      throw new Error('Academic certificates do not expire and cannot be assigned an automatic expiry date.');
+    }
+
     const fileSize = doc.fileSize ?? Math.max(1, Math.round((doc.fileSizeKb ?? 0) * 1024));
     const fileSizeKb = doc.fileSizeKb ?? Number((fileSize / 1024).toFixed(2));
     const width = doc.width ?? 0;

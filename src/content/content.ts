@@ -918,7 +918,7 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     }
 
     // Pass 2: Follow-up check for newly revealed / unlocked fields (e.g. ssc_gpa, nid_no, birth_reg_no, dependent upazila/group)
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 350));
     try {
       const pass2Scan = await UniversalPageScanner.scanPage(currentProfile, document);
       for (const item of pass2Scan.planItems) {

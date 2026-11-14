@@ -23,18 +23,164 @@ export const BILINGUAL_EQUIVALENTS: Record<string, string[]> = {
 
   // Education Boards
   dhaka: ['dhaka', 'ঢাকা'],
-  chittagong: ['chittagong', 'chattogram', 'চট্টগ্রাম'],
+  chittagong: ['chittagong', 'chattogram', 'চট্টগ্রাম', 'চিটাগাং'],
   rajshahi: ['rajshahi', 'রাজশাহী'],
   khulna: ['khulna', 'খুলনা'],
-  barisal: ['barisal', 'বরিশাল'],
+  barisal: ['barisal', 'barishal', 'বরিশাল'],
   sylhet: ['sylhet', 'সিলেট'],
-  comilla: ['comilla', 'কুমিল্লা'],
-  jessore: ['jessore', 'যশোর'],
+  comilla: ['comilla', 'cumilla', 'কুমিল্লা'],
+  jessore: ['jessore', 'jashore', 'যশোর'],
   dinajpur: ['dinajpur', 'দিনাজপুর'],
-  mymensingh: ['mymensingh', 'ময়মনসিংহ'],
-  madrasah: ['madrasah', 'madrasa', 'মাদ্রাসা', 'মাদ্রাসা বোর্ড'],
-  technical: ['technical', 'কারিগরি', 'কারিগরি বোর্ড', 'bteb'],
-  bteb: ['bteb', 'technical', 'বাংলাদেশ কারিগরি শিক্ষা বোর্ড'],
+  mymensingh: ['mymensingh', 'ময়মনসিংহ', 'ময়মনসিংহ'],
+  madrasah: ['madrasah', 'madrasa', 'মাদ্রাসা', 'মাদ্রাসা বোর্ড', 'madrasah board'],
+  technical: ['technical', 'কারিগরি', 'কারিগরি বোর্ড', 'bteb', 'technical board'],
+  bteb: ['bteb', 'technical', 'বাংলাদেশ কারিগরি শিক্ষা বোর্ড', 'bteb board'],
+  bou: ['bou', 'bangladesh open university', 'open university', 'বাংলাদেশ উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত'],
+
+  // Bangladesh 64 Districts (Bilingual & Transliteration Equivalence)
+  dist_dhaka: ['dhaka', 'ঢাকা'],
+  dist_gazipur: ['gazipur', 'গাজীপুর'],
+  dist_kishoreganj: ['kishoreganj', 'kishorganj', 'কিশোরগঞ্জ'],
+  dist_manikganj: ['manikganj', 'মানিকগঞ্জ'],
+  dist_munshiganj: ['munshiganj', 'মুন্সীগঞ্জ', 'মুন্সিগঞ্জ'],
+  dist_narayanganj: ['narayanganj', 'নারায়ণগঞ্জ', 'নারায়নগঞ্জ'],
+  dist_narsingdi: ['narsingdi', 'নরসিংদী'],
+  dist_tangail: ['tangail', 'টাঙ্গাইল'],
+  dist_faridpur: ['faridpur', 'ফরিদপুর'],
+  dist_gopalganj: ['gopalganj', 'গোপালগঞ্জ'],
+  dist_madaripur: ['madaripur', 'মাদারীপুর'],
+  dist_rajbari: ['rajbari', 'রাজবাড়ী', 'রাজবাড়ি'],
+  dist_shariatpur: ['shariatpur', 'শরীয়তপুর', 'শরীয়তপুর'],
+  dist_chattogram: ['chattogram', 'chittagong', 'চট্টগ্রাম', 'চিটাগাং'],
+  dist_coxsbazar: ["cox's bazar", 'coxsbazar', 'coxs bazar', 'কক্সবাজার'],
+  dist_cumilla: ['cumilla', 'comilla', 'কুমিল্লা'],
+  dist_feni: ['feni', 'ফেনী'],
+  dist_brahmanbaria: ['brahmanbaria', 'ব্রাহ্মণবাড়িয়া', 'ব্রাহ্মণবাড়িয়া'],
+  dist_rangamati: ['rangamati', 'রাঙ্গামাটি', 'রাঙামাটি'],
+  dist_noakhali: ['noakhali', 'নোয়াখালী', 'নোয়াখালী'],
+  dist_chandpur: ['chandpur', 'চাঁদপুর'],
+  dist_lakshmipur: ['lakshmipur', 'laxmipur', 'লক্ষ্মীপুর'],
+  dist_khagrachhari: ['khagrachhari', 'khagrachari', 'খাগড়াছড়ি', 'খাগড়াছড়ি'],
+  dist_bandarban: ['bandarban', 'বান্দরবান'],
+  dist_rajshahi: ['rajshahi', 'রাজশাহী'],
+  dist_bogura: ['bogura', 'bogra', 'বগুড়া', 'বগুড়া'],
+  dist_joypurhat: ['joypurhat', 'jaipurhat', 'জয়পুরহাট', 'জয়পুরহাট'],
+  dist_naogaon: ['naogaon', 'নওগাঁ'],
+  dist_natore: ['natore', 'নাটোর'],
+  dist_chapainawabganj: ['chapainawabganj', 'chapai nawabganj', 'nawabganj', 'চাঁপাইনবাবগঞ্জ'],
+  dist_pabna: ['pabna', 'পাবনা'],
+  dist_sirajganj: ['sirajganj', 'সিরাজগঞ্জ'],
+  dist_khulna: ['khulna', 'খুলনা'],
+  dist_bagerhat: ['bagerhat', 'বাগেরহাট'],
+  dist_chuadanga: ['chuadanga', 'চুয়াডাঙ্গা', 'চুয়াডাঙ্গা'],
+  dist_jashore: ['jashore', 'jessore', 'যশোর'],
+  dist_jhenaidah: ['jhenaidah', 'ঝিনাইদহ'],
+  dist_kushtia: ['kushtia', 'কুষ্টিয়া', 'কুষ্টিয়া'],
+  dist_magura: ['magura', 'মাগুরা'],
+  dist_meherpur: ['meherpur', 'মেহেরপুর'],
+  dist_narail: ['narail', 'নড়াইল', 'নড়াইল'],
+  dist_satkhira: ['satkhira', 'সাতক্ষীরা'],
+  dist_barishal: ['barishal', 'barisal', 'বরিশাল'],
+  dist_barguna: ['barguna', 'বরগুনা'],
+  dist_bhola: ['bhola', 'ভোলা'],
+  dist_jhalokathi: ['jhalokathi', 'jhalakati', 'ঝালকাঠি'],
+  dist_patuakhali: ['patuakhali', 'পটুয়াখালী', 'পটুয়াখালী'],
+  dist_pirojpur: ['pirojpur', 'পিরোজপুর'],
+  dist_sylhet: ['sylhet', 'সিলেট'],
+  dist_habiganj: ['habiganj', 'হবিগঞ্জ'],
+  dist_moulvibazar: ['moulvibazar', 'maulvibazar', 'মৌলভীবাজার'],
+  dist_sunamganj: ['sunamganj', 'সুনামগঞ্জ'],
+  dist_rangpur: ['rangpur', 'রংপুর'],
+  dist_dinajpur: ['dinajpur', 'দিনাজপুর'],
+  dist_gaibandha: ['gaibandha', 'গাইবান্ধা'],
+  dist_kurigram: ['kurigram', 'কুড়িগ্রাম', 'কুড়িগ্রাম'],
+  dist_lalmonirhat: ['lalmonirhat', 'লালমনিরহাট'],
+  dist_nilphamari: ['nilphamari', 'নীলফামারী'],
+  dist_panchagarh: ['panchagarh', 'পঞ্চগড়', 'পঞ্চগড়'],
+  dist_thakurgaon: ['thakurgaon', 'ঠাকুরগাঁও'],
+  dist_mymensingh: ['mymensingh', 'ময়মনসিংহ', 'ময়মনসিংহ'],
+  dist_jamalpur: ['jamalpur', 'জামালপুর'],
+  dist_netrokona: ['netrokona', 'netrakona', 'নেত্রকোণা', 'নেত্রকোনা'],
+  dist_sherpur: ['sherpur', 'শেরপুর'],
+
+  // Common Upazilas & Thanas
+  thana_motihar: ['motihar', 'মতিহার', 'motihar thana', 'মতিহার থানা'],
+  thana_boalia: ['boalia', 'বোয়ালিয়া', 'boalia thana', 'বোয়ালিয়া'],
+  thana_sadar: ['sadar', 'সদর', 'kotwali', 'কোতোয়ালী', 'কোতয়ালী', 'sadar thana'],
+  thana_dhanmondi: ['dhanmondi', 'ধানমন্ডি', 'ধানমণ্ডি'],
+  thana_gulshan: ['gulshan', 'গুলশান'],
+  thana_mirpur: ['mirpur', 'মিরপুর'],
+  thana_uttara: ['uttara', 'উত্তরা'],
+  thana_savar: ['savar', 'সাভার'],
+  thana_tongi: ['tongi', 'টঙ্গী'],
+  thana_bogra_sadar: ['bogra sadar', 'bogura sadar', 'বগুড়া সদর', 'বগুড়া সদর'],
+  thana_puthia: ['puthia', 'পুঠিয়া', 'পুঠিয়া'],
+  thana_bagmara: ['bagmara', 'বাগমারা'],
+  thana_godagari: ['godagari', 'গোদাগাড়ী', 'গোদাগাড়ী'],
+  thana_tanore: ['tanore', 'তানোর'],
+  thana_mohanpur: ['mohanpur', 'মোহনপুর'],
+  thana_charghat: ['charghat', 'চারঘাট'],
+  thana_durgapur: ['durgapur', 'দুর্গাপুর'],
+
+  // Results & GPA Scales
+  result_gpa_5: [
+    'gpa (out of 5.00)',
+    'gpa (out of 5)',
+    'gpa out of 5',
+    'gpa-5',
+    'gpa 5',
+    'gpa 5.00',
+    'scale 5',
+    '5.00',
+    'জিপিএ (৫.০০ এর মধ্যে)',
+    'জিপিএ ৫',
+    'gpa (scale 5.00)',
+    'gpa(out of 5)',
+  ],
+  result_gpa_4: [
+    'gpa (out of 4.00)',
+    'gpa (out of 4)',
+    'gpa out of 4',
+    'gpa-4',
+    'gpa 4',
+    'gpa 4.00',
+    'cgpa (out of 4.00)',
+    'cgpa (out of 4)',
+    'scale 4',
+    '4.00',
+    'সিজিপিএ (৪.০০ এর মধ্যে)',
+    'জিপিএ ৪',
+    'cgpa (scale 4.00)',
+    'gpa(out of 4)',
+  ],
+  result_first_division: [
+    'first division',
+    '1st division',
+    'প্রথম বিভাগ',
+    'first class',
+    '1st class',
+    'প্রথম শ্রেণী',
+    'first',
+  ],
+  result_second_division: [
+    'second division',
+    '2nd division',
+    'দ্বিতীয় বিভাগ',
+    'second class',
+    '2nd class',
+    'দ্বিতীয় শ্রেণী',
+    'second',
+  ],
+  result_third_division: [
+    'third division',
+    '3rd division',
+    'তৃতীয় বিভাগ',
+    'third class',
+    '3rd class',
+    'তৃতীয় শ্রেণী',
+    'third',
+  ],
+  result_passed: ['passed', 'pass', 'উত্তীর্ণ', 'pass course', 'degree pass'],
 
   // Groups
   science: ['science', 'বিজ্ঞান'],
@@ -208,10 +354,22 @@ export function setSelectValue(
   targetValue: string
 ): boolean {
   const matched = matchDropdownOption(selectElement, targetValue);
-  if (!matched || matched.index === 0) return false;
+  if (!matched) return false;
 
-  selectElement.value = matched.value;
+  try {
+    const prototype = window.HTMLSelectElement?.prototype;
+    const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(selectElement, matched.value);
+    } else {
+      selectElement.value = matched.value;
+    }
+  } catch {
+    selectElement.value = matched.value;
+  }
+
   selectElement.selectedIndex = matched.index;
+  matched.selected = true;
 
   // Dispatch events to inform reactive forms (React/Vue/Angular)
   selectElement.dispatchEvent(new Event('input', { bubbles: true }));

@@ -314,7 +314,18 @@ export class SelectHandler implements ControlHandler {
     }
 
     try {
-      select.value = matchedOpt.value;
+      try {
+        const prototype = window.HTMLSelectElement?.prototype;
+        const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
+        if (descriptor && descriptor.set) {
+          descriptor.set.call(select, matchedOpt.value);
+        } else {
+          select.value = matchedOpt.value;
+        }
+      } catch {
+        select.value = matchedOpt.value;
+      }
+
       select.selectedIndex = matchedOpt.index;
       matchedOpt.selected = true;
 
