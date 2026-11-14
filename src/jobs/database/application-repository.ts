@@ -5,6 +5,14 @@
 import { STORES } from '../../database/indexeddb';
 import { ApplicationTrackerRecord, ApplicationStatus, NormalizedJobCircular } from '../types/job.types';
 import { SharedStoreCrud } from './job-repository';
+import { JobVisitRepository } from './job-visit-repository';
+
+export interface RepairMisclassifiedResult {
+  scanned: number;
+  repaired: number;
+  unmodified: number;
+  repairedRecords: ApplicationTrackerRecord[];
+}
 
 const appCrud = new SharedStoreCrud<ApplicationTrackerRecord>(STORES.APPLICATIONS, 'jobId');
 
@@ -50,6 +58,10 @@ export class ApplicationRepository {
         | 'admitCardUrl'
         | 'resultSummary'
         | 'resultUrl'
+        | 'submissionConfirmedAt'
+        | 'submissionAttemptedAt'
+        | 'needsReview'
+        | 'reviewReason'
       >
     > = {}
   ): Promise<ApplicationTrackerRecord> {
@@ -68,6 +80,11 @@ export class ApplicationRepository {
         extra.applicationDate ??
         existing?.applicationDate ??
         (status === 'Applied' ? new Date().toISOString().slice(0, 10) : undefined),
+      submissionAttemptedAt: extra.submissionAttemptedAt ?? existing?.submissionAttemptedAt,
+      submissionConfirmedAt:
+        extra.submissionConfirmedAt ??
+        existing?.submissionConfirmedAt ??
+        (status === 'Applied' ? now : undefined),
       teletalkUserId: extra.teletalkUserId ?? existing?.teletalkUserId,
       applicationRefId: extra.applicationRefId ?? existing?.applicationRefId,
       transactionId: extra.transactionId ?? existing?.transactionId,
@@ -81,11 +98,75 @@ export class ApplicationRepository {
       admitCardUrl: extra.admitCardUrl ?? existing?.admitCardUrl,
       resultSummary: extra.resultSummary ?? existing?.resultSummary,
       resultUrl: extra.resultUrl ?? existing?.resultUrl,
+      needsReview: extra.needsReview ?? (status === 'Applied' ? false : existing?.needsReview),
+      reviewReason: extra.reviewReason ?? (status === 'Applied' ? undefined : existing?.reviewReason),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
     await appCrud.put(record);
     return record;
+  }
+
+  /**
+   * Repairs misclassified "Applied" records that have zero submission evidence
+   * (no confirmation timestamp, no User ID, no applicant ID, no transaction ID,
+   * no exam info, and no notes). Safely reclassifies them to 'Needs Manual Confirmation'
+   * with needsReview=true and ensures a visit record exists in JobVisitRepository.
+   * Never deletes records or loses user data.
+   */
+  public static async repairMisclassifiedRecords(): Promise<RepairMisclassifiedResult> {
+    const all = await this.getAll();
+    let repairedCount = 0;
+    const repairedRecords: ApplicationTrackerRecord[] = [];
+
+    for (const rec of all) {
+      if (rec.status === 'Applied') {
+        const hasEvidence = Boolean(
+          rec.submissionConfirmedAt ||
+            rec.teletalkUserId ||
+            rec.applicantId ||
+            rec.applicationRefId ||
+            rec.transactionId ||
+            rec.examRoll ||
+            rec.examDate ||
+            rec.examVenue ||
+            rec.admitCardStatus ||
+            rec.resultSummary ||
+            (rec.notes && rec.notes.trim().length > 0)
+        );
+
+        if (!hasEvidence) {
+          rec.status = 'Needs Manual Confirmation';
+          rec.needsReview = true;
+          rec.reviewReason = 'Auto-detected: Marked as Applied without verified submission evidence.';
+          rec.updatedAt = Date.now();
+          await appCrud.put(rec);
+          repairedCount += 1;
+          repairedRecords.push(rec);
+
+          // Ensure visit is preserved in JobVisitRepository
+          try {
+            await JobVisitRepository.recordVisit({
+              jobId: rec.jobId,
+              jobTitle: rec.jobTitle,
+              organization: rec.organization,
+              circularUrl: rec.circularUrl || rec.applicationUrl || '',
+              deadlineAt: rec.deadlineAt,
+              verificationStatus: 'verified',
+            });
+          } catch {
+            // safe fallback
+          }
+        }
+      }
+    }
+
+    return {
+      scanned: all.length,
+      repaired: repairedCount,
+      unmodified: all.length - repairedCount,
+      repairedRecords,
+    };
   }
 
   public static async exportBackup(): Promise<{ schemaVersion: 1; exportedAt: string; records: ApplicationTrackerRecord[] }> {

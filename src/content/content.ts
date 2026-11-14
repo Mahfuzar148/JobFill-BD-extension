@@ -474,6 +474,14 @@ async function initAssistant() {
         `🎉 আবেদন সফলভাবে গৃহীত হয়েছে!` +
           (confirmation.teletalkUserId ? ` (User ID: ${confirmation.teletalkUserId})` : '')
       );
+    } else if (confirmation.needsManualConfirmation && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'FLAG_APPLICATION_NEEDS_CONFIRMATION',
+        payload: {
+          teletalkUserId: confirmation.teletalkUserId,
+          applicantId: confirmation.applicantId,
+        },
+      });
     }
     // Also check for newly generated portal credentials
     const generated = LoginFormDetector.detectGeneratedPortalCredentials(document);

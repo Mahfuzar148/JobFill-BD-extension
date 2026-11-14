@@ -65,6 +65,8 @@ export interface ExtensionMessage {
     | 'SET_VISIT_TRACKING_ENABLED'
     | 'RECORD_APPLICATION_SUBMIT_ATTEMPT'
     | 'CONFIRM_APPLICATION_SUBMISSION'
+    | 'FLAG_APPLICATION_NEEDS_CONFIRMATION'
+    | 'REPAIR_MISCLASSIFIED_APPLICATIONS'
     | 'GET_TRUSTED_AUTOFILL_ORIGINS'
     | 'SET_TRUSTED_AUTOFILL_ORIGIN'
     | 'PROFILE_UPDATE_APPROVE'
@@ -822,11 +824,54 @@ export class MessageRouter {
               target.submissionConfirmedAt = confirmedAt || Date.now();
               if (teletalkUserId) target.teletalkUserId = teletalkUserId;
               if (applicantId) target.applicantId = applicantId;
+              target.needsReview = false;
+              target.reviewReason = undefined;
               await ApplicationRepository.upsert(target);
               sendResponse({ status: 'ok', application: target });
             } else {
               sendResponse({ status: 'no_pending_application' });
             }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'FLAG_APPLICATION_NEEDS_CONFIRMATION': {
+        (async () => {
+          try {
+            const { jobId, teletalkUserId, applicantId } = message.payload || {};
+            let target = jobId ? await ApplicationRepository.getByJobId(jobId) : null;
+            if (!target) {
+              const all = await ApplicationRepository.getAll();
+              target =
+                all.find((a) => a.status === 'Submission Pending Verification' || a.status === 'Application Started') ||
+                null;
+            }
+            if (target) {
+              target.status = 'Needs Manual Confirmation';
+              target.needsReview = true;
+              target.reviewReason = 'Ambiguous submission detected on portal';
+              if (teletalkUserId) target.teletalkUserId = teletalkUserId;
+              if (applicantId) target.applicantId = applicantId;
+              await ApplicationRepository.upsert(target);
+              sendResponse({ status: 'ok', application: target });
+            } else {
+              sendResponse({ status: 'no_pending_application' });
+            }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REPAIR_MISCLASSIFIED_APPLICATIONS': {
+        (async () => {
+          try {
+            const result = await ApplicationRepository.repairMisclassifiedRecords();
+            sendResponse({ status: 'ok', result });
           } catch (err: any) {
             sendResponse({ status: 'error', error: err?.message });
           }

@@ -21,6 +21,8 @@ export interface CircularPageDetectionResult {
 export interface ApplicationConfirmationResult {
   isConfirmed: boolean;
   isFailure: boolean;
+  isAmbiguous?: boolean;
+  needsManualConfirmation?: boolean;
   applicantId?: string;
   teletalkUserId?: string;
   successMessage?: string;
@@ -125,6 +127,8 @@ export function detectJobCircularPage(
 
 /**
  * Checks if the current page displays an official application submission receipt or confirmation.
+ * Strictly requires verified submission evidence (never misclassifies circular overviews,
+ * FAQs, payment instructions, or preliminary application preview screens as applied).
  */
 export function detectApplicationConfirmation(doc: Document): ApplicationConfirmationResult {
   const bodyText = (doc.body ? (doc.body.innerText || doc.body.textContent || '') : '') || '';
@@ -144,29 +148,63 @@ export function detectApplicationConfirmation(doc: Document): ApplicationConfirm
     };
   }
 
-  // 2. Detect Teletalk User ID (e.g. User ID: ABC12345)
+  // 2. Disqualify Job Circular overview pages (e.g., circular announcements, vacancies, requirement pages)
+  try {
+    const isCircularPage = Boolean(detectJobCircularPage(doc));
+    if (isCircularPage) {
+      return {
+        isConfirmed: false,
+        isFailure: false,
+      };
+    }
+  } catch {
+    // safe fallback
+  }
+
+  // 3. Disqualify active unfilled application forms
+  const forms = Array.from(doc.querySelectorAll<HTMLFormElement>('form'));
+  const hasActiveJobForm = forms.some((f) => isJobApplicationForm(f));
+  if (hasActiveJobForm) {
+    return {
+      isConfirmed: false,
+      isFailure: false,
+    };
+  }
+
+  // 4. Detect Teletalk User ID (e.g. User ID: ABC12345)
   const userIdMatch = bodyText.match(/User\s*ID\s*[:：\-]\s*([A-Za-z0-9_-]{4,24})/i);
   const teletalkUserId = userIdMatch ? userIdMatch[1].trim() : undefined;
 
-  // 3. Detect Application / Applicant Reference ID
-  const appIdMatch = bodyText.match(/(?:Applicant|Application|Tracking|Registration|Ref)\s*(?:ID|No|Number|Code)\s*[:：\-]\s*#?([A-Za-z0-9_-]{4,25})/i);
+  // 5. Detect Application / Applicant Reference ID (English & Bengali)
+  const appIdMatch = bodyText.match(
+    /(?:Applicant|Application|Tracking|Registration|Ref|রেজিস্ট্রেশন|আবেদন)\s*(?:ID|No|Number|Code|নম্বর|নং|আইডি)?\s*[:：\-]\s*#?([A-Za-z0-9_-]{4,25})/i
+  );
   const applicantId = appIdMatch ? appIdMatch[1].trim() : undefined;
 
-  // 4. Detect Confirmation / Applicant Copy Keywords
-  const hasSuccessKeywords =
-    /Application\s+Submitted\s+Successfully/i.test(bodyText) ||
+  // 6. Detect Explicit Submission Confirmation Headlines & Text
+  const hasStrictSuccessText =
+    /Application\s+(?:Submitted|Submission)\s+(?:Successfully|Confirmed)/i.test(bodyText) ||
     /আবেদন\s*সফলভাবে\s*গৃহীত/i.test(bodyText) ||
-    /Your\s+application\s+has\s+been\s+received/i.test(bodyText) ||
-    /Your\s+application\s+has\s+been\s+submitted/i.test(bodyText) ||
-    /Applicant(?:'s)?\s+Copy/i.test(bodyText) ||
-    /Application\s+Preview/i.test(bodyText) ||
-    /Payment\s+Instructions/i.test(bodyText);
+    /Your\s+application\s+has\s+been\s+(?:received|submitted)/i.test(bodyText) ||
+    /Application\s+successfully\s+received/i.test(bodyText) ||
+    /Congratulations[,!\s]+your\s+application\s+(?:has\s+been|is)\s+submitted/i.test(bodyText);
 
-  const isConfirmed = Boolean(hasSuccessKeywords || teletalkUserId || applicantId);
+  // 7. Detect Official Applicant's Copy Heading (slip representation)
+  const hasApplicantCopyHeader =
+    /(?:Applicant|Candidate)(?:'s)?\s+Copy/i.test(bodyText) ||
+    /আবেদনকারীর\s*কপি/i.test(bodyText);
+
+  // Confirmed ONLY when explicit success text is present, OR an official Applicant's Copy slip contains an extracted ID
+  const isConfirmed = Boolean(hasStrictSuccessText || (hasApplicantCopyHeader && (teletalkUserId || applicantId)));
+
+  // If candidate ID exists but without explicit success confirmation or applicant copy, mark as ambiguous
+  const isAmbiguous = !isConfirmed && Boolean((teletalkUserId || applicantId) && !hasFailureNotice);
 
   return {
     isConfirmed,
     isFailure: false,
+    isAmbiguous,
+    needsManualConfirmation: isAmbiguous,
     applicantId,
     teletalkUserId,
     successMessage: isConfirmed ? 'Application Submission Confirmed' : undefined,

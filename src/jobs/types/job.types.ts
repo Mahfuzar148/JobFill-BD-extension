@@ -264,6 +264,8 @@ export type ApplicationStatus =
   | 'Submission Pending Verification'
   | 'Applied'
   | 'Submission Failed'
+  | 'Needs Manual Confirmation'
+  | 'Cancelled'
   | 'Payment Pending'
   | 'Payment Completed'
   | 'Admit Card Available'
@@ -309,6 +311,8 @@ export interface ApplicationTrackerRecord {
   resultUrl?: string;
   createdAt: number;
   updatedAt: number;
+  needsReview?: boolean;
+  reviewReason?: string;
 }
 
 export interface JobVisitRecord {

@@ -344,6 +344,16 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         setTrackVisitsEnabled(visitsEnabled !== false);
         setLoadState(computeHubState(cleanedJobs, outcomes));
 
+        // Auto-repair any historical misclassified records in background without blocking UI
+        ApplicationRepository.repairMisclassifiedRecords()
+          .then((repairRes) => {
+            if (repairRes.repaired > 0) {
+              ApplicationRepository.getAll().then(setApplications);
+              JobVisitRepository.getAllVisits().then(setVisitedRecords);
+            }
+          })
+          .catch(() => {});
+
         // Only auto-sync on first empty open; background chrome.alarms & manual Sync handle ongoing checks
         const isExtensionContext = typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
         const isFirstEmptyOpen = cleanedJobs.length === 0 && outcomes.length === 0;
@@ -467,7 +477,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
       list = list.filter((j) => isJobMatchingStatFilter(j, 'closing_soon', bookmarkedIds, appByJobId, now));
     }
     if (hubTab === 'applied') {
-      list = list.filter((j) => appByJobId.has(j.id));
+      list = list.filter((j) => appByJobId.get(j.id)?.status === 'Applied');
     }
     return list;
   }, [jobs, filters, bookmarkedIds, applyMyPrefsFilter, hubTab, preferences, appByJobId]);
@@ -830,7 +840,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           { id: 'visited', label: bn ? 'সম্প্রতি দেখা' : 'Visited History', count: visitedRecords.length, icon: History },
           { id: 'bookmarked', label: bn ? 'বুকমার্ক' : 'Bookmarked', count: bookmarkedIds.size, icon: Bookmark },
           { id: 'closing_soon', label: bn ? 'শীঘ্রই শেষ' : 'Closing Soon', count: summary.closingSoon, icon: Clock },
-          { id: 'applied', label: bn ? 'আবেদিত' : 'Applied', count: applications.length, icon: CheckCircle2 },
+          { id: 'applied', label: bn ? 'আবেদিত' : 'Applied', count: applications.filter((a) => a.status === 'Applied').length, icon: CheckCircle2 },
         ].map((tab) => {
           const isActive = hubTab === tab.id;
           const Icon = tab.icon;
@@ -1381,6 +1391,10 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           <h3 className="text-sm font-bold text-slate-800 dark:text-white">
             {jobs.length === 0
               ? bn ? 'এখনও কোনো জব সার্কুলার সংরক্ষিত নেই' : 'No Job Circulars Saved Yet'
+              : hubTab === 'applied'
+              ? bn ? 'আপনি এখনও কোনো চাকরিতে আবেদন সম্পন্ন করেননি' : 'No applications submitted yet'
+              : hubTab === 'bookmarked'
+              ? bn ? 'কোনো সার্কুলার বুকমার্ক করা নেই' : 'No bookmarked circulars'
               : bn ? 'আপনার ফিল্টার অনুযায়ী কোনো চাকরি পাওয়া যায়নি' : 'No circulars match your current filters'}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
@@ -1388,6 +1402,10 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
               ? bn
                 ? '"আপডেট চেক করুন" ক্লিক করে অফিশিয়াল পোর্টাল (BPSC, বাংলাদেশ ব্যাংক, Bdjobs) থেকে রিয়েল বিজ্ঞপ্তি আনুন অথবা নিজে সার্কুলার যুক্ত করুন।'
                 : 'Click "Fetch Latest" to collect live circulars from verified public sources (BPSC, Bangladesh Bank, Bdjobs, Discovery RSS) or add a circular manually.'
+              : hubTab === 'applied'
+              ? bn
+                ? 'যেসব চাকরির আবেদন সম্পন্ন হয়েছে অথবা আপনি ম্যানুয়ালি "আবেদন সম্পন্ন" হিসেবে চিহ্নিত করেছেন, সেগুলো এখানে থাকবে।'
+                : 'Jobs where submission was confirmed or that you marked as applied will appear here.'
               : bn
                 ? 'ফিল্টার রিসেট করে আবার চেষ্টা করুন।'
                 : 'Try clearing or adjusting your search filters.'}
