@@ -274,9 +274,13 @@ export function filterAndSortJobs(
     if (!matchesJobLocation(job, filters.location)) return false;
     if (!matchesJobDeadline(job, filters.deadline, now)) return false;
 
-    // 6. Universal Job Taxonomy Category and Subcategory
+    // 6. Universal Job Taxonomy Category and Subcategory (Multi-Label Aware)
     if (filters.taxonomyCategory && filters.taxonomyCategory !== 'All') {
-      const matchCat = job.taxonomyCategoryId === filters.taxonomyCategory;
+      const targetCat = JobTaxonomyRegistry.resolveCategoryId(filters.taxonomyCategory);
+      const matchCat =
+        job.taxonomyCategoryId === targetCat ||
+        Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes(targetCat)) ||
+        (targetCat === 'other_unclassified' && Boolean(job.isUnclassified));
       const allowUnclassified = Boolean(filters.includeUnclassified && job.isUnclassified);
       if (!matchCat && !allowUnclassified) return false;
     }

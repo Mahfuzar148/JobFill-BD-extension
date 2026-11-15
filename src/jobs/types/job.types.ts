@@ -132,6 +132,9 @@ export interface NormalizedJobCircular {
   taxonomyCategoryId?: string;
   taxonomyCategoryNameEn?: string;
   taxonomyCategoryNameBn?: string;
+  taxonomyCategoryIds?: string[];
+  primaryCategoryId?: string;
+  secondaryCategoryIds?: string[];
   taxonomySubcategoryId?: string;
   taxonomySubcategoryNameEn?: string;
   taxonomySubcategoryNameBn?: string;
@@ -140,7 +143,9 @@ export interface NormalizedJobCircular {
   workMode?: WorkMode;
   experienceLevel?: ExperienceLevel;
   classificationConfidence?: number;
-  classificationMethod?: 'RULE_BASED' | 'ORGANIZATION_MAPPING' | 'SOURCE_DEFAULT' | 'UNCLASSIFIED';
+  classificationMethod?: 'RULE_BASED' | 'ORGANIZATION_MAPPING' | 'SOURCE_DEFAULT' | 'UNCLASSIFIED' | 'MULTI_LABEL';
+  classificationEvidence?: string[];
+  verificationState?: 'VERIFIED' | 'HIGH_CONFIDENCE_UNVERIFIED' | 'AMBIGUOUS' | 'UNCLASSIFIED' | 'NOT_APPLICABLE';
   isUnclassified?: boolean;
   employmentType: JobEmploymentType;
   vacancies?: number | null;

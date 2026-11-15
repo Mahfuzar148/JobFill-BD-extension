@@ -20,6 +20,7 @@ import { migrateLegacyCircularRecord } from '../services/application-link-detect
 import { computeJobFieldVerification } from '../services/job-normalizer';
 import { JobGradeExtractor } from '../services/grade-extractor';
 import { JobTaxonomyClassifier } from '../services/taxonomy-classifier';
+import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
 
 const FALLBACK_PREFIX = 'jobfill_idb_fallback_';
 const KEY_JOB_PREFERENCES = 'jobfill_job_preferences_v1';
@@ -336,8 +337,23 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
     gradeVerificationStatus: gradeInfo.gradeVerificationStatus,
   };
 
-  if (upgraded.taxonomyCategoryId === undefined) {
+  if (
+    upgraded.taxonomyCategoryId === undefined ||
+    !upgraded.taxonomyCategoryIds ||
+    upgraded.taxonomyCategoryIds.length === 0
+  ) {
     JobTaxonomyClassifier.enrichJobWithTaxonomy(upgraded);
+  } else {
+    // Ensure canonical ID resolution for legacy categories
+    upgraded.taxonomyCategoryId = JobTaxonomyRegistry.resolveCategoryId(upgraded.taxonomyCategoryId);
+    if (!upgraded.primaryCategoryId) {
+      upgraded.primaryCategoryId = upgraded.taxonomyCategoryId;
+    }
+    if (upgraded.taxonomyCategoryIds) {
+      upgraded.taxonomyCategoryIds = upgraded.taxonomyCategoryIds.map((id) =>
+        JobTaxonomyRegistry.resolveCategoryId(id)
+      );
+    }
   }
 
   return upgraded;

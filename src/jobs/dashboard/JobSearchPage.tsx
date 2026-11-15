@@ -76,6 +76,7 @@ import {
   buildPrefillFromSourceHealthItem,
 } from './AddJobCircularModal';
 import { MissingApplicationUrlModal } from './MissingApplicationUrlModal';
+import { JobCategoryDiscoveryHub } from './JobCategoryDiscoveryHub';
 import { NotificationScheduler } from '../notifications/notification-scheduler';
 import { runOpenTabPortalSyncWithFeedback } from '../services/open-tab-portal-sync';
 import {
@@ -327,6 +328,68 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
     searchState,
     taxonomyCategory,
     taxonomySubcategory,
+    employerType,
+    workMode,
+    experienceLevel,
+    selectedGrades,
+    minGpa,
+    includeUnclassified,
+    loadAllState,
+    onDataChanged,
+    showToast,
+    bn,
+  ]);
+
+  const handleCategoryHubOnlineSearch = useCallback(async (catId?: string, subCatId?: string) => {
+    setSyncing(true);
+    setHardSyncError(null);
+    try {
+      const filtersForSearch: JobSearchFilters = {
+        query: draftQuery.trim() || searchState.query,
+        category: searchState.category,
+        education: searchState.education,
+        employmentType: 'All',
+        deadline: searchState.deadline,
+        location: (searchState.location as any) || 'All',
+        sortBy: searchState.sortBy as any,
+        taxonomyCategory: catId || 'All',
+        taxonomySubcategory: subCatId || 'All',
+        employerType,
+        workMode,
+        experienceLevel,
+        selectedGrades,
+        minGpa,
+        includeUnclassified,
+      };
+
+      const report = await FederatedSearchOrchestrator.executeFederatedSearch({
+        filters: filtersForSearch,
+        onProgress: (prog) => {
+          setFederatedProgress(prog);
+        },
+      });
+
+      setFederatedReport(report);
+      setLastRunNewJobsCount(report.uniqueNewSavedCount);
+      await loadAllState();
+      onDataChanged?.();
+
+      showToast(
+        bn
+          ? `✅ লাইভ অনলাইন সার্চ সম্পন্ন: ${report.uniqueNewSavedCount}টি নতুন সার্কুলার যুক্ত হয়েছে (${report.successfulSourcesCount}/${report.configuredSourcesCount} সোর্স সফল)`
+          : `✅ Live Search complete: ${report.uniqueNewSavedCount} new circular(s) indexed (${report.successfulSourcesCount}/${report.configuredSourcesCount} sources succeeded)`
+      );
+    } catch (err: any) {
+      const msg = err?.message || 'Federated search failed';
+      setHardSyncError(msg);
+      showToast(`❌ ${msg}`);
+    } finally {
+      setSyncing(false);
+      setFederatedProgress(null);
+    }
+  }, [
+    draftQuery,
+    searchState,
     employerType,
     workMode,
     experienceLevel,
@@ -702,8 +765,8 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <div>{bn ? '১. সব ক্যাটাগরি ও পূর্ণ অনুসন্ধান' : '1. All Categories (Search Everything)'}</div>
-            <div className="text-[10.5px] font-normal opacity-80">{bn ? 'অনলাইন ও লোকাল সব ২০টি ক্যাটাগরি' : 'All 20 Categories (Online + Local)'}</div>
+            <div>{bn ? '১. ইউনিভার্সাল ক্যাটাগরি হাব' : '1. Universal Category Hub'}</div>
+            <div className="text-[10.5px] font-normal opacity-80">{bn ? 'সব ২৭টি পেশা, সাব-ক্যাটাগরি ও ব্রাউজার' : 'All 27 Categories, Subcategories & Browser'}</div>
           </button>
 
           <button
@@ -1151,7 +1214,7 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                   }}
                   className="h-9 text-xs border border-emerald-300 dark:border-emerald-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-emerald-900 dark:text-emerald-200 font-semibold"
                 >
-                  <option value="All">{bn ? 'সব পেশা (A-T সার্বজনীন)' : 'All 20 Categories (A-T)'}</option>
+                  <option value="All">{bn ? 'সব পেশা (২৭টি সার্বজনীন ক্যাটাগরি)' : 'All 27 Categories'}</option>
                   {JobTaxonomyRegistry.getAll().map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.code}. {bn ? c.labelBn : c.labelEn}
@@ -1463,7 +1526,24 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
       </div>
 
       {/* Results List / Loading Skeletons / Empty State */}
-      {loading ? (
+      {searchMode === 'all_categories' ? (
+        <JobCategoryDiscoveryHub
+          jobs={jobs}
+          language={language}
+          onSelectJob={(j) => setSelectedJob(j)}
+          onApplyJob={(j) => openJobApplicationWithContext(j, showToast, bn, setMissingAppJob)}
+          onBookmarkJob={async (j) => {
+            const appRecord = appByJobId.get(j.id);
+            const res = await toggleJobBookmarkAndSync(j.id, jobs, appRecord, showToast, bn);
+            setBookmarkedIds(res.bookmarkedIds);
+            setApplications(res.applications);
+            onDataChanged?.();
+          }}
+          bookmarkedIds={bookmarkedIds}
+          onRunOnlineSearch={handleCategoryHubOnlineSearch}
+          isSearchingOnline={syncing}
+        />
+      ) : loading ? (
         <div className="space-y-3" aria-label="Loading search results">
           {[1, 2, 3].map((idx) => (
             <div

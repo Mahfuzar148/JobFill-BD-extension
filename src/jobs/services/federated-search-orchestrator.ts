@@ -3,9 +3,10 @@
 // Enforces:
 // 1. Never merely filters IndexedDB on "Search Online" — performs real network queries.
 // 2. Concurrency bounding and progressive pagination across permitted source pages.
-// 3. Bilingual query expansion (English & Bengali).
-// 4. Safe upsert & deduplication into IndexedDB with search index rebuilding.
-// 5. Honest coverage reporting — never fabricates 100% web coverage or fake counts.
+// 3. Category-to-Source capability matrix (reports NOT_SUPPORTED instead of fake failure).
+// 4. Bilingual query expansion (English & Bengali).
+// 5. Safe upsert & deduplication into IndexedDB with search index rebuilding.
+// 6. Honest coverage reporting — never fabricates 100% web coverage or fake counts.
 
 import {
   NormalizedJobCircular,
@@ -22,16 +23,28 @@ import { JobTaxonomyClassifier } from './taxonomy-classifier';
 import { filterAndSortJobs } from '../dashboard/JobFilters';
 import { parseDeadlineDate } from './deadline-parser';
 
+export type SourceCoverageStatus =
+  | 'SUCCESS'
+  | 'PARTIAL'
+  | 'NOT_SUPPORTED'
+  | 'NOT_CONFIGURED'
+  | 'BLOCKED'
+  | 'FAILED'
+  | 'COOLDOWN'
+  | 'DISABLED';
+
 export interface SourceCoverageItem {
   sourceId: string;
   sourceName: string;
   sourceType: string;
-  status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'BLOCKED' | 'COOLDOWN' | 'DISABLED';
+  status: SourceCoverageStatus;
+  coverageState?: 'SUPPORTED' | 'PARTIAL' | 'NOT_SUPPORTED' | 'NOT_CONFIGURED' | 'BLOCKED' | 'NOT_TESTED';
   pagesFetched: number;
   retrievedCount: number;
   newJobsCount: number;
   durationMs: number;
   error?: string;
+  reason?: string;
 }
 
 export interface FederatedSearchResultReport {
@@ -40,6 +53,7 @@ export interface FederatedSearchResultReport {
   successfulSourcesCount: number;
   partialSourcesCount: number;
   failedSourcesCount: number;
+  notSupportedSourcesCount: number;
   pagesFetchedTotal: number;
   rawRecordsTotal: number;
   validRecordsTotal: number;
@@ -65,8 +79,82 @@ export interface FederatedSearchProgress {
   retrievedSoFar: number;
 }
 
+// Source-to-Category Capability Mapping Matrix
+const SOURCE_SUPPORTED_CATEGORIES: Record<string, string[] | 'ALL'> = {
+  bpsc: [
+    'govt_public',
+    'education_research',
+    'medical_healthcare',
+    'engineering_architecture',
+    'business_management',
+    'science_statistics',
+    'agriculture_fisheries',
+    'legal_compliance',
+    'other_unclassified',
+  ],
+  teletalk: [
+    'govt_public',
+    'banking_finance',
+    'education_research',
+    'medical_healthcare',
+    'engineering_architecture',
+    'defence_security',
+    'telecom_communication',
+    'environment_energy',
+    'transport_logistics',
+    'aviation_aerospace',
+    'other_unclassified',
+  ],
+  'national-portal': [
+    'govt_public',
+    'education_research',
+    'medical_healthcare',
+    'agriculture_fisheries',
+    'social_services',
+    'environment_energy',
+    'other_unclassified',
+  ],
+  'bangladesh-bank': [
+    'banking_finance',
+    'govt_public',
+    'it_software',
+    'business_management',
+    'legal_compliance',
+    'science_statistics',
+    'other_unclassified',
+  ],
+  dpe: ['education_research', 'govt_public', 'other_unclassified'],
+  ntrca: ['education_research', 'govt_public', 'other_unclassified'],
+  bdjobs: 'ALL',
+  'google-news-discovery': 'ALL',
+  reliefweb: [
+    'ngo_development',
+    'social_services',
+    'medical_healthcare',
+    'environment_energy',
+    'agriculture_fisheries',
+    'other_unclassified',
+  ],
+  remotive: ['it_software', 'media_creative', 'sales_marketing', 'business_management', 'other_unclassified'],
+  remoteok: ['it_software', 'media_creative', 'sales_marketing', 'business_management', 'other_unclassified'],
+  himalayas: ['it_software', 'media_creative', 'sales_marketing', 'business_management', 'other_unclassified'],
+  arbeitnow: ['it_software', 'media_creative', 'sales_marketing', 'business_management', 'other_unclassified'],
+};
+
 export class FederatedSearchOrchestrator {
   private static readonly MAX_CONCURRENT_REQUESTS = 4;
+
+  /**
+   * Checks whether a source officially covers the requested category.
+   */
+  public static isSourceSupportingCategory(sourceId: string, categoryId?: string): boolean {
+    if (!categoryId || categoryId === 'All') return true;
+    const canonical = JobTaxonomyRegistry.resolveCategoryId(categoryId);
+    const supported = SOURCE_SUPPORTED_CATEGORIES[sourceId];
+    if (!supported) return true;
+    if (supported === 'ALL') return true;
+    return supported.includes(canonical);
+  }
 
   /**
    * Constructs bilingual query keywords and variations based on filters.
@@ -76,6 +164,7 @@ export class FederatedSearchOrchestrator {
     expandedTerms: string[];
     targetCategoryNameEn?: string;
     targetCategoryNameBn?: string;
+    targetCategoryId?: string;
   } {
     const rawQuery = (filters.query || '').trim();
     const expanded = new Set<string>();
@@ -83,11 +172,13 @@ export class FederatedSearchOrchestrator {
 
     let targetCategoryNameEn: string | undefined;
     let targetCategoryNameBn: string | undefined;
+    let targetCategoryId: string | undefined;
 
     // Check Taxonomy Category
     if (filters.taxonomyCategory && filters.taxonomyCategory !== 'All') {
       const catDef = JobTaxonomyRegistry.getById(filters.taxonomyCategory);
       if (catDef) {
+        targetCategoryId = catDef.id;
         targetCategoryNameEn = catDef.labelEn;
         targetCategoryNameBn = catDef.labelBn;
         catDef.keywordsEn.slice(0, 3).forEach((k) => expanded.add(k.toLowerCase()));
@@ -119,6 +210,7 @@ export class FederatedSearchOrchestrator {
       expandedTerms: Array.from(expanded).slice(0, 8),
       targetCategoryNameEn,
       targetCategoryNameBn,
+      targetCategoryId,
     };
   }
 
@@ -133,22 +225,50 @@ export class FederatedSearchOrchestrator {
     const { filters, signal, onProgress } = options;
     const now = Date.now();
 
+    const adapters = JobSourceRegistry.getAll();
+    const searchPlan = this.buildSearchPlan(filters);
+
     onProgress?.({
       phase: 'planning',
       completedSources: 0,
-      totalSources: JobSourceRegistry.getAll().length,
+      totalSources: adapters.length,
       retrievedSoFar: 0,
     });
 
-    const searchPlan = this.buildSearchPlan(filters);
-    const adapters = JobSourceRegistry.getAll();
     const sourceCoverageItems: SourceCoverageItem[] = [];
     const collectedRawJobs: Array<{ raw: RawSourceJobItem; adapter: JobSourceAdapter }> = [];
 
     let completedCount = 0;
     let pagesTotal = 0;
+    let notSupportedCount = 0;
 
-    // Helper to run adapter with timing and error isolation
+    // Filter which adapters are relevant for the selected category
+    const targetCatId = searchPlan.targetCategoryId;
+    const activeAdapters: JobSourceAdapter[] = [];
+
+    for (const adapter of adapters) {
+      if (targetCatId && !this.isSourceSupportingCategory(adapter.sourceId, targetCatId)) {
+        // Record as NOT_SUPPORTED instead of treating it as an attempted failure
+        notSupportedCount++;
+        completedCount++;
+        sourceCoverageItems.push({
+          sourceId: adapter.sourceId,
+          sourceName: adapter.sourceName,
+          sourceType: adapter.sourceType,
+          status: 'NOT_SUPPORTED',
+          coverageState: 'NOT_SUPPORTED',
+          pagesFetched: 0,
+          retrievedCount: 0,
+          newJobsCount: 0,
+          durationMs: 0,
+          reason: `Source specializes in other fields and does not index ${searchPlan.targetCategoryNameEn || targetCatId}`,
+        });
+      } else {
+        activeAdapters.push(adapter);
+      }
+    }
+
+    // Helper to run active adapter with timing and error isolation
     const executeAdapter = async (adapter: JobSourceAdapter) => {
       if (signal?.aborted) return;
       const startMs = Date.now();
@@ -171,7 +291,7 @@ export class FederatedSearchOrchestrator {
         const isPartial = outcome.status === 'PARTIAL_SUCCESS' || outcome.connectionStatus === 'Partially Working';
         const isBlocked = Boolean(outcome.blockedByCaptcha || outcome.status === 'MANUAL_VERIFICATION_REQUIRED' || outcome.connectionStatus === 'Manual Verification Required');
 
-        const status: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'BLOCKED' | 'COOLDOWN' | 'DISABLED' = isBlocked
+        const status: SourceCoverageStatus = isBlocked
           ? 'BLOCKED'
           : isPartial
             ? 'PARTIAL'
@@ -184,6 +304,7 @@ export class FederatedSearchOrchestrator {
           sourceName: adapter.sourceName,
           sourceType: adapter.sourceType,
           status,
+          coverageState: isBlocked ? 'BLOCKED' : isPartial ? 'PARTIAL' : isSuccess ? 'SUPPORTED' : 'NOT_TESTED',
           pagesFetched: pages,
           retrievedCount: outcome.jobs.length,
           newJobsCount: 0, // will compute after dedupe
@@ -200,6 +321,7 @@ export class FederatedSearchOrchestrator {
           sourceName: adapter.sourceName,
           sourceType: adapter.sourceType,
           status: 'FAILED',
+          coverageState: 'NOT_TESTED',
           pagesFetched: 0,
           retrievedCount: 0,
           newJobsCount: 0,
@@ -217,10 +339,10 @@ export class FederatedSearchOrchestrator {
       }
     };
 
-    // Run sources in controlled concurrent pools
-    for (let i = 0; i < adapters.length; i += this.MAX_CONCURRENT_REQUESTS) {
+    // Run active sources in controlled concurrent pools
+    for (let i = 0; i < activeAdapters.length; i += this.MAX_CONCURRENT_REQUESTS) {
       if (signal?.aborted) break;
-      const chunk = adapters.slice(i, i + this.MAX_CONCURRENT_REQUESTS);
+      const chunk = activeAdapters.slice(i, i + this.MAX_CONCURRENT_REQUESTS);
       await Promise.all(chunk.map((adapter) => executeAdapter(adapter)));
     }
 
@@ -231,7 +353,7 @@ export class FederatedSearchOrchestrator {
       retrievedSoFar: collectedRawJobs.length,
     });
 
-    // Normalize and enrich each job
+    // Normalize and enrich each job with multi-label taxonomy
     const normalizedBatch: NormalizedJobCircular[] = [];
     let rejectedCount = 0;
 
@@ -320,10 +442,11 @@ export class FederatedSearchOrchestrator {
 
     return {
       configuredSourcesCount: adapters.length,
-      attemptedSourcesCount: completedCount,
+      attemptedSourcesCount: activeAdapters.length,
       successfulSourcesCount: successfulSources,
       partialSourcesCount: partialSources,
       failedSourcesCount: failedSources,
+      notSupportedSourcesCount: notSupportedCount,
       pagesFetchedTotal: pagesTotal,
       rawRecordsTotal: collectedRawJobs.length,
       validRecordsTotal: normalizedBatch.length,
