@@ -503,7 +503,7 @@ describe('JobFill BD — Dashboard Visual Document Wallet & Identity Gallery Sui
       await act(async () => {
         previewBtn?.click();
       });
-      await flushUi(200);
+      await flushUi(600);
 
       if (alertSpy.mock.calls.length > 0) {
         console.error('Alert called with:', alertSpy.mock.calls);

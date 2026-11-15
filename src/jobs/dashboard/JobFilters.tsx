@@ -16,6 +16,7 @@ import {
   Briefcase,
   Globe,
   Building2,
+  ExternalLink,
 } from 'lucide-react';
 import {
   JobSearchFilters,
@@ -32,9 +33,11 @@ import {
   EmployerType,
   WorkMode,
   ExperienceLevel,
+  JobSourceFilterGroup,
 } from '../types/job.types';
 import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
 import { DAY_MS, isTimestampInCurrentDhakaWeek } from '../services/deadline-parser';
+import { buildBdjobsSearchUrl } from '../sources/bdjobs/bdjobs.adapter';
 import {
   matchesSearchCategory,
   matchesJobEducation,
@@ -133,6 +136,129 @@ export const EXPERIENCE_LEVELS: ExperienceLevel[] = [
   'Not Specified',
 ];
 
+export interface SourceFilterGroupDefinition {
+  id: JobSourceFilterGroup;
+  labelEn: string;
+  labelBn: string;
+  shortLabelBn: string;
+  badgeColorClass: string;
+}
+
+export const SOURCE_FILTER_GROUPS: SourceFilterGroupDefinition[] = [
+  {
+    id: 'All',
+    labelEn: 'All Sources',
+    labelBn: 'সব সোর্স',
+    shortLabelBn: 'সব সোর্স',
+    badgeColorClass: 'border-slate-300 bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  },
+  {
+    id: 'government_portals',
+    labelEn: 'Government Portals',
+    labelBn: 'সরকারি পোর্টাল ও মন্ত্রণালয়',
+    shortLabelBn: 'সরকারি পোর্টাল',
+    badgeColorClass: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800',
+  },
+  {
+    id: 'teletalk',
+    labelEn: 'Teletalk Portals',
+    labelBn: 'টেলিটক পোর্টাল',
+    shortLabelBn: 'টেলিটক',
+    badgeColorClass: 'border-teal-300 bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-800',
+  },
+  {
+    id: 'bdjobs',
+    labelEn: 'Bdjobs.com',
+    labelBn: 'বিডিজবস (Bdjobs.com)',
+    shortLabelBn: 'বিডিজবস',
+    badgeColorClass: 'border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800',
+  },
+  {
+    id: 'bank_recruitment',
+    labelEn: 'Bank Recruitment',
+    labelBn: 'ব্যাংক নিয়োগ ও বাংলাদেশ ব্যাংক',
+    shortLabelBn: 'ব্যাংক নিয়োগ',
+    badgeColorClass: 'border-sky-300 bg-sky-50 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800',
+  },
+  {
+    id: 'ngo_ingo',
+    labelEn: 'NGO / INGO',
+    labelBn: 'এনজিও ও উন্নয়ন সংস্থা',
+    shortLabelBn: 'এনজিও / INGO',
+    badgeColorClass: 'border-cyan-300 bg-cyan-50 text-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-300 dark:border-cyan-800',
+  },
+  {
+    id: 'private_company',
+    labelEn: 'Private Company Websites',
+    labelBn: 'বেসরকারি কোম্পানি ও টেক',
+    shortLabelBn: 'বেসরকারি কোম্পানি',
+    badgeColorClass: 'border-purple-300 bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800',
+  },
+  {
+    id: 'international_jobs',
+    labelEn: 'International Jobs',
+    labelBn: 'আন্তর্জাতিক ও গ্লোবাল',
+    shortLabelBn: 'আন্তর্জাতিক',
+    badgeColorClass: 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800',
+  },
+];
+
+export function isJobMatchingSourceGroup(
+  job: NormalizedJobCircular,
+  group?: JobSourceFilterGroup
+): boolean {
+  if (!group || group === 'All') return true;
+  const sId = (job.sourceId || '').toLowerCase();
+  const sName = (job.sourceName || '').toLowerCase();
+  const cat = job.category;
+  const taxCat = job.taxonomyCategoryId;
+
+  switch (group) {
+    case 'bdjobs':
+      return sId.includes('bdjobs') || sName.includes('bdjobs');
+    case 'teletalk':
+      return sId.includes('teletalk') || sName.includes('teletalk');
+    case 'bank_recruitment':
+      return (
+        sId.includes('bangladesh-bank') ||
+        sId.includes('bangladesh_bank') ||
+        cat === 'Bank' ||
+        taxCat === 'banking_finance'
+      );
+    case 'ngo_ingo':
+      return (
+        sId === 'reliefweb' ||
+        cat === 'NGO' ||
+        taxCat === 'ngo_development' ||
+        job.employerType === 'NGO / INGO'
+      );
+    case 'private_company':
+      return (
+        ['remotive', 'remoteok', 'himalayas', 'arbeitnow'].includes(sId) ||
+        cat === 'Private' ||
+        job.employerType === 'Private Enterprise' ||
+        job.employerType === 'Multinational'
+      );
+    case 'international_jobs':
+      return (
+        ['reliefweb', 'himalayas', 'remoteok', 'remotive'].includes(sId) ||
+        cat === 'International Jobs' ||
+        job.location === 'Remote' ||
+        job.workMode === 'Remote'
+      );
+    case 'government_portals':
+      return (
+        ['bpsc', 'national-portal', 'dpe', 'ntrca'].includes(sId) ||
+        (cat === 'Government' && !sId.includes('bdjobs')) ||
+        (taxCat === 'govt_public' && !sId.includes('bdjobs')) ||
+        job.employerType === 'Government Ministry' ||
+        job.employerType === 'Directorate / Department'
+      );
+    default:
+      return true;
+  }
+}
+
 export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   query: '',
   category: 'All',
@@ -155,6 +281,7 @@ export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   experienceLevel: 'All',
   searchMode: 'smart_filter',
   includeUnclassified: true,
+  sourceGroup: 'All',
 };
 
 export function isJobMatchingStatFilter(
@@ -336,6 +463,13 @@ export function filterAndSortJobs(
       }
     }
 
+    // 12. Source Group Filter (Government, Teletalk, Bdjobs, Bank, NGO, Private, International)
+    if (filters.sourceGroup && filters.sourceGroup !== 'All') {
+      if (!isJobMatchingSourceGroup(job, filters.sourceGroup)) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -509,6 +643,14 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
       onRemove: () => update('minSalary', null),
     });
   }
+  if (filters.sourceGroup && filters.sourceGroup !== 'All') {
+    const srcDef = SOURCE_FILTER_GROUPS.find((s) => s.id === filters.sourceGroup);
+    activeChips.push({
+      id: 'sourceGroup',
+      label: `${bn ? 'সোর্স' : 'Source'}: ${srcDef ? (bn ? srcDef.shortLabelBn : srcDef.labelEn) : filters.sourceGroup}`,
+      onRemove: () => update('sourceGroup', 'All'),
+    });
+  }
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
@@ -578,6 +720,44 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
             <span className="hidden sm:inline">{bn ? 'রিসেট' : 'Reset'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Horizontal Job Source Filter Segmented Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
+        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0 flex items-center gap-1 mr-0.5">
+          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+          <span>{bn ? 'সোর্স ফিল্টার:' : 'Job Source:'}</span>
+        </span>
+        {SOURCE_FILTER_GROUPS.map((sg) => {
+          const isSelected = (filters.sourceGroup || 'All') === sg.id;
+          return (
+            <button
+              key={sg.id}
+              type="button"
+              onClick={() => update('sourceGroup', sg.id)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 cursor-pointer transition-all border ${
+                isSelected
+                  ? `${sg.badgeColorClass} shadow-xs ring-1 ring-offset-1 ring-emerald-500`
+                  : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+              title={bn ? sg.labelBn : sg.labelEn}
+            >
+              <span>{bn ? sg.shortLabelBn : sg.labelEn}</span>
+            </button>
+          );
+        })}
+
+        {/* External Search on Bdjobs Shortcut */}
+        <a
+          href={buildBdjobsSearchUrl(filters.query, filters.taxonomyCategory)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold shrink-0 border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors ml-auto cursor-pointer"
+          title={bn ? 'বিডিজবস ডট কম পোর্টালে সরাসরি খুঁজুন (নতুন ট্যাব)' : 'Search official Bdjobs.com in a new tab'}
+        >
+          <ExternalLink className="w-3 h-3 text-amber-600" />
+          <span>{bn ? 'বিডিজবসে সরাসরি খুঁজুন' : 'Search Bdjobs.com'}</span>
+        </a>
       </div>
 
       {/* Main Standard Filter Dropdowns */}

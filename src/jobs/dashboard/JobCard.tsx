@@ -314,8 +314,16 @@ export const JobCard: React.FC<JobCardProps> = ({
               <FileText className="w-3.5 h-3.5 shrink-0 text-slate-500" />
               <span>
                 {bn
-                  ? isPdfCircular ? 'অফিশিয়াল বিজ্ঞপ্তি (PDF)' : 'অফিশিয়াল বিজ্ঞপ্তি'
-                  : isPdfCircular ? 'Official Circular (PDF)' : 'Official Circular'}
+                  ? isPdfCircular
+                    ? 'অফিশিয়াল বিজ্ঞপ্তি (PDF)'
+                    : job.sourceId === 'bdjobs' || job.sourceName.toLowerCase().includes('bdjobs')
+                      ? 'Bdjobs সার্কুলার লিংক'
+                      : 'অফিশিয়াল বিজ্ঞপ্তি'
+                  : isPdfCircular
+                    ? 'Official Circular (PDF)'
+                    : job.sourceId === 'bdjobs' || job.sourceName.toLowerCase().includes('bdjobs')
+                      ? 'Original Bdjobs Circular'
+                      : 'Official Circular'}
               </span>
               <ExternalLink className="w-3 h-3 shrink-0" />
             </a>

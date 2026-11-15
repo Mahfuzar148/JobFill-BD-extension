@@ -229,6 +229,16 @@ export type JobSortOption =
   | 'organization_name'
   | 'recently_updated';
 
+export type JobSourceFilterGroup =
+  | 'All'
+  | 'government_portals'
+  | 'teletalk'
+  | 'bdjobs'
+  | 'private_company'
+  | 'bank_recruitment'
+  | 'ngo_ingo'
+  | 'international_jobs';
+
 export interface JobSearchFilters {
   query: string;
   category: JobCategory | 'All';
@@ -252,6 +262,7 @@ export interface JobSearchFilters {
   experienceLevel?: ExperienceLevel | 'All';
   searchMode?: 'all_categories' | 'smart_filter' | 'saved_jobs' | 'online_federated' | 'local_saved';
   includeUnclassified?: boolean;
+  sourceGroup?: JobSourceFilterGroup;
 }
 
 export interface BookmarkRecord {
