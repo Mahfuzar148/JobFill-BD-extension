@@ -336,6 +336,31 @@ export interface JobVisitRecord {
   visitCount: number;
   verificationStatus: 'verified' | 'unverified' | 'internal';
   deadlineAt?: number | null;
+  circularId?: string;
+  applicationUrl?: string | null;
+  subStatus?: string;
+}
+
+export interface VisitedTrackerItem {
+  id: string; // jobId or visitId
+  jobId?: string | null;
+  visitId?: string | null;
+  jobTitle: string;
+  organization: string;
+  circularId?: string;
+  circularUrl?: string;
+  applicationUrl?: string | null;
+  loginUrl?: string | null;
+  deadlineAt: number | null;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  subStatus: ApplicationStatus | 'Visited' | 'Viewed';
+  needsReview?: boolean;
+  reviewReason?: string;
+  verificationStatus: 'verified' | 'unverified' | 'internal';
+  applicationRecord?: ApplicationTrackerRecord | null;
+  visitRecord?: JobVisitRecord | null;
 }
 
 export type ReminderStatus =

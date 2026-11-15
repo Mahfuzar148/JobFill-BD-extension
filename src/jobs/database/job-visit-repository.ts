@@ -108,6 +108,9 @@ export class JobVisitRepository {
     circularUrl: string;
     deadlineAt?: number | null;
     verificationStatus?: 'verified' | 'unverified' | 'internal';
+    circularId?: string;
+    applicationUrl?: string | null;
+    subStatus?: string;
   }): Promise<JobVisitRecord | null> {
     const enabled = await this.isVisitTrackingEnabled();
     if (!enabled) return null;
@@ -130,6 +133,9 @@ export class JobVisitRepository {
         jobTitle: input.jobTitle && input.jobTitle !== 'Circular' ? input.jobTitle : existing.jobTitle,
         organization: input.organization && input.organization !== 'Unknown' ? input.organization : existing.organization,
         deadlineAt: input.deadlineAt ?? existing.deadlineAt,
+        circularId: input.circularId || existing.circularId,
+        applicationUrl: input.applicationUrl ?? existing.applicationUrl,
+        subStatus: input.subStatus || existing.subStatus,
         verificationStatus: existing.verificationStatus === 'verified' ? 'verified' : (input.verificationStatus || existing.verificationStatus),
         lastVisitedAt: now,
         visitCount: (existing.visitCount || 1) + 1,
@@ -152,6 +158,9 @@ export class JobVisitRepository {
       visitCount: 1,
       verificationStatus: input.verificationStatus || 'unverified',
       deadlineAt: input.deadlineAt ?? null,
+      circularId: input.circularId,
+      applicationUrl: input.applicationUrl || null,
+      subStatus: input.subStatus,
     };
 
     await visitCrud.put(newRecord);
@@ -160,6 +169,15 @@ export class JobVisitRepository {
 
   public static async removeVisit(visitId: string): Promise<void> {
     await visitCrud.remove(visitId);
+  }
+
+  public static async removeVisitByJobId(jobId: string): Promise<void> {
+    if (!jobId) return;
+    const all = await visitCrud.getAll();
+    const match = all.find((v) => v.jobId === jobId || v.visitId === jobId);
+    if (match) {
+      await visitCrud.remove(match.visitId);
+    }
   }
 
   public static async clearAllVisits(): Promise<void> {

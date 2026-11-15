@@ -28,14 +28,20 @@ import {
   Undo2,
   ShieldCheck,
   ShieldAlert,
+  Eye,
+  FileText,
+  Send,
+  ArrowUpRight,
 } from 'lucide-react';
 import {
   ApplicationTrackerRecord,
   ApplicationStatus,
   FeePaymentStatus,
   AdmitCardStatus,
+  VisitedTrackerItem,
+  JobVisitRecord,
 } from '../types/job.types';
-import { ApplicationRepository } from '../database/application-repository';
+import { ApplicationRepository, APPLIED_STATUS_SET } from '../database/application-repository';
 import { JobVisitRepository } from '../database/job-visit-repository';
 import { verifyJobUrl } from '../services/source-verifier';
 import { openApplicationPortalLoginTab } from '../services/job-ui-actions';
@@ -54,6 +60,11 @@ function toLocalDatetimeInputValue(ts?: number | null): string {
 function escapeCsvCell(value: unknown): string {
   const s = String(value ?? '').replace(/"/g, '""');
   return `"${s}"`;
+}
+
+export function toBnDigits(num: number | string): string {
+  const digits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+  return String(num).replace(/\d/g, (d) => digits[Number(d)]);
 }
 
 export const APPLICATION_STATUSES: ApplicationStatus[] = [
@@ -88,6 +99,8 @@ interface ApplicationTrackerProps {
   onDeleteRecord: (jobId: string) => Promise<void>;
   onOpenJob?: (jobId: string) => void;
   onRefreshRecords?: () => Promise<void>;
+  visits?: JobVisitRecord[];
+  initialTab?: 'visited' | 'applied';
 }
 
 export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
@@ -97,8 +110,15 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   onDeleteRecord,
   onOpenJob,
   onRefreshRecords,
+  visits,
+  initialTab = 'visited',
 }) => {
   const bn = language === 'bn';
+  const [primaryTab, setPrimaryTab] = useState<'visited' | 'applied'>(initialTab);
+  const [visitRecords, setVisitRecords] = useState<JobVisitRecord[]>(visits || []);
+  const [manualConfirmTarget, setManualConfirmTarget] = useState<VisitedTrackerItem | null>(null);
+  const [confirmUserId, setConfirmUserId] = useState('');
+  const [confirmTxnId, setConfirmTxnId] = useState('');
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'All'>('All');
   const [orgFilter, setOrgFilter] = useState<string>('All');
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilterMode>('All');
@@ -129,9 +149,26 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     }
   };
 
+  const loadVisits = async () => {
+    try {
+      const list = await JobVisitRepository.getAllVisits();
+      setVisitRecords(list);
+    } catch {
+      // safe fallback in unit tests
+    }
+  };
+
   useEffect(() => {
     void loadVaultCredentials();
   }, []);
+
+  useEffect(() => {
+    if (visits) {
+      setVisitRecords(visits);
+    } else {
+      void loadVisits();
+    }
+  }, [visits, records]);
 
   const getPortalDomain = (url?: string | null): string => {
     if (!url) return '';
@@ -169,17 +206,182 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     );
   };
 
-  const organizations = useMemo(
-    () => Array.from(new Set(records.map((r) => r.organization).filter(Boolean))).sort(),
-    [records]
-  );
+  // Derive VISITED and APPLIED collections with strict mutual exclusivity
+  const { visited, applied, visitedCount, appliedCount } = useMemo(() => {
+    const appliedList = records
+      .filter((r) => APPLIED_STATUS_SET.has(r.status))
+      .sort((a, b) => (b.submissionConfirmedAt || b.updatedAt) - (a.submissionConfirmedAt || a.updatedAt));
 
-  const filtered = useMemo(() => {
+    const appliedIds = new Set(appliedList.map((a) => a.jobId).filter(Boolean));
+    const appliedUrls = new Set(
+      appliedList
+        .flatMap((a) => [a.circularUrl, a.applicationUrl])
+        .filter(Boolean)
+        .map((u) => JobVisitRepository.canonicalizeJobUrl(u!))
+    );
+
+    const visitedMap = new Map<string, VisitedTrackerItem>();
+
+    // 1. Non-applied application records (e.g. Visited, Application Started, etc.)
+    for (const r of records) {
+      if (APPLIED_STATUS_SET.has(r.status)) continue;
+      if (r.jobId && appliedIds.has(r.jobId)) continue;
+      const cUrl = r.circularUrl ? JobVisitRepository.canonicalizeJobUrl(r.circularUrl) : '';
+      const aUrl = r.applicationUrl ? JobVisitRepository.canonicalizeJobUrl(r.applicationUrl) : '';
+      if (cUrl && appliedUrls.has(cUrl)) continue;
+      if (aUrl && appliedUrls.has(aUrl)) continue;
+
+      const key = r.jobId || cUrl || aUrl || `rec_${r.createdAt}`;
+      visitedMap.set(key, {
+        id: r.jobId,
+        jobId: r.jobId,
+        visitId: null,
+        jobTitle: r.jobTitle,
+        organization: r.organization,
+        circularId: r.circularId,
+        circularUrl: r.circularUrl,
+        applicationUrl: r.applicationUrl,
+        loginUrl: r.loginUrl,
+        deadlineAt: r.deadlineAt,
+        firstVisitedAt: r.createdAt,
+        lastVisitedAt: r.updatedAt,
+        visitCount: 1,
+        subStatus: r.status,
+        needsReview: r.needsReview,
+        reviewReason: r.reviewReason,
+        verificationStatus: 'verified',
+        applicationRecord: r,
+        visitRecord: null,
+      });
+    }
+
+    // 2. Job visits from repository
+    for (const v of visitRecords) {
+      if (v.jobId && appliedIds.has(v.jobId)) continue;
+      if (v.canonicalUrl && appliedUrls.has(v.canonicalUrl)) continue;
+      const vCanon = v.circularUrl ? JobVisitRepository.canonicalizeJobUrl(v.circularUrl) : '';
+      if (vCanon && appliedUrls.has(vCanon)) continue;
+
+      let matchKey: string | null = null;
+      if (v.jobId && visitedMap.has(v.jobId)) {
+        matchKey = v.jobId;
+      } else if (v.canonicalUrl && visitedMap.has(v.canonicalUrl)) {
+        matchKey = v.canonicalUrl;
+      } else if (vCanon && visitedMap.has(vCanon)) {
+        matchKey = vCanon;
+      } else {
+        for (const [k, item] of visitedMap.entries()) {
+          const iC = item.circularUrl ? JobVisitRepository.canonicalizeJobUrl(item.circularUrl) : '';
+          const iA = item.applicationUrl ? JobVisitRepository.canonicalizeJobUrl(item.applicationUrl) : '';
+          if (
+            (v.jobId && item.jobId === v.jobId) ||
+            (v.canonicalUrl && (iC === v.canonicalUrl || iA === v.canonicalUrl)) ||
+            (vCanon && (iC === vCanon || iA === vCanon))
+          ) {
+            matchKey = k;
+            break;
+          }
+        }
+      }
+
+      if (matchKey && visitedMap.has(matchKey)) {
+        const existing = visitedMap.get(matchKey)!;
+        existing.visitId = v.visitId;
+        existing.visitRecord = v;
+        existing.visitCount = Math.max(existing.visitCount, v.visitCount || 1);
+        existing.lastVisitedAt = Math.max(existing.lastVisitedAt, v.lastVisitedAt);
+        existing.firstVisitedAt = Math.min(existing.firstVisitedAt, v.firstVisitedAt);
+        if (!existing.circularUrl && v.circularUrl) existing.circularUrl = v.circularUrl;
+        if (!existing.applicationUrl && v.applicationUrl) existing.applicationUrl = v.applicationUrl;
+        if (!existing.circularId && v.circularId) existing.circularId = v.circularId;
+        if (!existing.deadlineAt && v.deadlineAt) existing.deadlineAt = v.deadlineAt;
+      } else {
+        const key = v.jobId || v.canonicalUrl || v.visitId;
+        visitedMap.set(key, {
+          id: v.visitId,
+          jobId: v.jobId || null,
+          visitId: v.visitId,
+          jobTitle: v.jobTitle,
+          organization: v.organization,
+          circularId: v.circularId,
+          circularUrl: v.circularUrl,
+          applicationUrl: v.applicationUrl || null,
+          loginUrl: null,
+          deadlineAt: v.deadlineAt ?? null,
+          firstVisitedAt: v.firstVisitedAt,
+          lastVisitedAt: v.lastVisitedAt,
+          visitCount: v.visitCount || 1,
+          subStatus: (v.subStatus as any) || 'Visited',
+          needsReview: false,
+          verificationStatus: v.verificationStatus,
+          applicationRecord: null,
+          visitRecord: v,
+        });
+      }
+    }
+
+    const visitedList = Array.from(visitedMap.values())
+      .filter((v) => {
+        if (v.jobId && appliedIds.has(v.jobId)) return false;
+        const c = v.circularUrl ? JobVisitRepository.canonicalizeJobUrl(v.circularUrl) : '';
+        if (c && appliedUrls.has(c)) return false;
+        return true;
+      })
+      .sort((a, b) => b.lastVisitedAt - a.lastVisitedAt);
+
+    return {
+      visited: visitedList,
+      applied: appliedList,
+      visitedCount: visitedList.length,
+      appliedCount: appliedList.length,
+    };
+  }, [records, visitRecords]);
+
+  const organizations = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of applied) if (a.organization) set.add(a.organization);
+    for (const v of visited) if (v.organization) set.add(v.organization);
+    return Array.from(set).sort();
+  }, [applied, visited]);
+
+  const filteredVisited = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const now = Date.now();
     const sevenDaysMs = 7 * 86_400_000;
 
-    const list = records.filter((r) => {
+    const list = visited.filter((v) => {
+      if (orgFilter !== 'All' && v.organization !== orgFilter) return false;
+      if (deadlineFilter === 'closing_7d') {
+        if (!v.deadlineAt || v.deadlineAt <= now || v.deadlineAt - now > sevenDaysMs) return false;
+      } else if (deadlineFilter === 'expired') {
+        if (!v.deadlineAt || v.deadlineAt > now) return false;
+      } else if (deadlineFilter === 'none') {
+        if (v.deadlineAt) return false;
+      }
+      if (!q) return true;
+      return (
+        v.jobTitle.toLowerCase().includes(q) ||
+        v.organization.toLowerCase().includes(q) ||
+        (v.circularId || '').toLowerCase().includes(q)
+      );
+    });
+
+    return [...list].sort((a, b) => {
+      if (sortBy === 'deadline_asc') {
+        const ad = a.deadlineAt ?? Number.MAX_SAFE_INTEGER;
+        const bd = b.deadlineAt ?? Number.MAX_SAFE_INTEGER;
+        return ad - bd;
+      }
+      return b.lastVisitedAt - a.lastVisitedAt;
+    });
+  }, [visited, orgFilter, deadlineFilter, sortBy, searchQuery]);
+
+  const filteredApplied = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const now = Date.now();
+    const sevenDaysMs = 7 * 86_400_000;
+
+    const list = applied.filter((r) => {
       if (statusFilter !== 'All' && r.status !== statusFilter) return false;
       if (orgFilter !== 'All' && r.organization !== orgFilter) return false;
       if (deadlineFilter === 'closing_7d') {
@@ -214,9 +416,110 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
         const bd = b.deadlineAt ?? Number.MAX_SAFE_INTEGER;
         return ad - bd;
       }
-      return b.updatedAt - a.updatedAt;
+      return (b.submissionConfirmedAt || b.updatedAt) - (a.submissionConfirmedAt || a.updatedAt);
     });
-  }, [records, statusFilter, orgFilter, deadlineFilter, sortBy, searchQuery]);
+  }, [applied, statusFilter, orgFilter, deadlineFilter, sortBy, searchQuery]);
+
+  const handleMoveToApplied = async (
+    targetId: string,
+    evidence?: {
+      teletalkUserId?: string;
+      applicantId?: string;
+      transactionId?: string;
+      notes?: string;
+    }
+  ) => {
+    try {
+      const updated = await ApplicationRepository.moveJobToApplied(targetId, {
+        teletalkUserId: evidence?.teletalkUserId,
+        applicantId: evidence?.applicantId,
+        transactionId: evidence?.transactionId,
+        notes: evidence?.notes,
+        confirmedAt: Date.now(),
+      });
+      await onUpdateRecord(updated);
+      await loadVisits();
+      if (onRefreshRecords) {
+        await onRefreshRecords();
+      }
+      setManualConfirmTarget(null);
+      setConfirmUserId('');
+      setConfirmTxnId('');
+      setBackupNotice(
+        bn
+          ? '✅ আবেদনটি সফলভাবে "আবেদন সম্পন্ন (Applied)" ট্যাবে স্থানান্তরিত হয়েছে।'
+          : '✅ Application successfully moved to "APPLIED" tab.'
+      );
+    } catch (err: any) {
+      setBackupNotice(`Error moving to applied: ${err?.message || 'Failed'}`);
+    }
+  };
+
+  const handleRemoveFromVisited = async (id: string) => {
+    try {
+      await ApplicationRepository.removeFromVisited(id);
+      await loadVisits();
+      if (onRefreshRecords) {
+        await onRefreshRecords();
+      }
+      setBackupNotice(
+        bn
+          ? 'সার্কুলারটি "দেখা হয়েছে" তালিকা থেকে সরানো হয়েছে।'
+          : 'Job removed from Visited list.'
+      );
+    } catch (err: any) {
+      setBackupNotice(`Error removing from visited: ${err?.message || 'Failed'}`);
+    }
+  };
+
+  const handleStartApplication = async (item: VisitedTrackerItem) => {
+    const targetUrl = item.applicationUrl || item.circularUrl;
+    if (targetUrl) {
+      try {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        // safe fallback
+      }
+    }
+    const targetJobId = item.jobId || item.id;
+    const rec: ApplicationTrackerRecord = item.applicationRecord || {
+      jobId: targetJobId,
+      jobTitle: item.jobTitle,
+      organization: item.organization,
+      circularId: item.circularId,
+      circularUrl: item.circularUrl,
+      applicationUrl: item.applicationUrl,
+      loginUrl: item.loginUrl,
+      deadlineAt: item.deadlineAt,
+      status: 'Application Started',
+      createdAt: item.firstVisitedAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+    rec.status = 'Application Started';
+    rec.updatedAt = Date.now();
+    await onUpdateRecord(rec);
+    await loadVisits();
+    if (onRefreshRecords) {
+      await onRefreshRecords();
+    }
+  };
+
+  const openPortalModalForVisited = (item: VisitedTrackerItem) => {
+    const rec: ApplicationTrackerRecord = item.applicationRecord || {
+      jobId: item.jobId || item.id,
+      jobTitle: item.jobTitle,
+      organization: item.organization,
+      circularId: item.circularId,
+      circularUrl: item.circularUrl,
+      applicationUrl: item.applicationUrl,
+      loginUrl: item.loginUrl,
+      deadlineAt: item.deadlineAt,
+      status: (item.subStatus as ApplicationStatus) || 'Visited',
+      createdAt: item.firstVisitedAt,
+      updatedAt: item.lastVisitedAt,
+    };
+    setPortalModalRecord(rec);
+  };
 
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -588,6 +891,79 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
         </div>
       )}
 
+      {/* Primary Two-Tab Selector: VISITED vs APPLIED */}
+      <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700/60">
+        <button
+          type="button"
+          onClick={() => setPrimaryTab('visited')}
+          className={`flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left ${
+            primaryTab === 'visited'
+              ? 'bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 ring-2 ring-blue-500/30'
+              : 'hover:bg-white/60 dark:hover:bg-slate-900/40 text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                primaryTab === 'visited'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <Eye className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm tracking-wide text-slate-800 dark:text-white uppercase">
+                  {bn ? 'দেখা হয়েছে (Visited)' : 'VISITED'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-black bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  # {visitedCount}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {bn ? 'দেখা হয়েছে, আবেদন সম্পন্ন হয়নি' : 'Circulars viewed, application pending'}
+              </p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPrimaryTab('applied')}
+          className={`flex items-center justify-between p-3.5 rounded-xl transition-all cursor-pointer text-left ${
+            primaryTab === 'applied'
+              ? 'bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 ring-2 ring-emerald-500/30'
+              : 'hover:bg-white/60 dark:hover:bg-slate-900/40 text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                primaryTab === 'applied'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm tracking-wide text-slate-800 dark:text-white uppercase">
+                  {bn ? 'আবেদন সম্পন্ন (Applied)' : 'APPLIED'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  # {appliedCount}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {bn ? 'আবেদন সফলভাবে সম্পন্ন' : 'Confirmed submitted applications'}
+              </p>
+            </div>
+          </div>
+        </button>
+      </div>
+
       {/* Search, Multi-Filter & Sort Toolbar */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
         <div className="relative lg:col-span-2">
@@ -644,21 +1020,202 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-2">
-          <CheckCircle2 className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-            {bn ? 'এখনও কোনো আবেদন ট্র্যাক করা হয়নি' : 'No tracked applications yet'}
-          </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            {bn
-              ? 'যেকোনো জব সার্কুলার খুলে "Mark as Applied" অথবা স্ট্যাটাস আপডেট করলে তা এখানে সংরক্ষিত হবে।'
-              : 'Open any job circular and mark your progress (Interested, Ready to Apply, Applied, etc.) to track it here.'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((rec) => {
+      {/* VISITED Tab View: Circulars opened / viewed but not applied */}
+      <div className={primaryTab === 'visited' ? 'space-y-3' : 'hidden space-y-3'}>
+        {filteredVisited.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-2">
+            <Eye className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              {bn ? 'কোনো দেখা চাকরি (Visited) নেই' : 'No visited job circulars yet'}
+            </p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              {bn
+                ? 'যেকোনো চাকরির সার্কুলার খুলে দেখলে তা স্বয়ংক্রিয়ভাবে এখানে তালিকাভুক্ত হবে। আবেদন সম্পন্ন হলে তা Applied ট্যাবে চলে যাবে।'
+                : 'Any job circular you inspect appears here automatically until its application is completed.'}
+            </p>
+          </div>
+        ) : (
+          filteredVisited.map((item) => {
+            const portalDomain = getPortalDomain(item.loginUrl || item.applicationUrl);
+            return (
+              <div
+                key={item.id}
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10.5px] font-bold px-2.5 py-0.5 rounded-full border ${statusColor(item.subStatus as ApplicationStatus)}`}>
+                        {item.subStatus === 'Visited' ? (bn ? 'দেখা হয়েছে' : 'Visited') : item.subStatus}
+                      </span>
+                      <span className="text-xs font-bold text-petro-700 dark:text-petro-400">
+                        {item.organization}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-white mt-1">
+                      {item.jobTitle}
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Primary Action Button: আবেদন করুন */}
+                    {(item.applicationUrl || item.circularUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartApplication(item)}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-petro-600 hover:bg-petro-700 text-white flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                        title={bn ? 'আবেদন শুরু করুন' : 'Open application and start autofill'}
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                        <span>{bn ? 'আবেদন করুন' : 'Apply Now'}</span>
+                      </button>
+                    )}
+
+                    {/* Transition to Applied Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualConfirmTarget(item);
+                        setConfirmUserId(item.applicationRecord?.teletalkUserId || '');
+                        setConfirmTxnId(item.applicationRecord?.transactionId || '');
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 flex items-center gap-1.5 cursor-pointer"
+                      title={bn ? 'আবেদন সম্পন্ন হয়েছে নিশ্চিত করুন' : 'Mark as Applied and move to Applied tab'}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{bn ? 'আবেদন সম্পন্ন চিহ্নিত করুন' : 'Mark as Applied'}</span>
+                    </button>
+
+                    {/* Details modal */}
+                    <button
+                      type="button"
+                      onClick={() => openPortalModalForVisited(item)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 cursor-pointer flex items-center gap-1"
+                    >
+                      {bn ? 'বিস্তারিত' : 'Details'}
+                    </button>
+
+                    {/* Remove from visited */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFromVisited(item.id)}
+                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                      title={bn ? 'দেখা হয়েছে তালিকা থেকে মুছুন' : 'Remove from Visited'}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Portal Domain & Portal Link Row */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  {portalDomain ? (
+                    <div className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                      <Globe className="w-3.5 h-3.5 text-petro-600 dark:text-petro-400" />
+                      <span className="text-[11px] font-medium text-slate-500">{bn ? 'পোর্টাল:' : 'Portal:'}</span>
+                      <strong className="font-mono text-slate-800 dark:text-slate-200">{portalDomain}</strong>
+                    </div>
+                  ) : null}
+
+                  {item.loginUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.applicationRecord) {
+                          handleLoginToPortal(item.applicationRecord);
+                        } else {
+                          openPortalModalForVisited(item);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{bn ? 'পোর্টালে লগইন করুন' : 'Login to Portal'}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openPortalModalForVisited(item)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 text-xs font-bold cursor-pointer"
+                    >
+                      <Link2 className="w-3.5 h-3.5 text-sky-600" />
+                      <span>{bn ? 'পোর্টাল লিংক যোগ করুন' : 'Add Portal Link'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Metadata summary */}
+                <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {item.circularId && (
+                    <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                      Circular: <strong className="font-mono text-slate-700 dark:text-slate-200">{item.circularId}</strong>
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                    <Eye className="w-3 h-3 text-blue-500" />
+                    <span>{bn ? `ভিজিট: ${toBnDigits(item.visitCount)} বার` : `Visits: ${item.visitCount}`}</span>
+                  </span>
+                  {item.lastVisitedAt && (
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      <span>{bn ? 'সর্বশেষ: ' : 'Last: '}</span>
+                      <strong className="text-slate-700 dark:text-slate-200">
+                        {new Date(item.lastVisitedAt).toLocaleDateString(bn ? 'bn-BD' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </strong>
+                    </span>
+                  )}
+                  {item.circularUrl && (
+                    <a
+                      href={item.circularUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-petro-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                    >
+                      <FileText className="w-3 h-3" />
+                      <span>{bn ? 'সার্কুলার দেখুন' : 'View Circular'}</span>
+                    </a>
+                  )}
+                  {item.applicationUrl && (
+                    <a
+                      href={item.applicationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>{bn ? 'আবেদন লিংক' : 'Application Link'}</span>
+                    </a>
+                  )}
+                  {item.deadlineAt && (
+                    <span className="inline-flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
+                      <Clock className="w-3 h-3" />
+                      <span>Deadline: {new Date(item.deadlineAt).toLocaleDateString(bn ? 'bn-BD' : 'en-US')}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* APPLIED Tab View: Confirmed submitted applications */}
+      <div className={primaryTab === 'applied' ? 'space-y-3' : 'hidden space-y-3'}>
+        {filteredApplied.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center space-y-2">
+            <CheckCircle2 className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              {bn ? 'কোনো আবেদন সম্পন্ন চাকরি নেই' : 'No confirmed applied jobs yet'}
+            </p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              {bn
+                ? 'কোনো চাকরিতে আবেদন সম্পন্ন হলে অথবা ফর্ম সাবমিট নিশ্চিত হলে তা এখানে সংরক্ষিত থাকবে।'
+                : 'Jobs with confirmed application submission will be tracked here.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredApplied.map((rec) => {
             const isEditing = editingId === rec.jobId && draft;
             const portalDomain = getPortalDomain(rec.loginUrl || rec.applicationUrl);
             const matchingCreds = getMatchingCredentialsForRecord(rec);
@@ -1162,6 +1719,89 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+      </div>
+
+      {/* Manual Confirm Modal for moving from Visited to Applied */}
+      {manualConfirmTarget && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md shadow-2xl overflow-hidden text-xs space-y-4 p-5">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{bn ? 'আবেদন সম্পন্ন নিশ্চিত করুন' : 'Confirm Application Submission'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setManualConfirmTarget(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{manualConfirmTarget.jobTitle}</p>
+              <p className="text-xs font-semibold text-petro-700 dark:text-petro-400">{manualConfirmTarget.organization}</p>
+            </div>
+
+            <p className="text-[11.5px] text-slate-500 dark:text-slate-400">
+              {bn
+                ? 'এই চাকরিটি "দেখা হয়েছে" থেকে "আবেদন সম্পন্ন" ট্যাবে স্থানান্তরিত হবে। ইউজার আইডি জানা থাকলে প্রবেশ করাতে পারেন।'
+                : 'This job will move from "VISITED" to "APPLIED". Enter your applicant/user ID if available.'}
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {bn ? 'Teletalk User ID / Applicant ID (ঐচ্ছিক)' : 'User ID / Applicant ID (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={confirmUserId}
+                  onChange={(e) => setConfirmUserId(e.target.value)}
+                  placeholder="e.g. NIZJARPKQP"
+                  className="w-full font-mono border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {bn ? 'Transaction ID / Ref (ঐচ্ছিক)' : 'Transaction ID / Ref (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={confirmTxnId}
+                  onChange={(e) => setConfirmTxnId(e.target.value)}
+                  placeholder="e.g. TXN987654321"
+                  className="w-full font-mono border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setManualConfirmTarget(null)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                {bn ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleMoveToApplied(manualConfirmTarget.id, {
+                    teletalkUserId: confirmUserId.trim() || undefined,
+                    transactionId: confirmTxnId.trim() || undefined,
+                  })
+                }
+                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer"
+              >
+                {bn ? 'আবেদন সম্পন্ন চিহ্নিত করুন' : 'Confirm as Applied'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -66,6 +66,9 @@ export interface ExtensionMessage {
     | 'SET_VISIT_TRACKING_ENABLED'
     | 'RECORD_APPLICATION_SUBMIT_ATTEMPT'
     | 'CONFIRM_APPLICATION_SUBMISSION'
+    | 'MOVE_JOB_TO_APPLIED'
+    | 'GET_VISITED_AND_APPLIED_LISTS'
+    | 'REMOVE_FROM_VISITED'
     | 'FLAG_APPLICATION_NEEDS_CONFIRMATION'
     | 'REPAIR_MISCLASSIFIED_APPLICATIONS'
     | 'GET_TRUSTED_AUTOFILL_ORIGINS'
@@ -861,24 +864,68 @@ export class MessageRouter {
       case 'CONFIRM_APPLICATION_SUBMISSION': {
         (async () => {
           try {
-            const { jobId, teletalkUserId, applicantId, confirmedAt } = message.payload || {};
-            let target = jobId ? await ApplicationRepository.getByJobId(jobId) : null;
-            if (!target) {
+            const { jobId, teletalkUserId, applicantId, confirmedAt, circularUrl, applicationUrl } = message.payload || {};
+            let targetKey = jobId;
+            if (!targetKey) {
               const all = await ApplicationRepository.getAll();
-              target = all.find((a) => a.status === 'Submission Pending Verification') || null;
+              const pending = all.find((a) => a.status === 'Submission Pending Verification');
+              if (pending) targetKey = pending.jobId;
             }
-            if (target) {
-              target.status = 'Applied';
-              target.submissionConfirmedAt = confirmedAt || Date.now();
-              if (teletalkUserId) target.teletalkUserId = teletalkUserId;
-              if (applicantId) target.applicantId = applicantId;
-              target.needsReview = false;
-              target.reviewReason = undefined;
-              await ApplicationRepository.upsert(target);
+            if (!targetKey && (circularUrl || applicationUrl)) {
+              targetKey = circularUrl || applicationUrl;
+            }
+            if (targetKey) {
+              const target = await ApplicationRepository.moveJobToApplied(targetKey, {
+                teletalkUserId,
+                applicantId,
+                confirmedAt: confirmedAt || Date.now(),
+                circularUrl,
+                applicationUrl,
+              });
               sendResponse({ status: 'ok', application: target });
             } else {
               sendResponse({ status: 'no_pending_application' });
             }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'MOVE_JOB_TO_APPLIED': {
+        (async () => {
+          try {
+            const { jobId, evidence } = message.payload || {};
+            const application = await ApplicationRepository.moveJobToApplied(jobId, evidence);
+            sendResponse({ status: 'ok', application });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_VISITED_AND_APPLIED_LISTS': {
+        (async () => {
+          try {
+            const result = await ApplicationRepository.getVisitedAndAppliedLists();
+            sendResponse({ status: 'ok', data: result });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REMOVE_FROM_VISITED': {
+        (async () => {
+          try {
+            const { id } = message.payload || {};
+            if (id) {
+              await ApplicationRepository.removeFromVisited(id);
+            }
+            sendResponse({ status: 'ok' });
           } catch (err: any) {
             sendResponse({ status: 'error', error: err?.message });
           }
