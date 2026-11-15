@@ -129,6 +129,26 @@ export const JobCard: React.FC<JobCardProps> = ({
               </span>
             ) : null}
 
+            {job.cadreStatus && job.cadreStatus !== 'Unspecified' && (
+              <span className={`inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
+                job.cadreStatus === 'Cadre'
+                  ? 'bg-blue-50 text-blue-800 border border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                  : 'bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+              }`}>
+                <span>{bn ? (job.cadreStatus === 'Cadre' ? 'ক্যাডার' : 'নন-ক্যাডার') : job.cadreStatus}</span>
+              </span>
+            )}
+
+            {job.gazettedStatus && job.gazettedStatus !== 'Unspecified' && (
+              <span className={`inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${
+                job.gazettedStatus === 'Gazetted'
+                  ? 'bg-indigo-50 text-indigo-800 border border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800'
+                  : 'bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+              }`}>
+                <span>{bn ? (job.gazettedStatus === 'Gazetted' ? 'গেজেটেড' : 'নন-গেজেটেড') : job.gazettedStatus}</span>
+              </span>
+            )}
+
             {job.taxonomyCategoryNameEn && (
               <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800">
                 <span>{bn ? job.taxonomyCategoryNameBn || job.taxonomyCategoryNameEn : job.taxonomyCategoryNameEn}</span>

@@ -446,7 +446,9 @@ export function filterAndSortJobs(
     }
 
     // 10. Government Job Grade Filter (multi-select)
-    if (filters.selectedGrades && filters.selectedGrades.length > 0 && !filters.selectedGrades.includes('All')) {
+    // Disabled for private sector, NGO, and international categories (private jobs do not use civil service pay grades)
+    const isPrivateCategory = filters.category === 'Private' || filters.category === 'NGO' || filters.category === 'International Jobs';
+    if (!isPrivateCategory && filters.selectedGrades && filters.selectedGrades.length > 0 && !filters.selectedGrades.includes('All')) {
       if (!JobGradeExtractor.matchesGradeFilter(job, filters.selectedGrades)) {
         return false;
       }
@@ -962,21 +964,21 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
                 onClick={() => selectGradeRange(1, 9)}
                 className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
               >
-                {bn ? '১ম–৯ম গ্রেড' : '1st–9th (Officer/Cadre)'}
+                {bn ? '১ম–৯ম গ্রেড' : '1st–9th Grade'}
               </button>
               <button
                 type="button"
                 onClick={() => selectGradeRange(10, 15)}
                 className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
               >
-                {bn ? '১০ম–১৫তম গ্রেড' : '10th–15th (Mid Grades)'}
+                {bn ? '১০ম–১৫তম গ্রেড' : '10th–15th Grade'}
               </button>
               <button
                 type="button"
                 onClick={() => selectGradeRange(16, 20)}
                 className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-petro-50 font-semibold cursor-pointer"
               >
-                {bn ? '১৬তম–২০তম গ্রেড' : '16th–20th (Entry/Staff)'}
+                {bn ? '১৬তম–২০তম গ্রেড' : '16th–20th Grade'}
               </button>
               {activeGradeCount > 0 && (
                 <button

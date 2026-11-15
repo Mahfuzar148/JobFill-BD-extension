@@ -286,6 +286,8 @@ export function normalizeJobRecord(
     gradeLabel: gradeResult.gradeLabel,
     gradeOriginalText: gradeResult.gradeOriginalText,
     gradeVerificationStatus: gradeResult.gradeVerificationStatus,
+    cadreStatus: raw.cadreStatus || JobGradeExtractor.extractCadreStatus(`${title} ${raw.description || ''} ${org}`),
+    gazettedStatus: raw.gazettedStatus || JobGradeExtractor.extractGazettedStatus(`${title} ${raw.description || ''} ${org}`),
     qualification: normalizeQualification(raw.qualification),
     minGpa: gpaInfo.minGpa,
     minCgpa: gpaInfo.minCgpa,

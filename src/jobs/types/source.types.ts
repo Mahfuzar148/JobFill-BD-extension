@@ -119,6 +119,8 @@ export interface RawSourceJobItem {
   employmentType?: string;
   vacancies?: number | null;
   salary?: string;
+  cadreStatus?: 'Cadre' | 'Non-Cadre' | 'Unspecified';
+  gazettedStatus?: 'Gazetted' | 'Non-Gazetted' | 'Unspecified';
   qualification?: string;
   experience?: string;
   ageRequirement?: string;

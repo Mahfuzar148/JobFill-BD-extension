@@ -156,6 +156,8 @@ export interface NormalizedJobCircular {
   gradeLabel?: string;
   gradeOriginalText?: string;
   gradeVerificationStatus?: GradeVerificationStatus;
+  cadreStatus?: 'Cadre' | 'Non-Cadre' | 'Unspecified';
+  gazettedStatus?: 'Gazetted' | 'Non-Gazetted' | 'Unspecified';
   qualification: EducationRequirement | string;
   minGpa?: number | null;
   minCgpa?: number | null;

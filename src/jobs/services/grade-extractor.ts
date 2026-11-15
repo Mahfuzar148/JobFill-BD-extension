@@ -101,6 +101,34 @@ export class JobGradeExtractor {
   }
 
   /**
+   * Extracts Cadre / Non-Cadre distinction strictly when documented in text.
+   * Never assumes Grade 1-9 is Cadre.
+   */
+  public static extractCadreStatus(text: string): 'Cadre' | 'Non-Cadre' | 'Unspecified' {
+    if (/(?:নন[- ]*ক্যাডার|non[- ]*cadre)/i.test(text)) {
+      return 'Non-Cadre';
+    }
+    if (/(?:বিসিএস\s*ক্যাডার|bcs\s*cadre|ক্যাডার\s*পদ|cadre\s*service|বিসিএস|bcs)/i.test(text)) {
+      return 'Cadre';
+    }
+    return 'Unspecified';
+  }
+
+  /**
+   * Extracts Gazetted / Non-Gazetted distinction strictly when documented in text.
+   * Never assumes Grade 1-9 is Gazetted.
+   */
+  public static extractGazettedStatus(text: string): 'Gazetted' | 'Non-Gazetted' | 'Unspecified' {
+    if (/(?:নন[- ]*গেজেটেড|non[- ]*gazetted)/i.test(text)) {
+      return 'Non-Gazetted';
+    }
+    if (/(?:গেজেটেড|gazetted)/i.test(text)) {
+      return 'Gazetted';
+    }
+    return 'Unspecified';
+  }
+
+  /**
    * Extracts government job grade from title, position, description, or salary text.
    */
   public static extractJobGrade(options: {
