@@ -42,6 +42,7 @@ import {
 } from '../../services/indexedDB';
 import { DocumentRepository } from '../../database/document-repository';
 import { VaultManager } from '../../security/vault-manager';
+import { normalizeAcademicSubjectName } from '../../jobs/services/eligibility-helper';
 
 export interface MyDocumentsWalletProps {
   profile: UserProfile;
@@ -196,7 +197,9 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
   const hscCertMeta = findMatchingMeta('hsc_cert', /hsc.*cert|আলিম.*সনদ|উচ্চ.*মাধ্যমিক.*সনদ/i);
   const hscMarksheetMeta = findMatchingMeta('hsc_marksheet', /hsc.*marksheet|hsc.*transcript|উচ্চ.*মাধ্যমিক.*মার্কশিট/i);
   const gradCertMeta = findMatchingMeta('grad_cert', /grad|bachelor|degree|স্নাতক.*সনদ/i);
-  const transcriptMeta = findMatchingMeta('transcript', /transcript|একাডেমিক.*ট্রান্সক্রিপ্ট/i);
+  const transcriptMeta = findMatchingMeta('transcript', /^(?!.*master).*transcript|একাডেমিক.*ট্রান্সক্রিপ্ট/i);
+  const mastersCertMeta = findMatchingMeta('masters_cert', /masters.*cert|স্নাতকোত্তর.*সনদ/i);
+  const mastersTranscriptMeta = findMatchingMeta('transcript', /masters.*transcript|masters.*marksheet|মাস্টার্স.*মার্কশিট/i);
 
   // Other documents counts
   const trainingCertsCount = docMetas.filter((m) => m.documentType === 'training_cert').length;
@@ -215,6 +218,7 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
       m.documentType !== 'hsc_cert' &&
       m.documentType !== 'hsc_marksheet' &&
       m.documentType !== 'grad_cert' &&
+      m.documentType !== 'masters_cert' &&
       m.documentType !== 'transcript'
   ).length;
 
@@ -782,7 +786,9 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
             title={isBn ? 'এসএসসি সনদপত্র' : 'SSC Certificate'}
             level="Secondary (SSC/Dakhil)"
             boardOrInst={profile.ssc?.board || profile.ssc?.institution}
+            groupOrSubject={normalizeAcademicSubjectName(profile.ssc?.groupSubject, 'SSC')}
             passingYear={profile.ssc?.passingYear}
+            result={profile.ssc?.gpa ? `GPA ${profile.ssc.gpa}` : profile.ssc?.resultType}
             docMeta={sscCertMeta}
             isBn={isBn}
             icon={<Award className="w-4 h-4 text-violet-600" />}
@@ -795,8 +801,10 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
           <AcademicCertCard
             title={isBn ? 'এসএসসি মার্কশিট' : 'SSC Marksheet'}
             level="Secondary (SSC/Dakhil)"
-            boardOrInst={profile.ssc?.board || (profile.ssc?.gpa ? `GPA ${profile.ssc.gpa}` : undefined)}
+            boardOrInst={profile.ssc?.board || profile.ssc?.institution}
+            groupOrSubject={normalizeAcademicSubjectName(profile.ssc?.groupSubject, 'SSC')}
             passingYear={profile.ssc?.passingYear}
+            result={profile.ssc?.gpa ? `GPA ${profile.ssc.gpa}` : profile.ssc?.resultType}
             docMeta={sscMarksheetMeta}
             isBn={isBn}
             icon={<BookOpen className="w-4 h-4 text-purple-600" />}
@@ -810,7 +818,9 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
             title={isBn ? 'এইচএসসি সনদপত্র' : 'HSC Certificate'}
             level="Higher Secondary (HSC/Alim)"
             boardOrInst={profile.hsc?.board || profile.hsc?.institution}
+            groupOrSubject={normalizeAcademicSubjectName(profile.hsc?.groupSubject, 'HSC')}
             passingYear={profile.hsc?.passingYear}
+            result={profile.hsc?.gpa ? `GPA ${profile.hsc.gpa}` : profile.hsc?.resultType}
             docMeta={hscCertMeta}
             isBn={isBn}
             icon={<Award className="w-4 h-4 text-blue-600" />}
@@ -823,8 +833,10 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
           <AcademicCertCard
             title={isBn ? 'এইচএসসি মার্কশিট' : 'HSC Marksheet'}
             level="Higher Secondary (HSC/Alim)"
-            boardOrInst={profile.hsc?.board || (profile.hsc?.gpa ? `GPA ${profile.hsc.gpa}` : undefined)}
+            boardOrInst={profile.hsc?.board || profile.hsc?.institution}
+            groupOrSubject={normalizeAcademicSubjectName(profile.hsc?.groupSubject, 'HSC')}
             passingYear={profile.hsc?.passingYear}
+            result={profile.hsc?.gpa ? `GPA ${profile.hsc.gpa}` : profile.hsc?.resultType}
             docMeta={hscMarksheetMeta}
             isBn={isBn}
             icon={<BookOpen className="w-4 h-4 text-cyan-600" />}
@@ -840,8 +852,11 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
             <AcademicCertCard
               title={isBn ? 'স্নাতক / ডিগ্রি সনদ' : 'Graduation Certificate'}
               level="Higher Education (Bachelor)"
+              degreeOrExam={profile.graduation?.examination}
               boardOrInst={profile.graduation?.universityInstitute || profile.graduation?.college}
+              groupOrSubject={profile.graduation?.subjectDegree}
               passingYear={profile.graduation?.passingYear}
+              result={profile.graduation?.gpa ? `CGPA ${profile.graduation.gpa}` : profile.graduation?.resultType}
               docMeta={gradCertMeta}
               isBn={isBn}
               icon={<GraduationCap className="w-4 h-4 text-emerald-600" />}
@@ -853,14 +868,54 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
             <AcademicCertCard
               title={isBn ? 'একাডেমিক ট্রান্সক্রিপ্ট' : 'Academic Transcript'}
               level="Transcript / Marks"
-              boardOrInst={profile.graduation?.universityInstitute}
+              degreeOrExam={profile.graduation?.examination}
+              boardOrInst={profile.graduation?.universityInstitute || profile.graduation?.college}
+              groupOrSubject={profile.graduation?.subjectDegree}
               passingYear={profile.graduation?.passingYear}
+              result={profile.graduation?.gpa ? `CGPA ${profile.graduation.gpa}` : profile.graduation?.resultType}
               docMeta={transcriptMeta}
               isBn={isBn}
               icon={<BookOpen className="w-4 h-4 text-teal-600" />}
               onPreview={() => transcriptMeta && openSecurePreview(transcriptMeta)}
               onUpload={() => triggerUploadSlot('transcript', 'Academic Transcript')}
               onDelete={() => transcriptMeta && setDocToDelete(transcriptMeta)}
+            />
+          </div>
+        )}
+
+        {/* Post-Graduation Slots (Masters Certificate & Transcript) if candidate has Masters */}
+        {(profile.hasMasters || mastersCertMeta || mastersTranscriptMeta) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+            <AcademicCertCard
+              title={isBn ? 'স্নাতকোত্তর সনদপত্র' : 'Masters Certificate'}
+              level="Post-Graduation (Masters)"
+              degreeOrExam={profile.masters?.examination}
+              boardOrInst={profile.masters?.universityInstitute || profile.masters?.college}
+              groupOrSubject={profile.masters?.subjectDegree}
+              passingYear={profile.masters?.passingYear}
+              result={profile.masters?.gpa ? `CGPA ${profile.masters.gpa}` : profile.masters?.resultType}
+              docMeta={mastersCertMeta}
+              isBn={isBn}
+              icon={<GraduationCap className="w-4 h-4 text-rose-600" />}
+              onPreview={() => mastersCertMeta && openSecurePreview(mastersCertMeta)}
+              onUpload={() => triggerUploadSlot('masters_cert', 'Masters Certificate')}
+              onDelete={() => mastersCertMeta && setDocToDelete(mastersCertMeta)}
+            />
+
+            <AcademicCertCard
+              title={isBn ? 'মাস্টার্স মার্কশিট / বিবরণী' : 'Masters Transcript'}
+              level="Post-Graduation (Masters)"
+              degreeOrExam={profile.masters?.examination}
+              boardOrInst={profile.masters?.universityInstitute || profile.masters?.college}
+              groupOrSubject={profile.masters?.subjectDegree}
+              passingYear={profile.masters?.passingYear}
+              result={profile.masters?.gpa ? `CGPA ${profile.masters.gpa}` : profile.masters?.resultType}
+              docMeta={mastersTranscriptMeta}
+              isBn={isBn}
+              icon={<BookOpen className="w-4 h-4 text-amber-600" />}
+              onPreview={() => mastersTranscriptMeta && openSecurePreview(mastersTranscriptMeta)}
+              onUpload={() => triggerUploadSlot('transcript', 'Masters Transcript')}
+              onDelete={() => mastersTranscriptMeta && setDocToDelete(mastersTranscriptMeta)}
             />
           </div>
         )}
@@ -1272,8 +1327,11 @@ export const MyDocumentsWallet: React.FC<MyDocumentsWalletProps> = ({
 interface AcademicCertCardProps {
   title: string;
   level: string;
+  degreeOrExam?: string;
   boardOrInst?: string;
+  groupOrSubject?: string;
   passingYear?: string;
+  result?: string;
   docMeta?: DocumentMetadata;
   isBn: boolean;
   icon: React.ReactNode;
@@ -1285,8 +1343,11 @@ interface AcademicCertCardProps {
 const AcademicCertCard: React.FC<AcademicCertCardProps> = ({
   title,
   level,
+  degreeOrExam,
   boardOrInst,
+  groupOrSubject,
   passingYear,
+  result,
   docMeta,
   isBn,
   icon,
@@ -1295,6 +1356,7 @@ const AcademicCertCard: React.FC<AcademicCertCardProps> = ({
   onDelete,
 }) => {
   const isPdf = docMeta?.mimeType === 'application/pdf';
+  const notAvail = isBn ? 'উপলব্ধ নয়' : 'Not Available';
 
   return (
     <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 p-3.5 flex flex-col justify-between shadow-2xs hover:border-petro-300 transition-colors">
@@ -1318,17 +1380,36 @@ const AcademicCertCard: React.FC<AcademicCertCardProps> = ({
           </span>
         </div>
 
-        {/* Level & Institution Info from Profile */}
-        <div className="bg-white dark:bg-slate-900 rounded-lg p-2 border border-slate-200/60 dark:border-slate-800 text-[10.5px] space-y-0.5">
+        {/* Level & Structured Academic Profile Info */}
+        <div className="bg-white dark:bg-slate-900 rounded-lg p-2.5 border border-slate-200/60 dark:border-slate-800 text-[10.5px] space-y-1">
           <div className="text-slate-400 dark:text-slate-500 font-semibold truncate">{level}</div>
-          <div className="text-slate-700 dark:text-slate-300 font-medium truncate">
-            {boardOrInst ? boardOrInst : isBn ? 'প্রতিষ্ঠান নির্ধারণ করা হয়নি' : 'Not specified'}
-          </div>
-          {passingYear && (
-            <div className="text-[10px] text-slate-500">
-              {isBn ? 'পাসের সাল:' : 'Year:'} <span className="font-bold text-slate-700 dark:text-slate-300">{passingYear}</span>
+
+          {degreeOrExam && (
+            <div className="text-slate-800 dark:text-slate-200 font-bold truncate">
+              {degreeOrExam}
             </div>
           )}
+
+          <div className="text-slate-700 dark:text-slate-300 truncate">
+            <span className="text-slate-400">{isBn ? 'বোর্ড/প্রতিষ্ঠান:' : 'Board/Inst:'}</span>{' '}
+            <span className="font-semibold">{boardOrInst ? boardOrInst : notAvail}</span>
+          </div>
+
+          <div className="text-slate-700 dark:text-slate-300 truncate">
+            <span className="text-slate-400">{isBn ? 'গ্রুপ/বিষয়:' : 'Group/Subject:'}</span>{' '}
+            <span className="font-semibold">{groupOrSubject ? groupOrSubject : notAvail}</span>
+          </div>
+
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 border-t border-slate-100 dark:border-slate-800/60">
+            <div>
+              {isBn ? 'সাল:' : 'Year:'}{' '}
+              <span className="font-bold text-slate-700 dark:text-slate-300">{passingYear || notAvail}</span>
+            </div>
+            <div>
+              {isBn ? 'ফলাফল:' : 'Result:'}{' '}
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{result || notAvail}</span>
+            </div>
+          </div>
         </div>
 
         {/* File Specifics if uploaded */}
