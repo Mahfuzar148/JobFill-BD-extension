@@ -125,6 +125,7 @@ import { OfficialJobPortalsDirectory } from './OfficialJobPortalsPage';
 
 interface JobCircularPageProps {
   initialSelectedJobId?: string | null;
+  initialFilters?: Partial<JobSearchFilters>;
   onNavigateNotifications?: () => void;
   onNavigateTracker?: () => void;
   onNavigateSettings?: () => void;
@@ -146,6 +147,7 @@ const CIRCULARS_PAGE_SIZE = 24;
 
 export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   initialSelectedJobId,
+  initialFilters,
   onNavigateNotifications,
   onNavigateTracker,
   onNavigateSettings,
@@ -160,7 +162,19 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   const [applications, setApplications] = useState<ApplicationTrackerRecord[]>([]);
   const [preferences, setPreferences] = useState<JobPreferences>(DEFAULT_JOB_PREFERENCES);
   const [sourceOutcomes, setSourceOutcomes] = useState<any[]>([]);
-  const [filters, setFilters] = useState<JobSearchFilters>(DEFAULT_JOB_FILTERS);
+  const [filters, setFilters] = useState<JobSearchFilters>(() => ({
+    ...DEFAULT_JOB_FILTERS,
+    ...(initialFilters || {}),
+  }));
+
+  useEffect(() => {
+    if (initialFilters) {
+      setFilters((prev) => ({
+        ...prev,
+        ...initialFilters,
+      }));
+    }
+  }, [initialFilters]);
   const [applyMyPrefsFilter, setApplyMyPrefsFilter] = useState(false);
   const [hubTab, setHubTab] = useState<'all' | 'recommended' | 'visited' | 'bookmarked' | 'closing_soon' | 'applied'>('all');
   const [visitedRecords, setVisitedRecords] = useState<JobVisitRecord[]>([]);

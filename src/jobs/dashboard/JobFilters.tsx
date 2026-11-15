@@ -249,10 +249,19 @@ export function isJobMatchingSourceGroup(
     case 'government_portals':
       return (
         ['bpsc', 'national-portal', 'dpe', 'ntrca'].includes(sId) ||
+        sId.startsWith('govt_') ||
+        sId.includes('alljobs') ||
+        sId.includes('bpsc') ||
+        job.isGovernmentJob === true ||
+        Boolean(job.governmentGroup) ||
         (cat === 'Government' && !sId.includes('bdjobs')) ||
         (taxCat === 'govt_public' && !sId.includes('bdjobs')) ||
         job.employerType === 'Government Ministry' ||
-        job.employerType === 'Directorate / Department'
+        job.employerType === 'Directorate / Department' ||
+        job.employerType === 'Autonomous Organization' ||
+        job.employerType === 'Public University' ||
+        (typeof job.circularUrl === 'string' && (job.circularUrl.includes('.gov.bd') || job.circularUrl.includes('.mil.bd'))) ||
+        (typeof job.applicationUrl === 'string' && (job.applicationUrl.includes('.gov.bd') || job.applicationUrl.includes('.mil.bd') || job.applicationUrl.includes('teletalk.com.bd')))
       );
     default:
       return true;
@@ -282,6 +291,7 @@ export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   searchMode: 'smart_filter',
   includeUnclassified: true,
   sourceGroup: 'All',
+  governmentGroup: 'All',
 };
 
 export function isJobMatchingStatFilter(
@@ -466,6 +476,13 @@ export function filterAndSortJobs(
     // 12. Source Group Filter (Government, Teletalk, Bdjobs, Bank, NGO, Private, International)
     if (filters.sourceGroup && filters.sourceGroup !== 'All') {
       if (!isJobMatchingSourceGroup(job, filters.sourceGroup)) {
+        return false;
+      }
+    }
+
+    // 13. Specific Government Group Filter (Central, Ministries, Defence, Bank, etc.)
+    if (filters.governmentGroup && filters.governmentGroup !== 'All') {
+      if (job.governmentGroup && job.governmentGroup !== filters.governmentGroup) {
         return false;
       }
     }

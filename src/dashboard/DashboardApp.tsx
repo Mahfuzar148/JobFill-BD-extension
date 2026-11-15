@@ -119,6 +119,7 @@ const DashboardContent: React.FC = () => {
   const initialRoute = parseInitialDashboardRoute();
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialRoute.tab);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(initialRoute.jobId);
+  const [pendingJobFilters, setPendingJobFilters] = useState<any>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [closingSoonCount, setClosingSoonCount] = useState(0);
   const [trackerRecords, setTrackerRecords] = useState<ApplicationTrackerRecord[]>([]);
@@ -465,7 +466,15 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'overview' && (
             <OverviewPage
               profile={currentProfile}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={(tab: any, filterOptions?: any) => {
+                const targetTab = tab === 'jobs' ? 'circulars' : tab;
+                setActiveTab(targetTab);
+                if (filterOptions) {
+                  setPendingJobFilters(filterOptions);
+                }
+                if (targetTab !== 'circulars' && targetTab !== 'search') setSelectedJobId(null);
+                refreshJobHubStats();
+              }}
               onChangeProfile={(p) => {
                 setCurrentProfile(p);
                 setHasUnsavedChanges(true);
@@ -484,6 +493,7 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'circulars' && (
             <JobCircularPage
               initialSelectedJobId={selectedJobId}
+              initialFilters={pendingJobFilters || undefined}
               onNavigateNotifications={() => setActiveTab('notifications')}
               onNavigateTracker={() => setActiveTab('tracker')}
               onNavigateSettings={() => setActiveTab('settings')}

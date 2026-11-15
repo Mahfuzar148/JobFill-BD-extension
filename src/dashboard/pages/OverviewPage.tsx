@@ -25,10 +25,11 @@ import { BookmarkRepository } from '../../jobs/database/bookmark-repository';
 import { ApplicationRepository } from '../../jobs/database/application-repository';
 import { computeRealDashboardStats, DashboardRealStats } from '../services/dashboard-stats';
 import { MyDocumentsWallet } from '../components/MyDocumentsWallet';
+import { GovernmentJobsOverviewSection } from '../components/GovernmentJobsOverviewSection';
 
 interface OverviewPageProps {
   profile: UserProfile;
-  onNavigateTab: (tab: any) => void;
+  onNavigateTab: (tab: any, filterOptions?: any) => void;
   onChangeProfile?: (p: UserProfile) => void;
   showToast?: (msg: string) => void;
 }
@@ -174,6 +175,12 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Dedicated Government Jobs Section */}
+      <GovernmentJobsOverviewSection
+        language={language}
+        onNavigateTab={onNavigateTab}
+      />
 
       {/* Visual Document Wallet & Identity Gallery */}
       <MyDocumentsWallet

@@ -194,6 +194,11 @@ export interface NormalizedJobCircular {
   originalValues?: JobOriginalValues;
   possibleDuplicateOfId?: string | null;
   duplicateConfidence?: number | null;
+  governmentGroup?: string;
+  isGovernmentJob?: boolean;
+  noticeClassification?: string;
+  subType?: string;
+  relatedCanonicalJobId?: string;
   isManual?: boolean;
   notes?: string;
   verificationHistory?: Array<{
@@ -263,6 +268,7 @@ export interface JobSearchFilters {
   searchMode?: 'all_categories' | 'smart_filter' | 'saved_jobs' | 'online_federated' | 'local_saved';
   includeUnclassified?: boolean;
   sourceGroup?: JobSourceFilterGroup;
+  governmentGroup?: string;
 }
 
 export interface BookmarkRecord {
