@@ -479,15 +479,22 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
       list = list.filter((item) => bookmarkedIds.has(item.job.id) || appByJobId.has(item.job.id));
     } else if (searchMode === 'smart_filter') {
       if (taxonomyCategory !== 'All') {
+        const targetCat = JobTaxonomyRegistry.resolveCategoryId(taxonomyCategory);
         list = list.filter((item) => {
-          const matchCat = item.job.taxonomyCategoryId === taxonomyCategory;
+          const matchCat =
+            item.job.taxonomyCategoryId === targetCat ||
+            Boolean(
+              item.job.taxonomyCategoryIds &&
+                item.job.taxonomyCategoryIds.map((id) => JobTaxonomyRegistry.resolveCategoryId(id)).includes(targetCat)
+            ) ||
+            (targetCat === 'other_unclassified' && Boolean(item.job.isUnclassified));
           const matchUnclassified = Boolean(includeUnclassified && item.job.isUnclassified);
           return matchCat || matchUnclassified;
         });
       }
       if (taxonomySubcategory !== 'All') {
         list = list.filter((item) => {
-          const matchSub = item.job.taxonomySubcategoryId === taxonomySubcategory;
+          const matchSub = item.job.taxonomySubcategoryId?.toLowerCase() === taxonomySubcategory.toLowerCase();
           const matchUnclassified = Boolean(includeUnclassified && item.job.isUnclassified);
           return matchSub || matchUnclassified;
         });
@@ -1204,7 +1211,7 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
           {searchMode === 'smart_filter' && (
             <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-2.5 animate-fadeIn">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                {/* 20 Universal Categories */}
+                {/* Dynamic Universal Categories */}
                 <select
                   aria-label="Universal Category"
                   value={taxonomyCategory}
@@ -1214,7 +1221,11 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                   }}
                   className="h-9 text-xs border border-emerald-300 dark:border-emerald-700 rounded-lg px-2.5 bg-white dark:bg-slate-800 text-emerald-900 dark:text-emerald-200 font-semibold"
                 >
-                  <option value="All">{bn ? 'সব পেশা (২৭টি সার্বজনীন ক্যাটাগরি)' : 'All 27 Categories'}</option>
+                  <option value="All">
+                    {bn
+                      ? `সব পেশা (${JobTaxonomyRegistry.getAll().length}টি সার্বজনীন ক্যাটাগরি)`
+                      : `All ${JobTaxonomyRegistry.getAll().length} Categories`}
+                  </option>
                   {JobTaxonomyRegistry.getAll().map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.code}. {bn ? c.labelBn : c.labelEn}
@@ -1279,52 +1290,137 @@ export const JobSearchPage: React.FC<JobSearchPageProps> = ({
                 </select>
               </div>
 
-              {/* Quick Govt Grade Selectors */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
-                <span className="font-bold text-slate-500 mr-1">{bn ? 'সরকারি গ্রেড ফিল্টার:' : 'Pay Grades:'}</span>
-                {['1st-9th', '10th-15th', '16th-20th', '9', '10', '11'].map((g) => {
-                  const isSel = selectedGrades.includes(g);
-                  return (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => {
-                        setSelectedGrades((prev) =>
-                          prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
+              {/* Structured Government Grade Filters & Private Sector Protection */}
+              <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 space-y-2">
+                {searchState.category === 'Private' || employerType === 'Private Enterprise' || employerType === 'Multinational' ? (
+                  <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 font-medium flex items-center justify-between">
+                    <span>
+                      {bn
+                        ? 'ℹ️ বেসরকারি চাকরির ক্ষেত্রে সরকারি পে-গ্রেড প্রযোজ্য নয় (গ্রেড ফিল্টার নিষ্ক্রিয়)'
+                        : 'ℹ️ Government pay grades do not apply to private sector jobs (grade filter disabled)'}
+                    </span>
+                    {selectedGrades.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGrades([])}
+                        className="text-amber-900 dark:text-amber-200 font-bold underline cursor-pointer"
+                      >
+                        {bn ? 'গ্রেড মুছুন' : 'Clear Grades'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 text-[11px]">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-slate-700 dark:text-slate-200 mr-1">
+                        {bn ? '১. গ্রেড রেঞ্জ (Quick Ranges):' : '1. Grade Ranges:'}
+                      </span>
+                      {[
+                        { id: '1st-9th', bn: '১ম–৯ম গ্রেড', en: '1st–9th' },
+                        { id: '10th-15th', bn: '১০ম–১৫তম গ্রেড', en: '10th–15th' },
+                        { id: '16th-20th', bn: '১৬তম–২০তম গ্রেড', en: '16th–20th' },
+                      ].map((r) => {
+                        const isSel = selectedGrades.includes(r.id);
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGrades((prev) =>
+                                prev.includes(r.id) ? prev.filter((x) => x !== r.id) : [...prev, r.id]
+                              );
+                            }}
+                            className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-colors ${
+                              isSel
+                                ? 'bg-petro-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {bn ? r.bn : r.en}
+                          </button>
                         );
-                      }}
-                      className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-colors ${
-                        isSel
-                          ? 'bg-petro-600 text-white'
-                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      {g.includes('-')
-                        ? g === '1st-9th' ? (bn ? '১ম–৯ম' : '1st-9th') : g === '10th-15th' ? (bn ? '১০ম–১৫তম' : '10th-15th') : (bn ? '১৬তম–২০তম' : '16th-20th')
-                        : `${g}th`}
-                    </button>
-                  );
-                })}
-                {selectedGrades.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedGrades([])}
-                    className="text-rose-600 font-bold ml-1 hover:underline cursor-pointer"
-                  >
-                    {bn ? 'মুছুন' : 'Clear'}
-                  </button>
+                      })}
+
+                      <span className="font-bold text-slate-700 dark:text-slate-200 ml-2 mr-1">
+                        {bn ? '২. একক গ্রেড (Individual):' : '2. Individual:'}
+                      </span>
+                      {['9', '10', '11', '16', '20'].map((g) => {
+                        const isSel = selectedGrades.includes(g);
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGrades((prev) =>
+                                prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]
+                              );
+                            }}
+                            className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-colors ${
+                              isSel
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {g}th {bn ? (g === '9' ? '(৯ম)' : g === '10' ? '(১০ম)' : g === '11' ? '(১১তম)' : g === '16' ? '(১৬তম)' : '(২০তম)') : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="font-bold text-slate-700 dark:text-slate-200 mr-1">
+                        {bn ? '৩. বিশেষ ধরন:' : '3. Special Status:'}
+                      </span>
+                      {[
+                        { id: 'Non-Grade', bn: 'নন-গ্রেড', en: 'Non-Grade' },
+                        { id: 'Not Specified', bn: 'গ্রেড উল্লেখ নেই', en: 'Not Specified' },
+                        { id: 'Needs Verification', bn: 'যাচাই প্রয়োজন', en: 'Needs Verification' },
+                      ].map((s) => {
+                        const isSel = selectedGrades.includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedGrades((prev) =>
+                                prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id]
+                              );
+                            }}
+                            className={`px-2 py-0.5 rounded-md font-semibold cursor-pointer transition-colors ${
+                              isSel
+                                ? 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {bn ? s.bn : s.en}
+                          </button>
+                        );
+                      })}
+
+                      {selectedGrades.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGrades([])}
+                          className="text-rose-600 font-bold ml-2 hover:underline cursor-pointer"
+                        >
+                          {bn ? 'গ্রেড ফিল্টার মুছুন' : 'Clear Grades'}
+                        </button>
+                      )}
+
+                      <div className="ml-auto flex items-center">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={includeUnclassified}
+                            onChange={(e) => setIncludeUnclassified(e.target.checked)}
+                            className="rounded text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span>{bn ? 'অনির্দিষ্ট ক্যাটাগরিও অন্তর্ভুক্ত রাখুন' : 'Include Unclassified Jobs'}</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 )}
-                <div className="ml-auto flex items-center">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={includeUnclassified}
-                      onChange={(e) => setIncludeUnclassified(e.target.checked)}
-                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span>{bn ? 'অনির্দিষ্ট ক্যাটাগরিও দেখান' : 'Include Unclassified'}</span>
-                  </label>
-                </div>
               </div>
             </div>
           )}

@@ -416,13 +416,16 @@ export function filterAndSortJobs(
       const targetCat = JobTaxonomyRegistry.resolveCategoryId(filters.taxonomyCategory);
       const matchCat =
         job.taxonomyCategoryId === targetCat ||
-        Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes(targetCat)) ||
+        Boolean(
+          job.taxonomyCategoryIds &&
+            job.taxonomyCategoryIds.map((id) => JobTaxonomyRegistry.resolveCategoryId(id)).includes(targetCat)
+        ) ||
         (targetCat === 'other_unclassified' && Boolean(job.isUnclassified));
       const allowUnclassified = Boolean(filters.includeUnclassified && job.isUnclassified);
       if (!matchCat && !allowUnclassified) return false;
     }
     if (filters.taxonomySubcategory && filters.taxonomySubcategory !== 'All') {
-      const matchSub = job.taxonomySubcategoryId === filters.taxonomySubcategory;
+      const matchSub = job.taxonomySubcategoryId?.toLowerCase() === filters.taxonomySubcategory.toLowerCase();
       const allowUnclassified = Boolean(filters.includeUnclassified && job.isUnclassified);
       if (!matchSub && !allowUnclassified) return false;
     }
@@ -570,6 +573,11 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
   const clearAllGrades = () => {
     update('selectedGrades', []);
   };
+
+  const isPrivateSelected =
+    filters.category === 'Private' ||
+    filters.employerType === 'Private Enterprise' ||
+    filters.employerType === 'Multinational';
 
   // Determine active filter chips
   const activeChips: Array<{ id: string; label: string; onRemove: () => void }> = [];
@@ -779,7 +787,7 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
 
       {/* Main Standard Filter Dropdowns */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        {/* Universal 20 Category Selector (A through T) */}
+        {/* Universal Dynamic Category Selector */}
         <select
           value={filters.taxonomyCategory || 'All'}
           onChange={(e) => {
@@ -790,10 +798,14 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
               taxonomySubcategory: 'All',
             });
           }}
-          aria-label="Universal Job Category (A-T)"
+          aria-label="Universal Job Category"
           className="text-xs bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-2 text-emerald-900 dark:text-emerald-200 font-semibold"
         >
-          <option value="All">{bn ? 'সব পেশা ও খাত (A-T সার্বজনীন)' : 'All 20 Categories (A-T)'}</option>
+          <option value="All">
+            {bn
+              ? `সব পেশা (${JobTaxonomyRegistry.getAll().length}টি সার্বজনীন ক্যাটাগরি)`
+              : `All ${JobTaxonomyRegistry.getAll().length} Categories`}
+          </option>
           {JobTaxonomyRegistry.getAll().map((c) => (
             <option key={c.id} value={c.id}>
               {c.code}. {bn ? c.labelBn : c.labelEn}
@@ -887,12 +899,20 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() => setShowGradePanel(!showGradePanel)}
+            disabled={isPrivateSelected}
+            onClick={() => !isPrivateSelected && setShowGradePanel(!showGradePanel)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-              showGradePanel || activeGradeCount > 0
-                ? 'bg-petro-50 dark:bg-petro-950/60 text-petro-700 dark:text-petro-300 border border-petro-200 dark:border-petro-800'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+              isPrivateSelected
+                ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
+                : showGradePanel || activeGradeCount > 0
+                  ? 'bg-petro-50 dark:bg-petro-950/60 text-petro-700 dark:text-petro-300 border border-petro-200 dark:border-petro-800'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
             }`}
+            title={
+              isPrivateSelected
+                ? (bn ? 'সরকারি চাকরির বেতন গ্রেড বেসরকারি চাকরির ক্ষেত্রে প্রযোজ্য নয়' : 'Government pay grades do not apply to private sector jobs')
+                : undefined
+            }
           >
             <Award className="w-3.5 h-3.5 text-petro-600" />
             <span>{bn ? 'সরকারি বেতন গ্রেড ফিল্টার' : 'Job Grade Filter (1st-20th)'}</span>

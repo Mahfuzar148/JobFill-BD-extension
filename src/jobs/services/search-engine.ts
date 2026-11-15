@@ -291,7 +291,23 @@ export function buildSearchIndexEntries(jobs: NormalizedJobCircular[]): SearchIn
 export function matchesSearchCategory(job: NormalizedJobCircular, selected: JobCategory | 'All'): boolean {
   if (selected === 'All') return true;
   if (job.category === selected) return true;
+
   if (selected === 'Government') {
+    if (job.isGovernmentJob === true) return true;
+    if (Boolean(job.governmentGroup)) return true;
+    if (
+      job.employerType &&
+      [
+        'Government',
+        'Government Ministry',
+        'Directorate / Department',
+        'Autonomous',
+        'Autonomous Organization',
+        'Public University',
+      ].includes(job.employerType)
+    ) {
+      return true;
+    }
     const isStatutoryGovtEducationBody =
       (job.category === 'Teaching' || job.category === 'Education') &&
       (job.sourceId === 'ntrca' ||
@@ -301,18 +317,97 @@ export function matchesSearchCategory(job: NormalizedJobCircular, selected: JobC
         ));
     return isStatutoryGovtEducationBody;
   }
+
+  if (selected === 'Private') {
+    if (job.isGovernmentJob === true) return false;
+    return (
+      job.category === 'Private' ||
+      job.employerType === 'Private' ||
+      job.employerType === 'Private Enterprise' ||
+      job.employerType === 'Multinational'
+    );
+  }
+
+  if (selected === 'Bank') {
+    return (
+      job.category === 'Bank' ||
+      job.taxonomyCategoryId === 'banking_finance' ||
+      Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes('banking_finance')) ||
+      Boolean(
+        job.employerType &&
+          ['Bank', 'Central Bank', 'Commercial Bank', 'Specialized Bank', 'NBFI'].includes(job.employerType)
+      )
+    );
+  }
+
+  if (selected === 'NGO') {
+    return (
+      job.category === 'NGO' ||
+      job.taxonomyCategoryId === 'ngo_development' ||
+      Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes('ngo_development')) ||
+      job.employerType === 'NGO' ||
+      job.employerType === 'NGO / INGO'
+    );
+  }
+
+  if (selected === 'Healthcare') {
+    return (
+      job.category === 'Healthcare' ||
+      job.taxonomyCategoryId === 'medical_healthcare' ||
+      Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes('medical_healthcare'))
+    );
+  }
+
+  if (selected === 'University') {
+    return (
+      job.category === 'University' ||
+      job.employerType === 'Public University' ||
+      job.taxonomyCategoryId === 'education_research'
+    );
+  }
+
+  if (selected === 'Autonomous Organization') {
+    return (
+      job.category === 'Autonomous Organization' ||
+      job.employerType === 'Autonomous Organization' ||
+      job.employerType === 'Autonomous'
+    );
+  }
+
+  if (selected === 'IT / Technology') {
+    return (
+      job.category === 'IT / Technology' ||
+      job.taxonomyCategoryId === 'it_software' ||
+      Boolean(job.taxonomyCategoryIds && job.taxonomyCategoryIds.includes('it_software'))
+    );
+  }
+
   if (selected === 'Education') {
-    return job.category === 'Teaching' || job.category === 'Education' || job.category === 'University';
+    return (
+      job.category === 'Teaching' ||
+      job.category === 'Education' ||
+      job.category === 'University' ||
+      job.taxonomyCategoryId === 'education_research'
+    );
   }
   if (selected === 'Teaching') {
-    return job.category === 'Teaching' || job.category === 'Education';
+    return (
+      job.category === 'Teaching' ||
+      job.category === 'Education' ||
+      job.taxonomyCategoryId === 'education_research'
+    );
   }
   if (selected === 'Defence' || selected === 'Defence / Security') {
-    return job.category === 'Defence' || job.category === 'Defence / Security';
+    return (
+      job.category === 'Defence' ||
+      job.category === 'Defence / Security' ||
+      job.taxonomyCategoryId === 'defence_security'
+    );
   }
   if (selected === 'Remote Jobs') {
     return (
       job.category === 'Remote Jobs' ||
+      job.workMode === 'Remote' ||
       job.sourceId === 'remotive_remote' ||
       job.sourceId === 'remoteok_remote' ||
       job.sourceId === 'arbeitnow_remote' ||
@@ -323,6 +418,7 @@ export function matchesSearchCategory(job: NormalizedJobCircular, selected: JobC
     return (
       job.category === 'International Jobs' ||
       job.category === 'Remote Jobs' ||
+      job.workMode === 'Remote' ||
       job.sourceId === 'himalayas_remote' ||
       job.sourceId === 'arbeitnow_remote' ||
       job.sourceId === 'remoteok_remote' ||
@@ -376,13 +472,32 @@ export function computeSearchRelevanceScore(
   return Math.max(1, score);
 }
 
+const EDUCATION_ALIASES: Record<string, string[]> = {
+  ssc: ['ssc', 'এসএসসি', 'secondary', 'মাধ্যমিক', 'দাখিল', 'dakhil', '১০ম শ্রেণি'],
+  hsc: ['hsc', 'এইচএসসি', 'higher secondary', 'উচ্চ মাধ্যমিক', 'ইন্টারমিডিয়েট', 'intermediate', 'আলিম', 'alim', '১২তম শ্রেণি'],
+  diploma: ['diploma', 'ডিপ্লোমা', 'polytechnic', 'পলিটেকনিক'],
+  bachelor: ['bachelor', 'honours', 'honors', 'graduation', 'undergraduate', 'b.sc', 'bsc', 'ba', 'bba', 'b.com', 'bcom', 'b.ed', 'llb', 'mbbs', 'স্নাতক', 'স্নাতক (সম্মান)', 'স্নাতক সম্মান', 'গ্র্যাজুয়েশন'],
+  honours: ['honours', 'honors', 'bachelor', 'graduation', 'undergraduate', 'b.sc', 'bsc', 'ba', 'bba', 'b.com', 'bcom', 'b.ed', 'llb', 'স্নাতক', 'স্নাতক (সম্মান)', 'স্নাতক সম্মান', 'গ্র্যাজুয়েশন'],
+  masters: ['masters', "master's", 'post graduate', 'post-graduate', 'm.sc', 'msc', 'ma', 'mba', 'm.com', 'mcom', 'm.ed', 'llm', 'স্নাতকোত্তর', 'মাস্টার্স', 'পোস্ট গ্র্যাজুয়েট'],
+  mbbs: ['mbbs', 'এমবিবিএস', 'bds', 'বিডিএস', 'medical degree', 'মেডিকেল'],
+  phd: ['phd', 'ph.d', 'ডক্টরেট', 'doctorate'],
+  degree: ['degree', 'ডিগ্রি', 'ডিগ্রী', 'degree pass', 'পাস কোর্স', 'pass course', 'bachelor', 'স্নাতক'],
+};
+
 export function matchesJobEducation(
   job: NormalizedJobCircular,
   selected: EducationRequirement | 'All'
 ): boolean {
   if (selected === 'All' || selected === 'Any Qualification') return true;
   const qualLower = normalizeSearchText(String(job.qualification || ''));
-  return qualLower.includes(selected.toLowerCase());
+  const selLower = selected.toLowerCase();
+
+  const aliases = EDUCATION_ALIASES[selLower];
+  if (aliases && aliases.length > 0) {
+    return aliases.some((alias) => qualLower.includes(alias));
+  }
+
+  return qualLower.includes(selLower);
 }
 
 export function matchesJobLocation(
@@ -390,14 +505,15 @@ export function matchesJobLocation(
   selectedLocation: string
 ): boolean {
   const locFilterNorm = normalizeSearchText(selectedLocation || '');
-  if (!locFilterNorm || locFilterNorm === 'all') return true;
+  if (!locFilterNorm || locFilterNorm === 'all' || locFilterNorm === 'all bangladesh' || locFilterNorm === 'সারাদেশ') {
+    return true;
+  }
   const jobLocNorm = normalizeSearchText(String(job.location || ''));
-  const isNationwide = jobLocNorm === 'all bangladesh';
-  if (locFilterNorm === 'all bangladesh') {
-    return isNationwide;
+  if (jobLocNorm === 'all bangladesh' || jobLocNorm === 'সারাদেশ' || jobLocNorm === 'যে কোনো জেলা' || !jobLocNorm) {
+    return true;
   }
   const locVariants = expandQueryTerms(locFilterNorm);
-  return isNationwide || locVariants.some((v) => jobLocNorm.includes(v));
+  return locVariants.some((v) => jobLocNorm.includes(v));
 }
 
 export function matchesJobDeadline(

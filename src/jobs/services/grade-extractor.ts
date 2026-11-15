@@ -263,6 +263,13 @@ export class JobGradeExtractor {
       return true;
     }
 
+    const isPrivateJob =
+      job.isGovernmentJob === false &&
+      (job.category?.toLowerCase() === 'private' ||
+        job.employerType === 'Private Enterprise' ||
+        job.employerType === 'Commercial Bank' ||
+        job.employerType === 'Multinational');
+
     const jobGradeNum = job.gradeNumber !== undefined && job.gradeNumber !== null ? String(job.gradeNumber) : null;
     const isNotSpecified =
       job.gradeNumber === null ||
@@ -270,57 +277,59 @@ export class JobGradeExtractor {
       job.gradeVerificationStatus === 'NOT_SPECIFIED';
 
     for (const filterItem of selectedGrades) {
-      const f = filterItem.trim();
+      const f = filterItem.trim().toLowerCase().replace(/[–—]/g, '-');
 
-      // Range matching
-      if (f === '1st-9th' || f === '1-9') {
-        if (job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 1 && job.gradeNumber <= 9) {
+      // Range matching (Grade 1-9, Grade 10-15, Grade 16-20)
+      if (f === '1st-9th' || f === '1-9' || f === 'grade_1_9' || f === 'grade 1-9') {
+        if (!isPrivateJob && job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 1 && job.gradeNumber <= 9) {
           return true;
         }
-      } else if (f === '10th-15th' || f === '10-15') {
-        if (job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 10 && job.gradeNumber <= 15) {
+      } else if (f === '10th-15th' || f === '10-15' || f === 'grade_10_15' || f === 'grade 10-15') {
+        if (!isPrivateJob && job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 10 && job.gradeNumber <= 15) {
           return true;
         }
-      } else if (f === '16th-20th' || f === '16-20') {
-        if (job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 16 && job.gradeNumber <= 20) {
+      } else if (f === '16th-20th' || f === '16-20' || f === 'grade_16_20' || f === 'grade 16-20') {
+        if (!isPrivateJob && job.gradeNumber !== null && job.gradeNumber !== undefined && job.gradeNumber >= 16 && job.gradeNumber <= 20) {
           return true;
         }
       }
 
-      // Check numeric grade match (e.g. '9' matches grade 9)
-      if (/^\d+$/.test(f)) {
-        if (jobGradeNum === f) return true;
+      // Check numeric grade match (e.g. '9', '9th', 'grade 9' matches grade 9)
+      const numMatch = f.match(/^(?:grade\s*)?(\d+)(?:st|nd|rd|th)?$/);
+      if (numMatch) {
+        const targetNum = numMatch[1];
+        if (!isPrivateJob && jobGradeNum === targetNum) return true;
       }
 
       // Check Not Specified
-      if (f.toLowerCase() === 'not specified' || f.toLowerCase() === 'grade not specified') {
+      if (f === 'not specified' || f === 'grade not specified') {
         if (isNotSpecified) return true;
       }
 
       // Check Non-Grade
-      if (f.toLowerCase() === 'non-grade') {
+      if (f === 'non-grade' || f === 'non grade') {
         if (job.gradeLabel?.toLowerCase().includes('non-grade') || job.gradeVerificationStatus === 'NOT_APPLICABLE') {
           return true;
         }
       }
 
       // Check Contractual
-      if (f.toLowerCase() === 'contractual') {
+      if (f === 'contractual') {
         if (job.employmentType === 'Contractual' || job.gradeLabel?.toLowerCase().includes('contractual')) {
           return true;
         }
       }
 
       // Check Needs Verification / Ambiguous
-      if (f.toLowerCase() === 'needs verification') {
+      if (f === 'needs verification') {
         if (job.gradeVerificationStatus === 'AMBIGUOUS') {
           return true;
         }
       }
 
       // Check Private Salary-Based
-      if (f.toLowerCase() === 'private salary-based') {
-        if (job.category?.toLowerCase() === 'private' || job.gradeVerificationStatus === 'NOT_APPLICABLE') {
+      if (f === 'private salary-based') {
+        if (job.category?.toLowerCase() === 'private' || isPrivateJob || job.gradeVerificationStatus === 'NOT_APPLICABLE') {
           return true;
         }
       }
