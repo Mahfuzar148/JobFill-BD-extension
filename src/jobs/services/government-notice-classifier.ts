@@ -120,7 +120,7 @@ export class GovernmentNoticeClassifier {
 
     // B. Examination Schedule & Seat Plan
     if (/(?:পরীক্ষার\s*সময়সূচি|পরীক্ষার\s*তারিখ|আসন\s*বিন্যাস|লিখিত\s*পরীক্ষা|এমসিকিউ\s*পরীক্ষা|ব্যবহারিক\s*পরীক্ষা|মৌখিক\s*পরীক্ষা|ভাইভা|exam\s*schedule|exam\s*date|seat\s*plan|written\s*exam|mcq\s*exam|viva\s*voce)/i.test(norm) &&
-        !/(?:নিয়োগ\s*বিজ্ঞপ্তি|শূন্য\s*পদে|job\s*circular|new\s*vacancy)/i.test(norm)) {
+        !/(?:নিয়োগ\s*বিজ্ঞপ্তি|শূন্য\s*পদে|job\s*circular|new\s*vacancy|ফলাফল|result|উত্তীর্ণ|নির্বাচিত|selected)/i.test(norm)) {
       matchedKeywords.push('exam_schedule');
       const subtype: RecruitmentUpdateSubtype =
         /(?:লিখিত|written)/i.test(norm)
