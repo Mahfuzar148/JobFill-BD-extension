@@ -463,7 +463,15 @@ const DashboardContent: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-6 max-w-5xl w-full mx-auto">
           {/* Overview */}
           {activeTab === 'overview' && (
-            <OverviewPage profile={currentProfile} onNavigateTab={setActiveTab} />
+            <OverviewPage
+              profile={currentProfile}
+              onNavigateTab={setActiveTab}
+              onChangeProfile={(p) => {
+                setCurrentProfile(p);
+                setHasUnsavedChanges(true);
+              }}
+              showToast={showToast}
+            />
           )}
 
           {/* Job Circular Hub */}

@@ -24,13 +24,21 @@ import { JobRepository } from '../../jobs/database/job-repository';
 import { BookmarkRepository } from '../../jobs/database/bookmark-repository';
 import { ApplicationRepository } from '../../jobs/database/application-repository';
 import { computeRealDashboardStats, DashboardRealStats } from '../services/dashboard-stats';
+import { MyDocumentsWallet } from '../components/MyDocumentsWallet';
 
 interface OverviewPageProps {
   profile: UserProfile;
   onNavigateTab: (tab: any) => void;
+  onChangeProfile?: (p: UserProfile) => void;
+  showToast?: (msg: string) => void;
 }
 
-export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateTab }) => {
+export const OverviewPage: React.FC<OverviewPageProps> = ({
+  profile,
+  onNavigateTab,
+  onChangeProfile,
+  showToast,
+}) => {
   const { language, userMode, setUserMode } = useApp();
   const [showBioPrint, setShowBioPrint] = useState(false);
   const [realStats, setRealStats] = useState<DashboardRealStats | null>(null);
@@ -166,6 +174,15 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ profile, onNavigateT
           </div>
         </div>
       </div>
+
+      {/* Visual Document Wallet & Identity Gallery */}
+      <MyDocumentsWallet
+        profile={profile}
+        language={language}
+        onNavigateTab={onNavigateTab}
+        onChangeProfile={onChangeProfile}
+        showToast={showToast}
+      />
 
       {/* Integrated Student & Job Seeker Real-Data Workspace Panel */}
       <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">

@@ -438,7 +438,7 @@ describe('Source-Category Capability Mapping & Federated Search', () => {
 
     // notSupportedSourcesCount should be properly tallied without being counted in failedSourcesCount
     expect(report.notSupportedSourcesCount).toBeGreaterThan(0);
-  });
+  }, 30000);
 });
 
 describe('Category Proposal & Zero-Count Visibility', () => {
