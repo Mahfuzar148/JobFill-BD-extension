@@ -605,10 +605,18 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                       : fullEligibility.overallStatus === 'NOT_ELIGIBLE'
                         ? 'bg-rose-100 text-rose-800 border-rose-200'
-                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                        : fullEligibility.overallStatus === 'INSUFFICIENT_PROFILE_DATA'
+                          ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                          : 'bg-amber-100 text-amber-800 border-amber-200'
                   }`}
                 >
-                  {fullEligibility.overallStatus.replace(/_/g, ' ')}
+                  {fullEligibility.overallStatus === 'ELIGIBLE'
+                    ? bn ? 'যোগ্য (Eligible)' : 'ELIGIBLE'
+                    : fullEligibility.overallStatus === 'NOT_ELIGIBLE'
+                      ? bn ? 'যোগ্য নন (Not Eligible)' : 'NOT ELIGIBLE'
+                      : fullEligibility.overallStatus === 'INSUFFICIENT_PROFILE_DATA'
+                        ? bn ? 'তথ্য অসম্পূর্ণ (Insufficient Data)' : 'INSUFFICIENT DATA'
+                        : bn ? 'ম্যানুয়াল যাচাই প্রয়োজন' : 'MANUAL REVIEW REQUIRED'}
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5">

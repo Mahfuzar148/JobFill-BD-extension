@@ -180,7 +180,7 @@ export function evaluateApplicationReadiness(
       status:
         eligibilityReport.overallStatus === 'ELIGIBLE'
           ? 'Ready'
-          : eligibilityReport.overallStatus === 'NOT_ELIGIBLE'
+          : eligibilityReport.overallStatus === 'NOT_ELIGIBLE' || eligibilityReport.overallStatus === 'INSUFFICIENT_PROFILE_DATA'
             ? 'Missing'
             : 'Needs Review',
       detailEn: `Result: ${eligibilityReport.overallStatus} (${eligibilityReport.criteria.length} criterion checks).`,
