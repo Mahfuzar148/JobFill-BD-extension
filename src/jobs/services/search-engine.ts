@@ -292,6 +292,16 @@ export function matchesSearchCategory(job: NormalizedJobCircular, selected: JobC
   if (selected === 'All') return true;
   if (job.category === selected) return true;
 
+  if (selected === ('BPSC' as any)) {
+    return (
+      job.organizationShortName === 'BPSC' ||
+      /bpsc|কর্ম\s*কমিশন|বিসিএস/i.test(`${job.organization} ${job.jobTitle} ${job.titleBn || ''}`) ||
+      job.cadreStatus === 'Cadre' ||
+      job.cadreStatus === 'Non-Cadre' ||
+      (typeof job.sourceJobId === 'string' && job.sourceJobId.includes('bpsc'))
+    );
+  }
+
   if (selected === 'Government') {
     if (job.isGovernmentJob === true) return true;
     if (Boolean(job.governmentGroup)) return true;

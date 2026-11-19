@@ -26,6 +26,13 @@ export const URGENT_WINDOW_MS = 48 * HOUR_MS;
 export const CRITICAL_24H_MS = 24 * HOUR_MS;
 export const TWO_HOURS_MS = 2 * HOUR_MS;
 
+// Explicit Milestone Bitmask Flags (48h, 24h, 12h, 6h, 1h)
+export const MILESTONE_48H = 1;
+export const MILESTONE_24H = 2;
+export const MILESTONE_12H = 4;
+export const MILESTONE_6H = 8;
+export const MILESTONE_1H = 16;
+
 export interface ReminderEvaluation {
   shouldNotifyNow: boolean;
   isUrgent: boolean;
@@ -201,12 +208,14 @@ export function evaluateJobReminderSchedule(
   let lastReminderAt = base.lastReminderAt;
   let snoozedUntil = base.snoozedUntil;
   let deadlineUpdatedAt = base.deadlineUpdatedAt;
+  let sentMilestones = existing?.sentMilestones ?? 0;
 
   if (existing && existing.deadlineAt !== null && existing.deadlineAt !== job.deadlineAt) {
     deadlineUpdatedAt = now;
     snoozedUntil = null;
     // Allow re-evaluation on updated deadline while preserving reminderCount history
     lastReminderAt = null;
+    sentMilestones = 0;
   }
 
   // 5. Snooze suppression
@@ -221,6 +230,7 @@ export function evaluateJobReminderSchedule(
         lastReminderAt,
         snoozedUntil,
         deadlineUpdatedAt,
+        sentMilestones,
         reminderStatus: 'snoozed',
         nextReminderAt: nextAfterSnooze,
       },
@@ -235,12 +245,31 @@ export function evaluateJobReminderSchedule(
 
   const copy = formatDeadlineReminderCopy(job, now);
 
-  // 6. <= 48 hours remaining -> every 2 hours
+  // 6. <= 48 hours remaining -> milestone checks (48h, 24h, 12h, 6h, 1h) + periodic 2h cadence
   if (remainingMs <= URGENT_WINDOW_MS) {
     const status: ReminderStatus = remainingMs < TWO_HOURS_MS ? 'final_countdown' : 'scheduled_urgent_2h';
-    const isDue = lastReminderAt === null || now - lastReminderAt >= TWO_HOURS_MS;
 
-    if (isDue) {
+    let milestoneBitToSet = 0;
+    if (remainingMs <= 1 * HOUR_MS && (sentMilestones & MILESTONE_1H) === 0) {
+      milestoneBitToSet = MILESTONE_1H;
+    } else if (remainingMs <= 6 * HOUR_MS && (sentMilestones & MILESTONE_6H) === 0) {
+      milestoneBitToSet = MILESTONE_6H;
+    } else if (remainingMs <= 12 * HOUR_MS && (sentMilestones & MILESTONE_12H) === 0) {
+      milestoneBitToSet = MILESTONE_12H;
+    } else if (remainingMs <= 24 * HOUR_MS && (sentMilestones & MILESTONE_24H) === 0) {
+      milestoneBitToSet = MILESTONE_24H;
+    } else if (remainingMs <= 48 * HOUR_MS && (sentMilestones & MILESTONE_48H) === 0) {
+      milestoneBitToSet = MILESTONE_48H;
+    }
+
+    const isDue = lastReminderAt === null || now - lastReminderAt >= TWO_HOURS_MS;
+    const shouldNotify = milestoneBitToSet > 0 || isDue;
+
+    if (milestoneBitToSet > 0) {
+      sentMilestones |= milestoneBitToSet;
+    }
+
+    if (shouldNotify) {
       const candidateNext = now + TWO_HOURS_MS;
       return {
         ...copy,
@@ -251,6 +280,7 @@ export function evaluateJobReminderSchedule(
           lastReminderAt,
           snoozedUntil,
           deadlineUpdatedAt,
+          sentMilestones,
           reminderStatus: status,
           nextReminderAt: candidateNext < job.deadlineAt ? candidateNext : null,
         },
@@ -267,6 +297,7 @@ export function evaluateJobReminderSchedule(
         lastReminderAt,
         snoozedUntil,
         deadlineUpdatedAt,
+        sentMilestones,
         reminderStatus: status,
         nextReminderAt: nextAt < job.deadlineAt ? nextAt : null,
       },

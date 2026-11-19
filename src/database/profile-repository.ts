@@ -29,6 +29,8 @@ export interface StoredEducationRecord {
   rollNumber?: string;
   passingYear?: string;
   gpa?: string;
+  subjectDegree?: string;
+  courseDurationYears?: number;
   updatedAt: string;
 }
 
@@ -100,6 +102,8 @@ function extractEducationRecords(profile: UserProfile): StoredEducationRecord[] 
       boardOrUniversity: profile.graduation.universityInstitute,
       passingYear: profile.graduation.passingYear,
       gpa: profile.graduation.gpa,
+      subjectDegree: profile.graduation.subjectDegree,
+      courseDurationYears: profile.graduation.courseDuration ? parseFloat(profile.graduation.courseDuration) || 4 : 4,
       updatedAt: nowIso,
     });
   }
@@ -112,7 +116,25 @@ function extractEducationRecords(profile: UserProfile): StoredEducationRecord[] 
       boardOrUniversity: profile.masters.universityInstitute,
       passingYear: profile.masters.passingYear,
       gpa: profile.masters.gpa,
+      subjectDegree: profile.masters.subjectDegree,
+      courseDurationYears: profile.masters.courseDuration ? parseFloat(profile.masters.courseDuration) || 1.5 : 1.5,
       updatedAt: nowIso,
+    });
+  }
+  if (profile.educationDegrees && Array.isArray(profile.educationDegrees)) {
+    profile.educationDegrees.forEach((deg, idx) => {
+      records.push({
+        id: `${profile.id}_deg_${deg.id || idx}`,
+        profileId: profile.id,
+        level: 'additional',
+        examination: deg.degreeTitle || deg.level,
+        boardOrUniversity: deg.institution || '',
+        passingYear: String(deg.passingYear || ''),
+        gpa: String(deg.gpa || ''),
+        subjectDegree: deg.subjectOrGroup,
+        courseDurationYears: deg.courseDurationYears,
+        updatedAt: nowIso,
+      });
     });
   }
   (profile.additionalQualifications || []).forEach((q, idx) => {
@@ -469,28 +491,65 @@ export class ProfileRepository {
     if (idx >= 0) all[idx] = profile;
     else all.push(profile);
 
-    await this.syncAllProfilesToIndexedDb(all, { includePlaintextProfileStore: false });
+    const hasNativeCryptoIdb =
+      typeof indexedDB !== 'undefined' && typeof crypto?.subtle?.generateKey === 'function';
 
-    if (typeof indexedDB === 'undefined') {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({ [STORAGE_KEY_PROFILES]: all });
-      } else if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(all));
+    let storedInEncryptedVault = false;
+    if (hasNativeCryptoIdb) {
+      try {
+        const key = await this.getOrCreateDeviceProfileCryptoKey(generateNonExtractableAesKey);
+        if (key) {
+          const nativePayload = await encryptWithCryptoKey(JSON.stringify(all), key);
+          storedInEncryptedVault = await this.saveEncryptedVaultRecord({
+            mode: 'device_key',
+            nativeEncryptedPayload: nativePayload,
+            updatedAt: Date.now(),
+          });
+        }
+      } catch {
+        storedInEncryptedVault = false;
       }
+    }
+
+    await this.syncAllProfilesToIndexedDb(all, { includePlaintextProfileStore: !storedInEncryptedVault });
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ [STORAGE_KEY_PROFILES]: all });
+    } else if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(all));
     }
   }
 
   public static async deleteProfile(id: string): Promise<void> {
     const all = await this.getAllProfiles();
     const filtered = all.filter((p) => p.id !== id);
-    await this.syncAllProfilesToIndexedDb(filtered, { includePlaintextProfileStore: false });
 
-    if (typeof indexedDB === 'undefined') {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({ [STORAGE_KEY_PROFILES]: filtered });
-      } else if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(filtered));
+    const hasNativeCryptoIdb =
+      typeof indexedDB !== 'undefined' && typeof crypto?.subtle?.generateKey === 'function';
+
+    let storedInEncryptedVault = false;
+    if (hasNativeCryptoIdb) {
+      try {
+        const key = await this.getOrCreateDeviceProfileCryptoKey(generateNonExtractableAesKey);
+        if (key) {
+          const nativePayload = await encryptWithCryptoKey(JSON.stringify(filtered), key);
+          storedInEncryptedVault = await this.saveEncryptedVaultRecord({
+            mode: 'device_key',
+            nativeEncryptedPayload: nativePayload,
+            updatedAt: Date.now(),
+          });
+        }
+      } catch {
+        storedInEncryptedVault = false;
       }
+    }
+
+    await this.syncAllProfilesToIndexedDb(filtered, { includePlaintextProfileStore: !storedInEncryptedVault });
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ [STORAGE_KEY_PROFILES]: filtered });
+    } else if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(filtered));
     }
   }
 }

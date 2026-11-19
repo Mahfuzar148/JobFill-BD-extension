@@ -21,6 +21,7 @@ import { computeJobFieldVerification } from '../services/job-normalizer';
 import { JobGradeExtractor } from '../services/grade-extractor';
 import { JobTaxonomyClassifier } from '../services/taxonomy-classifier';
 import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
+import { getSeedCirculars } from '../data/seed-circulars';
 
 const FALLBACK_PREFIX = 'jobfill_idb_fallback_';
 const KEY_JOB_PREFERENCES = 'jobfill_job_preferences_v1';
@@ -407,7 +408,7 @@ export class JobRepository {
     return jobsCrud.getAll();
   }
 
-  public static async getAllJobs(now: number = Date.now()): Promise<NormalizedJobCircular[]> {
+  public static async getAllJobs(now: number = Date.now(), opts?: { seedIfEmpty?: boolean }): Promise<NormalizedJobCircular[]> {
     if (this.inFlightGetAllJobsPromise) {
       const shared = await this.inFlightGetAllJobsPromise;
       return shared.map((j) => refreshJobStatus(j, now));
@@ -415,7 +416,18 @@ export class JobRepository {
 
     const loadTask = (async () => {
       await this.migrateLegacyUrlsIfNeeded(false);
-      const items = await jobsCrud.getAll();
+      let items = await jobsCrud.getAll();
+      if (items.length === 0 && opts?.seedIfEmpty) {
+        const seedItems = getSeedCirculars();
+        if (seedItems.length > 0) {
+          try {
+            await jobsCrud.putMany(seedItems);
+          } catch {
+            // storage fallback safe
+          }
+          items = seedItems;
+        }
+      }
       return items.map((j) => {
         const migrated = migrateLegacyCircularRecord(j);
         const enriched = ensureJobFieldProvenance(migrated.job);
@@ -431,6 +443,18 @@ export class JobRepository {
         this.inFlightGetAllJobsPromise = null;
       }
     }
+  }
+
+  public static async seedBpscCirculars(): Promise<number> {
+    const bpscList = getSeedCirculars();
+    const existing = await jobsCrud.getAll();
+    const existingIds = new Set(existing.map((j) => j.id));
+    const toAdd = bpscList.filter((j) => !existingIds.has(j.id));
+    if (toAdd.length > 0) {
+      await jobsCrud.putMany(toAdd);
+      this.inFlightGetAllJobsPromise = null;
+    }
+    return toAdd.length;
   }
 
   public static async getJobById(id: string, now: number = Date.now()): Promise<NormalizedJobCircular | null> {

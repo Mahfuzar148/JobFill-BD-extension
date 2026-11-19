@@ -37,9 +37,12 @@ export class FieldExtractor {
       return false;
     }
     const tagName = el.tagName.toLowerCase();
-    if (!['input', 'select', 'textarea'].includes(tagName)) return false;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const isCustomAriaDropdown = (tagName === 'div' || tagName === 'span') && (role === 'combobox' || role === 'listbox');
+    const isContentEditable = el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '';
+    if (!['input', 'select', 'textarea'].includes(tagName) && !isCustomAriaDropdown && !isContentEditable) return false;
 
-    const inputType = (el.getAttribute('type') || (tagName === 'select' ? 'select' : tagName === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+    const inputType = (el.getAttribute('type') || (tagName === 'select' ? 'select' : tagName === 'textarea' ? 'textarea' : isCustomAriaDropdown ? 'custom-dropdown' : isContentEditable ? 'contenteditable' : 'text')).toLowerCase();
 
     // Absolute exclusions per safety policy
     if (['hidden', 'password', 'submit', 'button', 'reset', 'file', 'image'].includes(inputType)) {
@@ -100,7 +103,8 @@ export class FieldExtractor {
   // Extracts all 12 evidence signals from an element
   public static extractEvidence(el: HTMLElement): FieldEvidence {
     const tagName = el.tagName.toLowerCase();
-    const inputType = (el.getAttribute('type') || (tagName === 'select' ? 'select' : tagName === 'textarea' ? 'textarea' : 'text')).toLowerCase();
+    const isContentEditable = el.isContentEditable || el.getAttribute('contenteditable') === 'true' || el.getAttribute('contenteditable') === '';
+    const inputType = (el.getAttribute('type') || (tagName === 'select' ? 'select' : tagName === 'textarea' ? 'textarea' : isContentEditable ? 'contenteditable' : 'text')).toLowerCase();
     const name = el.getAttribute('name') || '';
     const id = el.id || '';
     const placeholder = el.getAttribute('placeholder') || '';
@@ -112,7 +116,7 @@ export class FieldExtractor {
     const isRequired = el.hasAttribute('required') || el.getAttribute('aria-required') === 'true';
     const isReadOnly = (el as HTMLInputElement).readOnly || el.hasAttribute('readonly');
     const isDisabled = (el as HTMLInputElement).disabled || el.hasAttribute('disabled');
-    const currentValue = (el as HTMLInputElement).value || '';
+    const currentValue = (el as HTMLInputElement).value || (isContentEditable ? (el.textContent || '') : '');
 
     // Evidence 1: Label
     let label = '';

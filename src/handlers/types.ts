@@ -4,7 +4,7 @@
 export interface ControlFillResult {
   success: boolean;
   element: HTMLElement;
-  status: 'Filled' | 'Fill Failed' | 'Already Correct';
+  status: 'Filled' | 'Fill Failed' | 'Already Correct' | 'Manual Selection Required' | 'Unsupported Control';
   message: string;
   appliedValue: string | boolean;
 }

@@ -117,6 +117,11 @@ function areDistinctCirculars(a: NormalizedJobCircular, b: NormalizedJobCircular
   if (a.circularNumber && b.circularNumber) {
     if (normVal(a.circularNumber) !== normVal(b.circularNumber)) return true;
   }
+  const yearA = extractJobYear(a);
+  const yearB = extractJobYear(b);
+  if (yearA && yearB && yearA !== yearB) {
+    return true;
+  }
   if (
     a.deadlineVerified &&
     b.deadlineVerified &&
@@ -167,10 +172,57 @@ function collectAlternateSources(
   return all.length > 1 ? all : existing.alternateSources;
 }
 
+function extractJobYear(job: NormalizedJobCircular): string | null {
+  if (typeof job.publishedAt === 'number' && Number.isFinite(job.publishedAt)) {
+    const yr = new Date(job.publishedAt).getFullYear();
+    if (yr >= 1990 && yr <= 2100) return String(yr);
+  }
+  if (job.publishedDateText) {
+    const std = job.publishedDateText.replace(/[০-৯]/g, (d) => ({
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+    }[d] || d));
+    const m = std.match(/\b(20\d\d)\b/);
+    if (m) return m[1];
+  }
+  const textToCheck = `${job.circularNumber || ''} ${job.jobTitle || ''}`;
+  const stdText = textToCheck.replace(/[০-৯]/g, (d) => ({
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+  }[d] || d));
+  const ym = stdText.match(/\b(20\d\d)\b/);
+  if (ym) return ym[1];
+
+  return null;
+}
+
+function extractWordPressPostId(job: NormalizedJobCircular): string | null {
+  const sources = [
+    job.sourceJobId,
+    (job as any).externalId,
+    job.sourceUrl,
+    job.secondarySourceUrl,
+    job.id,
+  ];
+  for (const s of sources) {
+    if (typeof s === 'string') {
+      const m = s.match(/(?:post[-:]?|p=)(\d+)(?:[-:sec]+(\d+))?/i);
+      if (m) {
+        return m[2] ? `${m[1]}:${m[2]}` : m[1];
+      }
+    }
+  }
+  return null;
+}
+
 function getIdentityKeys(job: NormalizedJobCircular): string[] {
   const keys: string[] = [job.id];
   if (job.sourceJobId) {
     keys.push(`sjid:${job.sourceId}|${normVal(job.sourceJobId)}`);
+  }
+  const wpPostId = extractWordPressPostId(job);
+  if (wpPostId) {
+    keys.push(`wppost:${wpPostId}`);
   }
   if (job.circularNumber) {
     keys.push(`circ:${normVal(job.organization)}|${normVal(job.circularNumber)}`);
@@ -184,7 +236,14 @@ function getIdentityKeys(job: NormalizedJobCircular): string[] {
       job.applicationUrl || job.circularUrl || job.sourceUrl || ''
     );
   keys.push(`fp:${fp}`);
-  keys.push(`title:${normVal(job.organization)}|${normVal(job.position)}`);
+
+  const pubYear = extractJobYear(job);
+  if (pubYear) {
+    keys.push(`title:${normVal(job.organization)}|${normVal(job.position)}|${pubYear}`);
+  } else {
+    keys.push(`title:${normVal(job.organization)}|${normVal(job.position)}`);
+  }
+
   if (job.circularUrl) {
     const cleanCurl = job.circularUrl.split('#')[0].toLowerCase().trim();
     const isSpecificCircularUrl = /\.pdf(\?|$)|[?&](?:id|jobid|circular|jp_id)=|\/(?:notification-circulars|notices|circulars)\/[^/]+/i.test(cleanCurl);

@@ -22,20 +22,35 @@ export const BILINGUAL_EQUIVALENTS: Record<string, string[]> = {
   other_religion: ['other', 'অন্যান্য'],
 
   // Education Boards
-  dhaka: ['dhaka', 'ঢাকা'],
-  chittagong: ['chittagong', 'chattogram', 'চট্টগ্রাম', 'চিটাগাং'],
-  rajshahi: ['rajshahi', 'রাজশাহী'],
-  khulna: ['khulna', 'খুলনা'],
-  barisal: ['barisal', 'barishal', 'বরিশাল'],
-  sylhet: ['sylhet', 'সিলেট'],
-  comilla: ['comilla', 'cumilla', 'কুমিল্লা'],
-  jessore: ['jessore', 'jashore', 'যশোর'],
-  dinajpur: ['dinajpur', 'দিনাজপুর'],
-  mymensingh: ['mymensingh', 'ময়মনসিংহ', 'ময়মনসিংহ'],
-  madrasah: ['madrasah', 'madrasa', 'মাদ্রাসা', 'মাদ্রাসা বোর্ড', 'madrasah board'],
-  technical: ['technical', 'কারিগরি', 'কারিগরি বোর্ড', 'bteb', 'technical board'],
-  bteb: ['bteb', 'technical', 'বাংলাদেশ কারিগরি শিক্ষা বোর্ড', 'bteb board'],
-  bou: ['bou', 'bangladesh open university', 'open university', 'বাংলাদেশ উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত'],
+  dhaka: ['dhaka', 'ঢাকা', 'dhaka board', 'ঢাকা বোর্ড', 'board of intermediate and secondary education, dhaka'],
+  chittagong: ['chittagong', 'chattogram', 'চট্টগ্রাম', 'চিটাগাং', 'chittagong board', 'chattogram board', 'চট্টগ্রাম বোর্ড'],
+  rajshahi: ['rajshahi', 'রাজশাহী', 'rajshahi board', 'রাজশাহী বোর্ড'],
+  khulna: ['khulna', 'খুলনা', 'khulna board', 'খুলনা বোর্ড'],
+  barisal: ['barisal', 'barishal', 'বরিশাল', 'barisal board', 'barishal board', 'বরিশাল বোর্ড'],
+  sylhet: ['sylhet', 'সিলেট', 'sylhet board', 'সিলেট বোর্ড'],
+  comilla: ['comilla', 'cumilla', 'কুমিল্লা', 'comilla board', 'cumilla board', 'কুমিল্লা বোর্ড'],
+  jessore: ['jessore', 'jashore', 'যশোর', 'jessore board', 'jashore board', 'যশোর বোর্ড'],
+  dinajpur: ['dinajpur', 'দিনাজপুর', 'dinajpur board', 'দিনাজপুর বোর্ড'],
+  mymensingh: ['mymensingh', 'ময়মনসিংহ', 'ময়মনসিংহ', 'mymensingh board', 'ময়মনসিংহ বোর্ড'],
+  madrasah: [
+    'madrasah',
+    'madrasa',
+    'মাদ্রাসা',
+    'মাদ্রাসা বোর্ড',
+    'madrasah board',
+    'madrasa board',
+    'bangladesh madrasah education board',
+    'bangladesh madrasa education board',
+    'madrasah education board',
+    'madrasa education board',
+    'বাংলাদেশ মাদ্রাসা শিক্ষা বোর্ড',
+    'বাংলাদেশ মাদ্রাসা শিক্ষা বোর্ড (ঢাকা)',
+    'মাদ্রাসা শিক্ষা বোর্ড',
+    'bmeb',
+  ],
+  technical: ['technical', 'কারিগরি', 'কারিগরি বোর্ড', 'bteb', 'technical board', 'bangladesh technical education board', 'বাংলাদেশ কারিগরি শিক্ষা বোর্ড'],
+  bteb: ['bteb', 'technical', 'কারিগরি', 'কারিগরি বোর্ড', 'বাংলাদেশ কারিগরি শিক্ষা বোর্ড', 'bteb board', 'bangladesh technical education board'],
+  bou: ['bou', 'bangladesh open university', 'open university', 'বাংলাদেশ উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত বিশ্ববিদ্যালয়', 'উন্মুক্ত', 'bou board'],
 
   // Bangladesh 64 Districts (Bilingual & Transliteration Equivalence)
   dist_dhaka: ['dhaka', 'ঢাকা'],
@@ -189,10 +204,27 @@ export const BILINGUAL_EQUIVALENTS: Record<string, string[]> = {
   general: ['general', 'সাধারণ'],
 
   // Quotas
-  general_quota: ['general', 'সাধারণ', 'non-quota', 'non quota'],
-  freedom_fighter: ['freedom fighter', 'মুক্তিযোদ্ধা', 'মুক্তিযোদ্ধা কোটা', 'ff'],
-  child_ff: ['child of freedom fighter', 'মুক্তিযোদ্ধার সন্তান', 'মুক্তিযোদ্ধা কোটা (সন্তান)'],
-  grandchild_ff: ['grandchild of freedom fighter', 'মুক্তিযোদ্ধার নাতি-নাতনি'],
+  general_quota: ['general', 'সাধারণ', 'non-quota', 'non quota', 'none', 'no quota', 'কোনটিই নয়', 'কোনটিই নয়', 'প্রযোজ্য নয়', 'প্রযোজ্য নয়', 'na', 'n/a'],
+  freedom_fighter: ['freedom fighter', 'মুক্তিযোদ্ধা', 'মুক্তিযোদ্ধা কোটা', 'ff', 'ff quota'],
+  child_ff: [
+    'child of freedom fighter',
+    'মুক্তিযোদ্ধার সন্তান',
+    'মুক্তিযোদ্ধা কোটা (সন্তান)',
+    'son/daughter of freedom fighter',
+    'মুক্তিযোদ্ধা/শহীদ মুক্তিযোদ্ধার পুত্র-কন্যা',
+    'মুক্তিযোদ্ধার পুত্র/কন্যা',
+    'মুক্তিযোদ্ধার পুত্র-কন্যা',
+    'son of freedom fighter',
+    'daughter of freedom fighter',
+  ],
+  grandchild_ff: [
+    'grandchild of freedom fighter',
+    'মুক্তিযোদ্ধার নাতি-নাতনি',
+    'মুক্তিযোদ্ধার নাতি/নাতনি',
+    'মুক্তিযোদ্ধা/শহীদ মুক্তিযোদ্ধার নাতি-নাতনি',
+    'grand child of freedom fighter',
+    'grandson/granddaughter of freedom fighter',
+  ],
   district_quota: ['district', 'জেলা কোটা', 'district quota'],
   women_quota: ['women', 'মহিলা', 'মহিলা কোটা', 'female quota'],
   tribal_quota: ['tribal', 'ethnic minority', 'উপজাতি', 'ক্ষুদ্র নৃ-গোষ্ঠী'],
@@ -228,12 +260,15 @@ export const BILINGUAL_EQUIVALENTS: Record<string, string[]> = {
   hsc_equivalent: ['hsc equivalent', 'h.s.c equivalent', 'h.s.c. equivalent', 'সমমান (এইচএসসি)'],
 
   // Graduation Examinations / Degrees
-  bsc_engineering: ['b.sc engineering', 'b.sc. engineering', 'bsc engineering', 'b.sc. in engineering', 'b.sc engg.', 'b.sc engg', 'engineering'],
+  bsc_engineering: ['b.sc engineering', 'b.sc. engineering', 'bsc engineering', 'b.sc. in engineering', 'b.sc engg.', 'b.sc engg', 'engineering', 'b.sc in computer science & engineering', 'b.sc in cse', 'b.sc. (engg.)', 'b.sc(engg)'],
   bsc_hons: ['b.sc (hons)', 'b.sc. (hons)', 'bsc hons', 'b.sc (honours)', 'bachelor of science'],
   bba: ['b.b.a', 'bba', 'b.b.a (hons)', 'bachelor of business administration'],
   ba_hons: ['b.a (hons)', 'b.a. (hons)', 'ba hons', 'bachelor of arts'],
   bcom: ['b.com (hons)', 'b.com', 'bcom', 'bachelor of commerce'],
   pass_course: ['degree (pass)', 'pass course', 'degree pass', 'বিএ পাস', 'বিএসএস পাস'],
+  msc: ['m.sc', 'msc', 'master of science', 'm.sc.', 'masters', 'মাস্টার্স', 'মাস্টার্স ডিগ্রি', 'post graduation'],
+  mba: ['m.b.a', 'mba', 'master of business administration', 'm.b.a.'],
+  ma: ['m.a', 'ma', 'master of arts', 'm.a.'],
 
   // Subjects
   cse: ['computer science and engineering', 'computer science & engineering', 'cse', 'computer science', 'কম্পিউটার সায়েন্স'],
@@ -249,6 +284,19 @@ export const BILINGUAL_EQUIVALENTS: Record<string, string[]> = {
   ku: ['khulna university', 'ku', 'খুলনা বিশ্ববিদ্যালয়'],
   sust: ['shahjalal university of science and technology', 'sust', 'শাবিপ্রবি'],
   nu: ['national university', 'জাতীয় বিশ্ববিদ্যালয়', 'nu'],
+  kuet: ['khulna university of engineering & technology', 'kuet', 'কুয়েট', 'khulna university of engineering and technology'],
+  ruet: ['rajshahi university of engineering & technology', 'ruet', 'রুয়েট', 'rajshahi university of engineering and technology'],
+  cuet: ['chittagong university of engineering & technology', 'cuet', 'চুয়েট', 'chittagong university of engineering and technology'],
+  duet: ['dhaka university of engineering & technology', 'duet', 'ডুয়েট'],
+  butex: ['bangladesh university of textiles', 'butex'],
+  bup: ['bangladesh university of professionals', 'bup'],
+  bau: ['bangladesh agricultural university', 'bau', 'বাকৃবি'],
+  sau: ['sher-e-bangla agricultural university', 'sau', 'শেকৃবি'],
+  pstu: ['patuakhali science and technology university', 'pstu'],
+  hstu: ['haji mohammad danesh science and technology university', 'hstu', 'হাবিপ্রবি'],
+  jnu: ['jagannath university', 'jnu', 'জবি', 'জগন্নাথ বিশ্ববিদ্যালয়'],
+  cou: ['comilla university', 'cou', 'কুবি', 'কুমিল্লা বিশ্ববিদ্যালয়'],
+  brur: ['begum rokeya university', 'brur', 'বেরোবি'],
 
   // Course Duration
   duration_4: ['4 years', '4 year', '4-years', '৪ বছর', '4'],
@@ -379,6 +427,34 @@ export function setSelectValue(
   return true;
 }
 
+function waitForChildOptions(
+  select: HTMLSelectElement,
+  initialCount: number = 1,
+  timeoutMs: number = 1500
+): Promise<boolean> {
+  if (select.options.length > initialCount && select.options.length > 1) {
+    return Promise.resolve(true);
+  }
+  return new Promise<boolean>((resolve) => {
+    let resolved = false;
+    const obs = new MutationObserver(() => {
+      if (select.options.length > initialCount && !resolved) {
+        resolved = true;
+        obs.disconnect();
+        resolve(true);
+      }
+    });
+    obs.observe(select, { childList: true, subtree: true });
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        obs.disconnect();
+        resolve(select.options.length > initialCount);
+      }
+    }, timeoutMs);
+  });
+}
+
 // Cascading Dependent Dropdowns Driver
 export async function handleCascadingDropdowns(
   divisionEl: HTMLSelectElement | null,
@@ -395,14 +471,25 @@ export async function handleCascadingDropdowns(
   // Step 1: Select Division
   if (divisionEl && divisionVal) {
     divisionSet = setSelectValue(divisionEl, divisionVal);
-    // Wait for DOM mutation or timeout
-    await new Promise((r) => setTimeout(r, 350));
+    if (districtEl) {
+      await waitForChildOptions(
+        districtEl,
+        districtEl.options.length <= 1 ? districtEl.options.length : 0,
+        1500
+      );
+    }
   }
 
   // Step 2: Select District
   if (districtEl && districtVal) {
     districtSet = setSelectValue(districtEl, districtVal);
-    await new Promise((r) => setTimeout(r, 350));
+    if (upazilaEl) {
+      await waitForChildOptions(
+        upazilaEl,
+        upazilaEl.options.length <= 1 ? upazilaEl.options.length : 0,
+        1500
+      );
+    }
   }
 
   // Step 3: Select Upazila

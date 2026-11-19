@@ -2,6 +2,8 @@
 // Centralized, extensible, data-driven taxonomy covering Bangladesh & international employment markets.
 // Allows adding new categories without rewriting adapters or UI components.
 
+export * from './canonical-categories';
+
 export type EmployerType =
   | 'Government'
   | 'Government Ministry'

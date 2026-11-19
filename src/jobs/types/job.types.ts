@@ -57,6 +57,13 @@ export type SourceVerificationStatus =
   | 'user_submitted'
   | 'unverified';
 
+export type OfficialSourceVerificationStatus =
+  | 'OFFICIAL_VERIFIED'
+  | 'SECONDARY_SOURCE_ONLY'
+  | 'PARTIALLY_VERIFIED'
+  | 'CONFLICT_DETECTED'
+  | 'UNVERIFIED';
+
 export type GovernmentJobGrade =
   | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
   | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
@@ -203,6 +210,18 @@ export interface NormalizedJobCircular {
   relatedCanonicalJobId?: string;
   isManual?: boolean;
   notes?: string;
+  secondarySourceUrl?: string | null;
+  officialSourceUrl?: string | null;
+  circularDocumentUrl?: string | null;
+  circularImages?: string[];
+  verificationStatus?: OfficialSourceVerificationStatus;
+  lastVerifiedAt?: number | null;
+  hasConflict?: boolean;
+  conflictNotes?: string[];
+  recruitmentType?: string;
+  memorandumNumber?: string;
+  applicationStartTime?: string;
+  applicationDeadlineTime?: string;
   verificationHistory?: Array<{
     timestamp: number;
     status: SourceVerificationStatus;
@@ -244,7 +263,8 @@ export type JobSourceFilterGroup =
   | 'private_company'
   | 'bank_recruitment'
   | 'ngo_ingo'
-  | 'international_jobs';
+  | 'international_jobs'
+  | 'bdgovtjob';
 
 export interface JobSearchFilters {
   query: string;
@@ -271,6 +291,11 @@ export interface JobSearchFilters {
   includeUnclassified?: boolean;
   sourceGroup?: JobSourceFilterGroup;
   governmentGroup?: string;
+  academicDiscipline?: string | 'All';
+  academicSubject?: string | 'All';
+  eligibilityStatus?: 'All' | 'Eligible' | 'Review' | 'Not Eligible';
+  maxAgeLimit?: number | null;
+  sourceVerificationLevel?: 'All' | 'Official' | 'Secondary';
 }
 
 export interface BookmarkRecord {
@@ -409,6 +434,7 @@ export interface ReminderScheduleRecord {
   dismissed: boolean;
   markedAsApplied: boolean;
   deadlineUpdatedAt?: number | null;
+  sentMilestones?: number;
 }
 
 export type NotificationCategoryType =

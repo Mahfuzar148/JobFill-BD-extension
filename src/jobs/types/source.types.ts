@@ -1,7 +1,12 @@
 // JobFill BD - Job Source Adapter Contracts
 // Defines standard modular interface for official & discovery Bangladesh job sources.
 
-import { NormalizedJobCircular, SourceVerificationStatus, JobCategory } from './job.types';
+import {
+  NormalizedJobCircular,
+  SourceVerificationStatus,
+  OfficialSourceVerificationStatus,
+  JobCategory,
+} from './job.types';
 
 export type SourceType =
   | 'official_portal'
@@ -137,6 +142,18 @@ export interface RawSourceJobItem {
   applicationFee?: string;
   applicationProcedure?: string;
   requiredDocuments?: string[];
+  secondarySourceUrl?: string | null;
+  officialSourceUrl?: string | null;
+  circularDocumentUrl?: string | null;
+  circularImages?: string[];
+  verificationStatus?: OfficialSourceVerificationStatus;
+  lastVerifiedAt?: number | null;
+  hasConflict?: boolean;
+  conflictNotes?: string[];
+  recruitmentType?: string;
+  memorandumNumber?: string;
+  applicationStartTime?: string;
+  applicationDeadlineTime?: string;
   rawPayload?: unknown;
 }
 

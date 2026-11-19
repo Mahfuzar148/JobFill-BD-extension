@@ -148,6 +148,11 @@ export class VerificationEngine {
       return false;
     }
 
+    // Await options for dependent select controls if empty or placeholder-only
+    if (el instanceof HTMLSelectElement && el.options.length <= 1) {
+      await SelectHandler.waitForOptions(el, el.options.length, 1200);
+    }
+
     // 2. Controlled Execution via specialized Control Handler
     try {
       const handler = ControlHandlerRouter.getHandler(el);
@@ -160,8 +165,16 @@ export class VerificationEngine {
         this.highlightSuccess(el);
         return true;
       } else {
-        item.status = fillResult.status || 'Fill Failed';
-        item.diagnosticStatus = 'Fill Failed';
+        if (fillResult.status === 'Manual Selection Required') {
+          item.status = 'User Confirmation Required';
+          item.diagnosticStatus = 'User Confirmation Required';
+        } else if (fillResult.status === 'Unsupported Control') {
+          item.status = 'Unsupported Field';
+          item.diagnosticStatus = 'Unsupported Control';
+        } else {
+          item.status = 'Fill Failed';
+          item.diagnosticStatus = 'Fill Failed';
+        }
         item.verificationMessage = fillResult.message;
         return false;
       }
@@ -184,14 +197,25 @@ export class VerificationEngine {
     if (item.status === 'Fill Failed' || item.status === 'FAILED') return 'Fill Failed';
     if (item.status === 'Ambiguous Field') return 'Mapping Not Found';
     if (item.status === 'Unsupported Field') {
-      if (item.diagnosticStatus === 'Unsupported Control') return 'Unsupported Control';
-      if ((item.statusReason || '').includes('Safety Policy')) return 'Unsupported Control';
       const el = item.element as HTMLInputElement | undefined;
       const t = el ? (el.getAttribute?.('type') || el.tagName || '').toLowerCase() : '';
-      if (['file', 'image', 'submit', 'button', 'range', 'color'].includes(t)) return 'Unsupported Control';
+      if (['range', 'color'].includes(t)) {
+        if (!item.proposedValue || item.diagnosticStatus === 'Profile Information Missing') {
+          return 'Profile Information Missing';
+        }
+        return 'Mapping Not Found';
+      }
+      if (item.diagnosticStatus === 'Unsupported Control') return 'Unsupported Control';
+      if ((item.statusReason || '').includes('Safety Policy')) return 'Unsupported Control';
+      if (['file', 'image', 'submit', 'button'].includes(t)) return 'Unsupported Control';
       return 'Mapping Not Found';
     }
     if (item.status === 'Matched') return 'User Confirmation Required';
+    const el = item.element as HTMLInputElement | undefined;
+    const t = el ? (el.getAttribute?.('type') || el.tagName || '').toLowerCase() : '';
+    if (['range', 'color'].includes(t) && item.diagnosticStatus === 'Unsupported Control') {
+      return !item.proposedValue ? 'Profile Information Missing' : 'Mapping Not Found';
+    }
     return item.diagnosticStatus || 'Mapping Not Found';
   }
 
@@ -225,10 +249,11 @@ export class VerificationEngine {
     if (id.includes('division')) return 10;
     if (id.includes('district')) return 20;
     if (id.includes('upazila') || id.includes('thana')) return 30;
-    if (id.includes('examination')) return 10;
+    if (id.includes('examination') || id.includes('degree')) return 10;
     if (id.includes('board')) return 15;
     if (id.includes('group') || id.includes('subject')) return 20;
-    if (id.includes('result')) return 25;
+    if (id.includes('result') && !id.includes('gpa')) return 25;
+    if (id.includes('scale')) return 26;
     if (id.includes('gpa') || id.includes('cgpa')) return 35;
     if (id.startsWith('identity.') && id.includes('yesno')) return 10;
     return 50;
@@ -236,9 +261,12 @@ export class VerificationEngine {
 
   // Executes the approved plan in a controlled queue
   public static async executePlan(
-    sessionId: string,
-    planItems: FillPlanItem[]
+    sessionOrPlan: string | FillPlanItem[],
+    items?: FillPlanItem[]
   ): Promise<FillExecutionReport> {
+    const planItems = Array.isArray(sessionOrPlan) ? sessionOrPlan : (items || []);
+    const sessionId = typeof sessionOrPlan === 'string' ? sessionOrPlan : 'default_autofill_session';
+
     const report: FillExecutionReport = {
       timestamp: new Date().toISOString(),
       totalApproved: planItems.filter((i) => i.isApproved).length,
@@ -261,6 +289,9 @@ export class VerificationEngine {
     );
 
     for (const item of executionQueue) {
+      if (item.status === 'Filled') {
+        continue;
+      }
       if (item.status === 'Already Correct') {
         report.alreadyCorrect++;
         continue;
@@ -289,19 +320,60 @@ export class VerificationEngine {
       const handler = ControlHandlerRouter.getHandler(item.element);
       const snapshotOrig = item.originalValue ?? handler.getCurrentValue(item.element);
 
-      // Snapshot dependent select option count BEFORE changing parent (Examination / District / Yes-No IDs)
-      let dependentSelect: HTMLSelectElement | null = null;
-      let initialDependentCount = 0;
-      if (item.canonicalId.includes('examination') || item.canonicalId.includes('district')) {
+      // Snapshot dependent select option counts BEFORE changing parent (District -> Upazila, Examination -> Board & Group, Degree -> Subject)
+      const dependentChildren: Array<{ select: HTMLSelectElement; initialCount: number }> = [];
+
+      if (item.canonicalId.includes('district')) {
+        const isPerm = item.canonicalId.includes('permanent');
+        const selector = isPerm
+          ? 'select[name*="perm" i][name*="upazila" i], select[id*="perm" i][id*="upazila" i], select[name*="per_upazila" i], select[name*="perm_thana" i], select[name="menu_two_list"], select[id="menu_two_list"], select[name*="menu_two_list" i]'
+          : 'select[name*="present" i][name*="upazila" i], select[id*="present" i][id*="upazila" i], select[name*="p_upazila" i], select[name*="p_thana" i], select[name="menu_one_list"], select[id="menu_one_list"], select[name*="menu_one_list" i], select[name*="upazila" i], select[id*="upazila" i]';
         const sectionRoot =
-          item.element.closest('.edu-block, .edu-grid, .present-address-box, .permanent-address-box, table, fieldset, tr, .section') ||
+          item.element.closest(isPerm ? '.permanent-address-box, fieldset, table, tr, div' : '.present-address-box, fieldset, table, tr, div') ||
           document;
-        const cand = sectionRoot.querySelector<HTMLSelectElement>(
-          'select[name*="group" i], select[id*="group" i], select[name*="subject" i], select[name*="upazila" i], select[id*="upazila" i], select[name*="thana" i]'
-        );
+        const cand = sectionRoot.querySelector<HTMLSelectElement>(selector) ||
+          document.querySelector<HTMLSelectElement>(selector);
         if (cand && cand !== item.element) {
-          dependentSelect = cand;
-          initialDependentCount = cand.options.length;
+          dependentChildren.push({ select: cand, initialCount: cand.options.length });
+        }
+      } else if (item.canonicalId.includes('examination') || item.canonicalId.includes('degree')) {
+        const isGrad = item.canonicalId.includes('graduation');
+        const isHsc = item.canonicalId.includes('hsc');
+        const isSsc = item.canonicalId.includes('ssc');
+
+        const sectionRoot =
+          item.element.closest('.edu-block, .edu-grid, table, fieldset, tr, tbody, .section') || document;
+
+        if (isGrad) {
+          const gradSub = sectionRoot.querySelector<HTMLSelectElement>(
+            'select[name*="gra_subject" i], select[name*="grad_subject" i], select[id*="gra_subject" i], select[id*="grad_subject" i], select[name*="subject3" i]'
+          );
+          if (gradSub && gradSub !== item.element) {
+            dependentChildren.push({ select: gradSub, initialCount: gradSub.options.length });
+          }
+        } else {
+          // Identify both Board and Group/Subject dropdowns in the examination's section
+          const boardSelector = isHsc
+            ? 'select[name*="hsc_board" i], select[id*="hsc_board" i], select[name="board2"], select[id="board2"], select[name="ins2"], select[id="ins2"], select[name*="board" i], select[id*="board" i]'
+            : isSsc
+            ? 'select[name*="ssc_board" i], select[id*="ssc_board" i], select[name="board1"], select[id="board1"], select[name="ins1"], select[id="ins1"], select[name*="board" i], select[id*="board" i]'
+            : 'select[name*="board" i], select[id*="board" i]';
+
+          const groupSelector = isHsc
+            ? 'select[name*="hsc_group" i], select[id*="hsc_group" i], select[name="group2"], select[id="group2"], select[name*="group" i], select[id*="group" i], select[name*="subject" i]'
+            : isSsc
+            ? 'select[name*="ssc_group" i], select[id*="ssc_group" i], select[name="group1"], select[id="group1"], select[name*="group" i], select[id*="group" i], select[name*="subject" i]'
+            : 'select[name*="group" i], select[id*="group" i], select[name*="subject" i]';
+
+          const candBoard = sectionRoot.querySelector<HTMLSelectElement>(boardSelector);
+          if (candBoard && candBoard !== item.element && !dependentChildren.some((d) => d.select === candBoard)) {
+            dependentChildren.push({ select: candBoard, initialCount: candBoard.options.length });
+          }
+
+          const candGroup = sectionRoot.querySelector<HTMLSelectElement>(groupSelector);
+          if (candGroup && candGroup !== item.element && !dependentChildren.some((d) => d.select === candGroup)) {
+            dependentChildren.push({ select: candGroup, initialCount: candGroup.options.length });
+          }
         }
       }
 
@@ -315,16 +387,22 @@ export class VerificationEngine {
           appliedValue: actualApplied,
         });
 
-        // Wait up to 1200ms ONLY if the dependent child dropdown started empty (<= 1 option) and is still waiting for options
-        if (dependentSelect && initialDependentCount <= 1 && dependentSelect.options.length <= 1) {
-          await SelectHandler.waitForOptions(dependentSelect, initialDependentCount, 1200);
+        // Wait up to 1200ms for each dependent child dropdown that started empty (<= 1 option) and is waiting for options
+        for (const dep of dependentChildren) {
+          if (dep.initialCount <= 1 && dep.select.options.length <= 1) {
+            await SelectHandler.waitForOptions(dep.select, dep.initialCount, 1200);
 
-          // Re-enable/re-approve child item if present in plan and currently unapproved due to previously missing options
-          const childItem = planItems.find((p) => p.element === dependentSelect);
-          if (childItem && childItem.proposedValue && (!childItem.isApproved || childItem.status === 'Unsupported Field')) {
-            childItem.status = 'Matched';
-            childItem.isApproved = true;
-            childItem.diagnosticStatus = 'Successfully Filled';
+            // Re-enable/re-approve child item if present in plan and currently unapproved due to previously missing options
+            const childItem = planItems.find((p) => p.element === dep.select);
+            if (
+              childItem &&
+              childItem.proposedValue &&
+              (!childItem.isApproved || childItem.status === 'Unsupported Field' || childItem.status === 'Fill Failed')
+            ) {
+              childItem.status = 'Matched';
+              childItem.isApproved = true;
+              childItem.diagnosticStatus = 'Successfully Filled';
+            }
           }
         }
       } else {
@@ -333,29 +411,55 @@ export class VerificationEngine {
     }
 
     // Cross-verify Confirm Mobile Number against Primary Mobile Number in DOM
-    const primaryMobileItem = planItems.find((p) => p.canonicalId === 'contact.mobile');
-    const confirmMobileItem = planItems.find(
-      (p) => p.canonicalId === 'contact.confirmMobile' && (p.status === 'Filled' || p.status === 'Already Correct')
+    const primaryMobileItem = planItems.find(
+      (p) => p.canonicalId === 'contact.mobile' || p.canonicalId === 'candidate.mobile'
     );
-    if (confirmMobileItem && primaryMobileItem?.element && document.body.contains(primaryMobileItem.element)) {
+    if (primaryMobileItem?.element && document.body.contains(primaryMobileItem.element)) {
       const primaryDomVal = ControlHandlerRouter.getHandler(primaryMobileItem.element).getCurrentValue(
         primaryMobileItem.element
       );
-      const confirmDomVal = ControlHandlerRouter.getHandler(confirmMobileItem.element).getCurrentValue(
-        confirmMobileItem.element
-      );
       const normPrimary = ValueNormalizer.normalizeMobileNumber(primaryDomVal);
-      const normConfirm = ValueNormalizer.normalizeMobileNumber(confirmDomVal);
-      if (normPrimary && normConfirm !== normPrimary) {
-        if (confirmMobileItem.status === 'Filled') {
-          report.successfullyFilled = Math.max(0, report.successfullyFilled - 1);
+      if (primaryMobileItem.status === 'Filled' || primaryMobileItem.status === 'Already Correct') {
+        if (!normPrimary || normPrimary.length !== 11 || !normPrimary.startsWith('01') || !/^\d{11}$/.test(normPrimary)) {
+          if (primaryMobileItem.status === 'Filled') {
+            report.successfullyFilled = Math.max(0, report.successfullyFilled - 1);
+          }
+          primaryMobileItem.status = 'Fill Failed';
+          primaryMobileItem.diagnosticStatus = 'Fill Failed';
+          primaryMobileItem.verificationMessage = `Invalid Mobile Number ("${primaryDomVal}"). Expected complete 11-digit number starting with 01.`;
           report.failedVerification++;
         }
-        confirmMobileItem.status = 'Fill Failed';
-        confirmMobileItem.diagnosticStatus = 'Fill Failed';
-        confirmMobileItem.verificationMessage = `Confirm Mobile ("${confirmDomVal}") does not match primary Mobile ("${primaryDomVal}").`;
-      } else if (normPrimary && normConfirm === normPrimary) {
-        confirmMobileItem.verificationMessage = `Verified matching primary Mobile Number (${normConfirm}).`;
+      }
+    }
+
+    const confirmMobileItems = planItems.filter(
+      (p) =>
+        (p.canonicalId === 'contact.confirmMobile' ||
+          p.canonicalId === 'contact.alternateMobile' ||
+          p.canonicalId === 'candidate.confirmMobile') &&
+        (p.status === 'Filled' || p.status === 'Already Correct')
+    );
+    for (const confirmMobileItem of confirmMobileItems) {
+      if (primaryMobileItem?.element && document.body.contains(primaryMobileItem.element)) {
+        const primaryDomVal = ControlHandlerRouter.getHandler(primaryMobileItem.element).getCurrentValue(
+          primaryMobileItem.element
+        );
+        const confirmDomVal = ControlHandlerRouter.getHandler(confirmMobileItem.element).getCurrentValue(
+          confirmMobileItem.element
+        );
+        const normPrimary = ValueNormalizer.normalizeMobileNumber(primaryDomVal);
+        const normConfirm = ValueNormalizer.normalizeMobileNumber(confirmDomVal);
+        if (normPrimary && normConfirm !== normPrimary) {
+          if (confirmMobileItem.status === 'Filled') {
+            report.successfullyFilled = Math.max(0, report.successfullyFilled - 1);
+            report.failedVerification++;
+          }
+          confirmMobileItem.status = 'Fill Failed';
+          confirmMobileItem.diagnosticStatus = 'Fill Failed';
+          confirmMobileItem.verificationMessage = `Confirm Mobile ("${confirmDomVal}") does not match primary Mobile ("${primaryDomVal}").`;
+        } else if (normPrimary && normConfirm === normPrimary && normConfirm.length === 11) {
+          confirmMobileItem.verificationMessage = `Verified matching primary Mobile Number (${normConfirm}).`;
+        }
       }
     }
 

@@ -56,15 +56,15 @@ export function normalizeCategory(raw?: string, textHint: string = ''): JobCateg
     return raw as JobCategory;
   }
   if (/bank|bb\.org|sonali|janata|rupali|agrani|spcbl|ব্যাংক/i.test(combined)) return 'Bank';
-  if (/defence|army|navy|air force|police|ansar|rab|bgb|সেনাবাহিনী|পুলিশ/i.test(combined)) return 'Defence / Security';
-  if (/university|বিশ্ববিদ্যালয়|buet|du\.ac|sust|ju|cu|ru/i.test(combined)) return 'University';
+  if (/defence|army|navy|air force|police|ansar|rab|bgb|সেনাবাহিনী|পুলিশ|ডিফেন্স|প্রতিরক্ষা/i.test(combined)) return 'Defence / Security';
+  if (/university|বিশ্ববিদ্যালয়|বিশ্ববিদ্যালয়|buet|du\.ac|sust|ju|cu|ru/i.test(combined)) return 'University';
   if (/hospital|medical|health|nurse|doctor|স্বাস্থ্য|হাসপাতাল/i.test(combined)) return 'Healthcare';
-  if (/school|college|teacher|lecturer|professor|শিক্ষক|প্রভাষক/i.test(combined)) return 'Teaching';
+  if (/school|college|teacher|lecturer|professor|শিক্ষক|প্রভাষক|শিক্ষা\s*প্রতিষ্ঠান/i.test(combined)) return 'Teaching';
   if (/software|developer|programmer|engineer|it |ict|প্রোগ্রামার|আইটি/i.test(combined)) return 'IT / Technology';
   if (/ngo|brac|asa|grameen|unicef|undp|এনজিও/i.test(combined)) return 'NGO';
   if (/petrobangla|bpdb|desco|wasa|reb|autonomous|স্বায়ত্তশাসিত/i.test(combined)) return 'Autonomous Organization';
-  if (/gov\.bd|bpsc|teletalk|ministry|directorate|government|সরকারি|মন্ত্রণালয়|অধিদপ্তর|বিপিএসসি/i.test(combined)) return 'Government';
-  if (/private|limited|ltd|company|corporate|বেসরকারি/i.test(combined)) return 'Private';
+  if (/private|limited|ltd|company|corporate|বেসরকারি|ফার্মাসিউটিক্যালস|ফার্মাসিউটিকাল|ঔষধ|গ্রুপ\s*অ[বভ]\s*কোম্পানি|কোম্পানি/i.test(combined)) return 'Private';
+  if (/gov\.bd|bpsc|teletalk|ministry|directorate|government|(?<!বে)সরকারি|মন্ত্রণালয়|অধিদপ্তর|বিপিএসসি/i.test(combined)) return 'Government';
   return 'Other';
 }
 
@@ -323,6 +323,18 @@ export function normalizeJobRecord(
     possibleDuplicateOfId: null,
     duplicateConfidence: null,
     isManual: meta.isManual,
+    secondarySourceUrl: raw.secondarySourceUrl ?? null,
+    officialSourceUrl: raw.officialSourceUrl ?? null,
+    circularDocumentUrl: raw.circularDocumentUrl ?? (circularUrl && isCircularDocumentUrl(circularUrl) ? circularUrl : null),
+    circularImages: raw.circularImages,
+    verificationStatus: raw.verificationStatus,
+    lastVerifiedAt: raw.lastVerifiedAt ?? (raw.verificationStatus === 'OFFICIAL_VERIFIED' ? now : null),
+    hasConflict: raw.hasConflict,
+    conflictNotes: raw.conflictNotes,
+    recruitmentType: raw.recruitmentType,
+    memorandumNumber: raw.memorandumNumber || raw.circularNumber,
+    applicationStartTime: raw.applicationStartTime,
+    applicationDeadlineTime: raw.applicationDeadlineTime,
     verificationHistory: meta.isManual
       ? [
           {

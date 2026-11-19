@@ -12,7 +12,7 @@ export class DateHandler implements ControlHandler {
   public canHandle(el: HTMLElement): boolean {
     if (!(el instanceof HTMLInputElement)) return false;
     const type = (el.type || 'text').toLowerCase();
-    if (type === 'date') return true;
+    if (['date', 'month', 'week', 'time', 'datetime-local'].includes(type)) return true;
 
     // Detect text inputs acting as date pickers
     if (type === 'text') {

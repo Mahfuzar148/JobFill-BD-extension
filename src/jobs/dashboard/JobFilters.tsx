@@ -17,6 +17,10 @@ import {
   Globe,
   Building2,
   ExternalLink,
+  Clock,
+  FileText,
+  CheckCircle2,
+  Shield,
 } from 'lucide-react';
 import {
   JobSearchFilters,
@@ -38,6 +42,16 @@ import {
 import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
 import { DAY_MS, isTimestampInCurrentDhakaWeek } from '../services/deadline-parser';
 import { buildBdjobsSearchUrl } from '../sources/bdjobs/bdjobs.adapter';
+import { CANONICAL_18_CATEGORIES, mapJobToCategoryLetter } from '../taxonomy/canonical-categories';
+import type { CategoryLetter, ExamSchedule, JobResult } from '../types/job-system.types';
+
+declare module '../types/job.types' {
+  interface JobSearchFilters {
+    categoryLetter?: CategoryLetter | 'All';
+    examStatus?: 'all' | 'announced' | 'not_announced' | 'postponed' | 'completed';
+    resultStatus?: 'all' | 'result_published' | 'result_pending';
+  }
+}
 import {
   matchesSearchCategory,
   matchesJobEducation,
@@ -47,6 +61,11 @@ import {
   normalizeSearchText,
 } from '../services/search-engine';
 import { JobGradeExtractor, GRADE_LABELS } from '../services/grade-extractor';
+import {
+  ACADEMIC_DISCIPLINES,
+  getSubjectById,
+  ALL_CANONICAL_SUBJECTS,
+} from '../taxonomy/subject-taxonomy';
 
 export const JOB_CATEGORIES: JobCategory[] = [
   'Government',
@@ -201,6 +220,13 @@ export const SOURCE_FILTER_GROUPS: SourceFilterGroupDefinition[] = [
     shortLabelBn: 'আন্তর্জাতিক',
     badgeColorClass: 'border-indigo-300 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800',
   },
+  {
+    id: 'bdgovtjob',
+    labelEn: 'BD Govt Job (bdgovtjob.net)',
+    labelBn: 'বিডি গভর্নমেন্ট জব (bdgovtjob.net)',
+    shortLabelBn: 'বিডি গভর্নমেন্ট জব',
+    badgeColorClass: 'border-orange-300 bg-orange-50 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-800',
+  },
 ];
 
 export function isJobMatchingSourceGroup(
@@ -263,6 +289,8 @@ export function isJobMatchingSourceGroup(
         (typeof job.circularUrl === 'string' && (job.circularUrl.includes('.gov.bd') || job.circularUrl.includes('.mil.bd'))) ||
         (typeof job.applicationUrl === 'string' && (job.applicationUrl.includes('.gov.bd') || job.applicationUrl.includes('.mil.bd') || job.applicationUrl.includes('teletalk.com.bd')))
       );
+    case 'bdgovtjob':
+      return sId.includes('bdgovtjob') || sName.includes('bdgovtjob');
     default:
       return true;
   }
@@ -292,7 +320,17 @@ export const DEFAULT_JOB_FILTERS: JobSearchFilters = {
   includeUnclassified: true,
   sourceGroup: 'All',
   governmentGroup: 'All',
+  categoryLetter: 'All',
+  examStatus: 'all',
+  resultStatus: 'all',
+  academicDiscipline: 'All',
+  academicSubject: 'All',
+  eligibilityStatus: 'All',
+  maxAgeLimit: null,
+  sourceVerificationLevel: 'All',
 };
+
+export const defaultJobSearchFilters = DEFAULT_JOB_FILTERS;
 
 export function isJobMatchingStatFilter(
   job: NormalizedJobCircular,
@@ -492,6 +530,99 @@ export function filterAndSortJobs(
       }
     }
 
+    // 14. Universal 18-Category Letter Filter (A through R)
+    if (filters.categoryLetter && filters.categoryLetter !== 'All') {
+      const jobCatLetter = (job as any).categoryLetter || mapJobToCategoryLetter(job);
+      if (jobCatLetter !== filters.categoryLetter) {
+        return false;
+      }
+    }
+
+    // 15. Exam Lifecycle Status Filter
+    if (filters.examStatus && filters.examStatus !== 'all') {
+      const schedules: ExamSchedule[] = (job as any).examSchedules || [];
+      if (filters.examStatus === 'announced') {
+        const hasAnnounced = schedules.some((s) => s.status === 'Announced' || s.status === 'Rescheduled');
+        if (!hasAnnounced) return false;
+      } else if (filters.examStatus === 'not_announced') {
+        const hasAnnounced = schedules.some((s) => s.status === 'Announced' || s.status === 'Rescheduled' || s.status === 'Completed');
+        if (hasAnnounced) return false;
+      } else if (filters.examStatus === 'postponed') {
+        const hasPostponed = schedules.some((s) => s.status === 'Postponed');
+        if (!hasPostponed) return false;
+      } else if (filters.examStatus === 'completed') {
+        const hasCompleted = schedules.some((s) => s.status === 'Completed');
+        if (!hasCompleted) return false;
+      }
+    }
+
+    // 16. Result Lifecycle Status Filter
+    if (filters.resultStatus && filters.resultStatus !== 'all') {
+      const results: JobResult[] = (job as any).results || [];
+      if (filters.resultStatus === 'result_published') {
+        const hasPublished = results.some((r) => r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published' || r.publicationStatus === 'Partially Published');
+        if (!hasPublished) return false;
+      } else if (filters.resultStatus === 'result_pending') {
+        const hasPublished = results.some((r) => r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published' || r.publicationStatus === 'Partially Published');
+        if (hasPublished) return false;
+      }
+    }
+
+    // 17. Academic Discipline & Subject Filter
+    if (filters.academicDiscipline && filters.academicDiscipline !== 'All') {
+      const disc = ACADEMIC_DISCIPLINES.find((d) => d.id === filters.academicDiscipline);
+      if (disc) {
+        const textToMatch = `${job.jobTitle || ''} ${job.position || ''} ${job.qualification || ''} ${(job.requirements || []).join(' ')} ${job.description || ''}`;
+        const matchesAnySubjectInDiscipline = disc.subjects.some((subj) =>
+          subj.aliases.some((rx) => rx.test(textToMatch))
+        );
+        if (!matchesAnySubjectInDiscipline) return false;
+      }
+    }
+
+    if (filters.academicSubject && filters.academicSubject !== 'All') {
+      const targetSubj = getSubjectById(filters.academicSubject);
+      if (targetSubj) {
+        const textToMatch = `${job.jobTitle || ''} ${job.position || ''} ${job.qualification || ''} ${(job.requirements || []).join(' ')} ${job.description || ''}`;
+        const matchesTarget = targetSubj.aliases.some((rx) => rx.test(textToMatch));
+        if (!matchesTarget) return false;
+      }
+    }
+
+    // 18. Eligibility Status Filter (All, Eligible, Review, Not Eligible)
+    if (filters.eligibilityStatus && filters.eligibilityStatus !== 'All') {
+      const verdict = (job as any).eligibilityVerdict || (job as any).eligibilityStatus;
+      if (filters.eligibilityStatus === 'Eligible') {
+        if (verdict !== 'ELIGIBLE' && verdict !== 'Eligible') return false;
+      } else if (filters.eligibilityStatus === 'Review') {
+        if (verdict !== 'MANUAL_REVIEW_REQUIRED' && verdict !== 'Needs Verification' && verdict !== 'Review') return false;
+      } else if (filters.eligibilityStatus === 'Not Eligible') {
+        if (verdict !== 'NOT_ELIGIBLE' && verdict !== 'Not Eligible') return false;
+      }
+    }
+
+    // 19. Max Age Limit Filter (e.g. 30, 32, 35, 40)
+    if (filters.maxAgeLimit) {
+      const ageStr = `${job.ageRequirement || ''} ${(job.requirements || []).join(' ')} ${job.description || ''}`;
+      const match = ageStr.match(/\b(?:1[6-9]|2[0-9])\s*(?:-|to|থেকে)\s*(2[5-9]|3[0-9]|4[0-5])\b/i) ||
+                    ageStr.match(/(?:max(?:imum)?\s*age|up to|অনূর্ধ্ব|সর্বোচ্চ\s*বয়স)\s*[:\-]?\s*(2[5-9]|3[0-9]|4[0-5])/i);
+      if (match) {
+        const parsedMaxAge = parseInt(match[1], 10);
+        if (parsedMaxAge > filters.maxAgeLimit) return false;
+      }
+    }
+
+    // 20. Source Verification Level Filter (Official vs Secondary)
+    if (filters.sourceVerificationLevel && filters.sourceVerificationLevel !== 'All') {
+      const isOfficial = job.sourceVerification === 'official_verified' ||
+                         (job.sourceId || '').toLowerCase().includes('bpsc') ||
+                         (job.sourceId || '').toLowerCase().includes('teletalk') ||
+                         (job.sourceId || '').toLowerCase().includes('bangladesh-bank') ||
+                         (job.sourceId || '').toLowerCase().includes('petrobangla');
+      if (filters.sourceVerificationLevel === 'Official' && !isOfficial) return false;
+      if (filters.sourceVerificationLevel === 'Secondary' && isOfficial) return false;
+    }
+
     return true;
   });
 
@@ -546,11 +677,13 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
   const [showGradePanel, setShowGradePanel] = useState(false);
   const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
 
+  const safeFilters = filters || DEFAULT_JOB_FILTERS;
+
   const update = <K extends keyof JobSearchFilters>(key: K, val: JobSearchFilters[K]) => {
-    onChange({ ...filters, [key]: val });
+    onChange({ ...safeFilters, [key]: val });
   };
 
-  const selectedGrades = filters.selectedGrades || [];
+  const selectedGrades = safeFilters.selectedGrades || [];
   const activeGradeCount = selectedGrades.filter((g) => g !== 'All').length;
 
   const toggleGradeSelection = (gradeId: string) => {
@@ -678,6 +811,48 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
       onRemove: () => update('sourceGroup', 'All'),
     });
   }
+  if (filters.categoryLetter && filters.categoryLetter !== 'All') {
+    activeChips.push({
+      id: 'categoryLetter',
+      label: `${bn ? 'ক্যাটাগরি' : 'Category'}: ${filters.categoryLetter}`,
+      onRemove: () => update('categoryLetter', 'All'),
+    });
+  }
+  if (filters.examStatus && filters.examStatus !== 'all') {
+    activeChips.push({
+      id: 'examStatus',
+      label: `${bn ? 'পরীক্ষা' : 'Exam'}: ${filters.examStatus}`,
+      onRemove: () => update('examStatus', 'all'),
+    });
+  }
+  if (filters.resultStatus && filters.resultStatus !== 'all') {
+    activeChips.push({
+      id: 'resultStatus',
+      label: `${bn ? 'ফলাফল' : 'Result'}: ${filters.resultStatus}`,
+      onRemove: () => update('resultStatus', 'all'),
+    });
+  }
+  if (filters.eligibilityStatus && filters.eligibilityStatus !== 'All') {
+    activeChips.push({
+      id: 'eligibilityStatus',
+      label: `${bn ? 'যোগ্যতা' : 'Eligibility'}: ${filters.eligibilityStatus}`,
+      onRemove: () => update('eligibilityStatus', 'All'),
+    });
+  }
+  if (filters.maxAgeLimit) {
+    activeChips.push({
+      id: 'maxAgeLimit',
+      label: `Age ≤ ${filters.maxAgeLimit} yrs`,
+      onRemove: () => update('maxAgeLimit', null),
+    });
+  }
+  if (filters.sourceVerificationLevel && filters.sourceVerificationLevel !== 'All') {
+    activeChips.push({
+      id: 'sourceVerificationLevel',
+      label: `${bn ? 'উৎস' : 'Source'}: ${filters.sourceVerificationLevel}`,
+      onRemove: () => update('sourceVerificationLevel', 'All'),
+    });
+  }
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
@@ -786,6 +961,42 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
           <span>{bn ? 'বিডিজবসে সরাসরি খুঁজুন' : 'Search Bdjobs.com'}</span>
         </a>
       </div>
+
+      {/* BD Govt Job Sub-Category Filter */}
+      {filters.sourceGroup === 'bdgovtjob' && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar bg-orange-50/50 dark:bg-orange-950/20 px-2.5 py-1.5 rounded-lg border border-orange-200 dark:border-orange-800/50">
+          <span className="text-[11px] font-bold text-orange-700 dark:text-orange-300 shrink-0 flex items-center gap-1">
+            <span>{bn ? 'বিডি গভর্নমেন্ট জব ক্যাটাগরি:' : 'BD Govt Job Category:'}</span>
+          </span>
+          {[
+            { id: 'All', labelEn: 'All Jobs', labelBn: 'সব ক্যাটাগরি' },
+            { id: 'Government', labelEn: 'Government', labelBn: 'সরকারি চাকরি' },
+            { id: 'BPSC', labelEn: 'BPSC', labelBn: 'বিপিএসসি' },
+            { id: 'Bank', labelEn: 'Bank', labelBn: 'ব্যাংক চাকরি' },
+            { id: 'Private', labelEn: 'Private', labelBn: 'প্রাইভেট চাকরি' },
+            { id: 'NGO', labelEn: 'NGO', labelBn: 'এনজিও চাকরি' },
+            { id: 'Teaching', labelEn: 'Education', labelBn: 'শিক্ষা প্রতিষ্ঠান' },
+            { id: 'University', labelEn: 'University', labelBn: 'বিশ্ববিদ্যালয়' },
+            { id: 'Defence / Security', labelEn: 'Defence', labelBn: 'ডিফেন্স' },
+          ].map((cat) => {
+            const isSelected = (filters.category || 'All') === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => update('category', cat.id as any)}
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 cursor-pointer transition-all border ${
+                  isSelected
+                    ? 'border-orange-400 bg-orange-500 text-white shadow-xs'
+                    : 'border-orange-200 dark:border-orange-800 bg-white dark:bg-slate-800 text-orange-900 dark:text-orange-200 hover:bg-orange-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <span>{bn ? cat.labelBn : cat.labelEn}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main Standard Filter Dropdowns */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -1130,6 +1341,160 @@ export const JobFilters: React.FC<JobFiltersProps> = ({
                 {EXPERIENCE_LEVELS.map((el) => (
                   <option key={el} value={el}>{el}</option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{bn ? 'সার্বজনীন ক্যাটাগরি (A-R)' : 'Universal Category (A–R)'}</span>
+              </label>
+              <select
+                value={filters.categoryLetter || 'All'}
+                onChange={(e) => update('categoryLetter', e.target.value as any)}
+                aria-label="Universal Category Letter"
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব ক্যাটাগরি (A-R)' : 'All 18 Categories (A–R)'}</option>
+                {CANONICAL_18_CATEGORIES.map((c) => (
+                  <option key={c.letter} value={c.letter}>
+                    {c.letter}. {bn ? c.nameBn : c.nameEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
+                <span>{bn ? 'শিক্ষাগত অনুষদ / ডিসিপ্লিন' : 'Academic Discipline'}</span>
+              </label>
+              <select
+                value={filters.academicDiscipline || 'All'}
+                onChange={(e) => {
+                  update('academicDiscipline', e.target.value);
+                  update('academicSubject', 'All');
+                }}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব অনুষদ (All Disciplines)' : 'All Disciplines'}</option>
+                {ACADEMIC_DISCIPLINES.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {bn ? d.nameBn : d.nameEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{bn ? 'স্নাতক / অনার্সের নির্দিষ্ট বিষয়' : 'Specific Subject'}</span>
+              </label>
+              <select
+                value={filters.academicSubject || 'All'}
+                onChange={(e) => update('academicSubject', e.target.value)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব বিষয় (All Subjects)' : 'All Subjects'}</option>
+                {(filters.academicDiscipline && filters.academicDiscipline !== 'All'
+                  ? ACADEMIC_DISCIPLINES.find((d) => d.id === filters.academicDiscipline)?.subjects || []
+                  : ALL_CANONICAL_SUBJECTS
+                ).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {bn ? s.nameBn : s.nameEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>{bn ? 'পরীক্ষার স্ট্যাটাস' : 'Exam Schedule Status'}</span>
+              </label>
+              <select
+                value={filters.examStatus || 'all'}
+                onChange={(e) => update('examStatus', e.target.value as any)}
+                aria-label="Exam Schedule Status"
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="all">{bn ? 'সব পরীক্ষার স্ট্যাটাস' : 'All Exam Status'}</option>
+                <option value="announced">{bn ? 'তারিখ ঘোষিত (Announced)' : 'Announced'}</option>
+                <option value="not_announced">{bn ? 'তারিখ নির্ধারিত হয়নি (Not Announced)' : 'Not Announced'}</option>
+                <option value="postponed">{bn ? 'স্থগিত (Postponed)' : 'Postponed'}</option>
+                <option value="completed">{bn ? 'সম্পন্ন (Completed)' : 'Completed'}</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Award className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{bn ? 'ফলাফল স্ট্যাটাস' : 'Job Result Status'}</span>
+              </label>
+              <select
+                value={filters.resultStatus || 'all'}
+                onChange={(e) => update('resultStatus', e.target.value as any)}
+                aria-label="Job Result Status"
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="all">{bn ? 'সব ফলাফল স্ট্যাটাস' : 'All Result Status'}</option>
+                <option value="result_published">{bn ? 'ফলাফল প্রকাশিত (Published)' : 'Result Published'}</option>
+                <option value="result_pending">{bn ? 'ফলাফল অপেক্ষমাণ (Pending)' : 'Result Pending'}</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{bn ? 'যোগ্যতার স্থিতি (Eligibility)' : 'Eligibility Status'}</span>
+              </label>
+              <select
+                aria-label="Eligibility Status"
+                value={filters.eligibilityStatus || 'All'}
+                onChange={(e) => update('eligibilityStatus', e.target.value as any)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব সার্কুলার (All)' : 'All Circulars'}</option>
+                <option value="Eligible">{bn ? 'শুধু যোগ্য চাকরি (Eligible Only)' : 'Eligible Only'}</option>
+                <option value="Review">{bn ? 'যাচাই প্রয়োজন (Review Required)' : 'Review Required'}</option>
+                <option value="Not Eligible">{bn ? 'অযোগ্য চাকরি (Not Eligible)' : 'Not Eligible'}</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                <span>{bn ? 'সর্বোচ্চ বয়সসীমা (Max Age)' : 'Max Age Limit'}</span>
+              </label>
+              <select
+                aria-label="Filter by Age Limit"
+                value={filters.maxAgeLimit ? String(filters.maxAgeLimit) : ''}
+                onChange={(e) => update('maxAgeLimit', e.target.value ? parseInt(e.target.value, 10) : null)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="">{bn ? 'সব বয়সসীমা (Any Age)' : 'Any Age Limit'}</option>
+                <option value="30">{bn ? 'অনূর্ধ্ব ৩০ বছর (Max 30 Yrs)' : 'Up to 30 Years'}</option>
+                <option value="32">{bn ? 'অনূর্ধ্ব ৩২ বছর (Max 32 Yrs - Quota/BPSC)' : 'Up to 32 Years (Quota/BPSC)'}</option>
+                <option value="35">{bn ? 'অনূর্ধ্ব ৩৫ বছর (Max 35 Yrs)' : 'Up to 35 Years'}</option>
+                <option value="40">{bn ? 'অনূর্ধ্ব ৪০ বছর (Max 40 Yrs)' : 'Up to 40 Years'}</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mb-1.5">
+                <Shield className="w-3.5 h-3.5 text-teal-600" />
+                <span>{bn ? 'উৎস ভেরিফিকেশন (Source)' : 'Source Verification'}</span>
+              </label>
+              <select
+                aria-label="Filter by Verification Status"
+                value={filters.sourceVerificationLevel || 'All'}
+                onChange={(e) => update('sourceVerificationLevel', e.target.value as any)}
+                className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-2 text-slate-700 dark:text-slate-200"
+              >
+                <option value="All">{bn ? 'সব সোর্স (All Sources)' : 'All Verification Levels'}</option>
+                <option value="Official">{bn ? 'অফিশিয়াল ভেরিফাইড (Govt/Teletalk/Bank)' : 'Official Verified Only'}</option>
+                <option value="Secondary">{bn ? 'সেকেন্ডারি / এগ্রিগেটেড' : 'Secondary Aggregated'}</option>
               </select>
             </div>
 

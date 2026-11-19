@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <title>Directorate of Registration (DOR) / Sub-Registrar Application Form - Teletalk Portal</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; margin: 0; padding: 20px; color: #1e293b; }
+    .portal-container { max-width: 960px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }
+    .portal-header { background: #047857; color: white; padding: 18px 24px; text-align: center; }
+    .portal-header h1 { margin: 0 0 6px 0; font-size: 20px; }
+    .portal-header p { margin: 0; font-size: 14px; opacity: 0.9; }
+    .form-wrapper { padding: 24px; }
+    fieldset { border: 1px solid #94a3b8; border-radius: 6px; margin-bottom: 22px; padding: 16px 20px; }
+    legend { font-weight: 700; color: #047857; padding: 0 8px; font-size: 15px; }
+    table.form-table { width: 100%; border-collapse: collapse; }
+    table.form-table td { padding: 7px 10px; vertical-align: middle; }
+    table.form-table td.label-col { width: 28%; font-weight: 600; font-size: 13px; color: #334155; }
+    table.form-table td.colon-col { width: 2%; text-align: center; font-weight: bold; }
+    table.form-table td.input-col { width: 70%; }
+    input[type="text"], input[type="tel"], input[type="email"], select, textarea {
+      width: 100%; max-width: 380px; padding: 6px 10px; border: 1px solid #94a3b8; border-radius: 4px; font-size: 13px; box-sizing: border-box;
+    }
+    input[type="text"]:focus, input[type="tel"]:focus, input[type="email"]:focus, select:focus {
+      outline: none; border-color: #047857; box-shadow: 0 0 0 2px #a7f3d0;
+    }
+    .flex-row { display: flex; gap: 8px; align-items: center; }
+    .radio-label { margin-right: 16px; font-size: 13px; cursor: pointer; }
+    .two-col-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .captcha-box { background: #e2e8f0; border: 1px dashed #64748b; padding: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .captcha-img { font-family: monospace; font-size: 20px; font-weight: bold; letter-spacing: 4px; background: #cbd5e1; padding: 4px 12px; border-radius: 4px; color: #0f172a; }
+    .declaration-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+    .submit-btn { background: #047857; color: white; font-size: 15px; font-weight: 600; padding: 10px 28px; border: none; border-radius: 6px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<div class="portal-container">
+  <div class="portal-header">
+    <h1>Directorate of Registration (DOR) — গণপ্রজাতন্ত্রী বাংলাদেশ সরকার</h1>
+    <p>Application for the Post of Sub-Registrar (সাব-রেজিস্ট্রার পদ)</p>
+  </div>
+
+  <div class="form-wrapper">
+    <form id="govJobApplicationForm" autocomplete="off">
+
+      <!-- SECTION 1: Personal Information -->
+      <fieldset id="sec_personal">
+        <legend>Basic Information (ব্যক্তিগত সাধারণ তথ্য)</legend>
+        <table class="form-table">
+          <tr>
+            <td class="label-col">Applicant's Name (English)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="applicant_name" name="applicant_name" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Applicant's Name (বাংলায়)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="applicant_name_bn" name="applicant_name_bn" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Father's Name (English)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="father_name" name="father_name" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Father's Name (বাংলায়)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="father_name_bn" name="father_name_bn" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Mother's Name (English)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="mother_name" name="mother_name" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Mother's Name (বাংলায়)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="mother_name_bn" name="mother_name_bn" /></td>
+          </tr>
+
+          <!-- Scenario 1: Single Date of Birth input -->
+          <tr>
+            <td class="label-col">Date of Birth (DD/MM/YYYY text)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="dob_single" name="dob" placeholder="DD/MM/YYYY" /></td>
+          </tr>
+
+          <!-- Scenario 2: Day/Month/Year DOB dropdowns -->
+          <tr>
+            <td class="label-col">Date of Birth (Dropdown Mode)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <div class="flex-row">
+                <select id="dob_day" name="dob_day" style="max-width: 90px;">
+                  <option value="">Day</option>
+                  <option value="1">01</option>
+                  <option value="15">15</option>
+                  <option value="25">25</option>
+                </select>
+                <select id="dob_month" name="dob_month" style="max-width: 140px;">
+                  <option value="">Month</option>
+                  <option value="1">01 - January</option>
+                  <option value="8">08 - August</option>
+                  <option value="12">12 - December</option>
+                </select>
+                <select id="dob_year" name="dob_year" style="max-width: 110px;">
+                  <option value="">Year</option>
+                  <option value="1990">1990</option>
+                  <option value="1994">1994</option>
+                  <option value="1998">1998</option>
+                </select>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="label-col">Gender (লিঙ্গ)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="gender" name="gender">
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Others">Others</option>
+              </select>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="label-col">Religion (ধর্ম)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="religion" name="religion">
+                <option value="">Select Religion</option>
+                <option value="Islam">Islam</option>
+                <option value="Hinduism">Hinduism</option>
+                <option value="Buddhism">Buddhism</option>
+                <option value="Christianity">Christianity</option>
+              </select>
+            </td>
+          </tr>
+
+          <!-- Scenario 6: NID number vs NID Yes/No -->
+          <tr>
+            <td class="label-col">Do you have National ID?</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <label class="radio-label"><input type="radio" name="has_nid" value="Yes" id="has_nid_yes" /> Yes</label>
+              <label class="radio-label"><input type="radio" name="has_nid" value="No" id="has_nid_no" /> No</label>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">National ID Number</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="nid_number" name="nid_no" placeholder="NID Number" /></td>
+          </tr>
+
+          <!-- Scenario 3 & 4: Freedom Fighter Status (Dropdown and Radio) -->
+          <tr>
+            <td class="label-col">Freedom Fighter Quota (Dropdown)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="ff_quota_select" name="freedom_fighter">
+                <option value="">Select Status</option>
+                <option value="Non-Freedom Fighter">Non-Freedom Fighter</option>
+                <option value="Freedom Fighter">Freedom Fighter</option>
+                <option value="Child of Freedom Fighter">Child of Freedom Fighter</option>
+                <option value="Grandchild of Freedom Fighter">Grandchild of Freedom Fighter</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Freedom Fighter Radio Status</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <label class="radio-label"><input type="radio" name="ff_radio" value="Non-Freedom Fighter" id="ff_radio_non" /> Non-Freedom Fighter</label>
+              <label class="radio-label"><input type="radio" name="ff_radio" value="Child of Freedom Fighter" id="ff_radio_child" /> Child of Freedom Fighter</label>
+            </td>
+          </tr>
+
+          <!-- Scenario 5: Quota Category -->
+          <tr>
+            <td class="label-col">Quota Category (অন্যান্য কোটা)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="quota_category" name="quota">
+                <option value="">Select Quota</option>
+                <option value="General">General</option>
+                <option value="Child of Freedom Fighter">Child of Freedom Fighter</option>
+                <option value="Tribal">Tribal / Ethnic</option>
+                <option value="Physically Challenged">Physically Challenged</option>
+                <option value="Ansar-VDP">Ansar-VDP</option>
+              </select>
+            </td>
+          </tr>
+
+          <!-- Scenario 15: Mobile and Confirm Mobile -->
+          <tr>
+            <td class="label-col">Mobile Number</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="tel" id="mobile" name="mobile" placeholder="01XXXXXXXXX" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Confirm Mobile Number</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="tel" id="confirm_mobile" name="confirm_mobile" placeholder="Re-type Mobile Number" /></td>
+          </tr>
+
+          <tr>
+            <td class="label-col">Email Address</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="email" id="email" name="email" /></td>
+          </tr>
+
+          <!-- Scenario 26: Additional Contact Address -->
+          <tr>
+            <td class="label-col">Contact Address (যোগাযোগের ঠিকানা)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><textarea id="contact_address" name="contact_address" rows="2"></textarea></td>
+          </tr>
+
+          <!-- Scenario 27: Exam Centre -->
+          <tr>
+            <td class="label-col">Preferred Exam Centre (পরীক্ষা কেন্দ্র)</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="exam_centre" name="exam_centre">
+                <option value="">Select Exam Centre</option>
+                <option value="Dhaka">Dhaka (ঢাকা)</option>
+                <option value="Rajshahi">Rajshahi (রাজশাহী)</option>
+                <option value="Chittagong">Chittagong (চট্টগ্রাম)</option>
+                <option value="Khulna">Khulna (খুলনা)</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </fieldset>
+
+      <!-- SECTION 2: Address Information (Present vs Permanent) -->
+      <fieldset id="sec_address">
+        <legend>Address Information (ঠিকানা সংক্রান্ত তথ্য)</legend>
+        <div class="two-col-grid">
+          <!-- Scenario 10: Present Address -->
+          <div id="present_address_block">
+            <h4 style="margin: 0 0 10px 0; color: #047857;">Present Address (বর্তমান ঠিকানা)</h4>
+            <div style="margin-bottom: 8px;">
+              <label>Care Of:</label>
+              <input type="text" id="present_care" name="present_care" />
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Village / Road / House:</label>
+              <input type="text" id="present_village" name="present_village" />
+            </div>
+            <!-- Scenario 13 & 14: District & Cascading Upazila -->
+            <div style="margin-bottom: 8px;">
+              <label>District (জেলা):</label>
+              <select id="present_district" name="present_district">
+                <option value="">Select District</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Chittagong">Chittagong</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Upazila / Thana (উপজেলা/থানা):</label>
+              <select id="present_upazila" name="present_upazila">
+                <option value="">Select Upazila</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Post Office:</label>
+              <input type="text" id="present_post" name="present_post" />
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Postal Code:</label>
+              <input type="text" id="present_postcode" name="present_postcode" />
+            </div>
+          </div>
+
+          <!-- Scenario 11: Permanent Address -->
+          <div id="permanent_address_block">
+            <h4 style="margin: 0 0 10px 0; color: #047857;">Permanent Address (স্থায়ী ঠিকানা)</h4>
+            <!-- Scenario 12: Same as Present Address Checkbox -->
+            <div style="margin-bottom: 10px; background: #e2e8f0; padding: 6px 10px; border-radius: 4px;">
+              <label style="cursor: pointer; font-size: 12px; font-weight: 600;">
+                <input type="checkbox" id="same_as_present" name="same_as_present" /> Same as Present Address (বর্তমান ঠিকানার অনুরূপ)
+              </label>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Care Of:</label>
+              <input type="text" id="permanent_care" name="permanent_care" />
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Village / Road / House:</label>
+              <input type="text" id="permanent_village" name="permanent_village" />
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>District (জেলা):</label>
+              <select id="permanent_district" name="permanent_district">
+                <option value="">Select District</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Chittagong">Chittagong</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Upazila / Thana (উপজেলা/থানা):</label>
+              <select id="permanent_upazila" name="permanent_upazila">
+                <option value="">Select Upazila</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Post Office:</label>
+              <input type="text" id="permanent_post" name="permanent_post" />
+            </div>
+            <div style="margin-bottom: 8px;">
+              <label>Postal Code:</label>
+              <input type="text" id="permanent_postcode" name="permanent_postcode" />
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- SECTION 3: Academic Qualifications (SSC & HSC) -->
+      <!-- Scenario 16, 17, 18: SSC Examination, Board, Roll, Reg, GPA, Group, Year -->
+      <fieldset id="sec_ssc">
+        <legend>Secondary School Certificate (SSC / Equivalent)</legend>
+        <table class="form-table">
+          <tr>
+            <td class="label-col">Examination</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="ssc_exam" name="ssc_exam">
+                <option value="">Select Examination</option>
+                <option value="S.S.C">S.S.C</option>
+                <option value="Dakhil">Dakhil</option>
+                <option value="S.S.C Vocational">S.S.C Vocational</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Board</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="ssc_board" name="ssc_board">
+                <option value="">Select Board</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Comilla">Comilla</option>
+                <option value="Madrasah">Madrasah</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Roll No</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="ssc_roll" name="ssc_roll" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Registration No</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="ssc_reg" name="ssc_reg" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Result / GPA</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <div class="flex-row">
+                <select id="ssc_result_type" name="ssc_result" style="max-width: 180px;">
+                  <option value="">Select Result</option>
+                  <option value="GPA (out of 5)">GPA (out of 5)</option>
+                  <option value="First Division">First Division</option>
+                </select>
+                <input type="text" id="ssc_gpa" name="ssc_gpa" placeholder="GPA" style="max-width: 120px;" />
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Group</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="ssc_group" name="ssc_group">
+                <option value="">Select Group</option>
+                <option value="Science">Science</option>
+                <option value="Humanities">Humanities</option>
+                <option value="Business Studies">Business Studies</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Passing Year</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="ssc_year" name="ssc_year">
+                <option value="">Select Year</option>
+                <option value="2012">2012</option>
+                <option value="2013">2013</option>
+                <option value="2014">2014</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </fieldset>
+
+      <!-- Scenario 19, 20, 21: HSC Examination, Board, Roll, Reg, GPA, Group, Year -->
+      <fieldset id="sec_hsc">
+        <legend>Higher Secondary Certificate (HSC / Equivalent)</legend>
+        <table class="form-table">
+          <tr>
+            <td class="label-col">Examination</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="hsc_exam" name="hsc_exam">
+                <option value="">Select Examination</option>
+                <option value="H.S.C">H.S.C</option>
+                <option value="Alim">Alim</option>
+                <option value="Diploma in Engineering">Diploma in Engineering</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Board</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="hsc_board" name="hsc_board">
+                <option value="">Select Board</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Comilla">Comilla</option>
+                <option value="Madrasah">Madrasah</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Roll No</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="hsc_roll" name="hsc_roll" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Registration No</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="hsc_reg" name="hsc_reg" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">Result / GPA</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <div class="flex-row">
+                <select id="hsc_result_type" name="hsc_result" style="max-width: 180px;">
+                  <option value="">Select Result</option>
+                  <option value="GPA (out of 5)">GPA (out of 5)</option>
+                  <option value="First Division">First Division</option>
+                </select>
+                <input type="text" id="hsc_gpa" name="hsc_gpa" placeholder="GPA" style="max-width: 120px;" />
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Group</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="hsc_group" name="hsc_group">
+                <option value="">Select Group</option>
+                <option value="Science">Science</option>
+                <option value="Humanities">Humanities</option>
+                <option value="Business Studies">Business Studies</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Passing Year</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="hsc_year" name="hsc_year">
+                <option value="">Select Year</option>
+                <option value="2014">2014</option>
+                <option value="2015">2015</option>
+                <option value="2016">2016</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </fieldset>
+
+      <!-- Scenario 22, 23, 24: Graduation Degree, Subject, University, CGPA, Scale -->
+      <fieldset id="sec_graduation">
+        <legend>Graduation / Degree (স্নাতক বা সমমান)</legend>
+        <table class="form-table">
+          <tr>
+            <td class="label-col">Examination / Degree</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="gra_exam" name="gra_exam">
+                <option value="">Select Degree</option>
+                <option value="B.Sc Engineering">B.Sc Engineering</option>
+                <option value="B.Sc (Hons)">B.Sc (Hons)</option>
+                <option value="B.B.A">B.B.A</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Subject / Discipline</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="gra_subject" name="gra_subject">
+                <option value="">Select Subject</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">University / Institute</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="gra_institute" name="gra_institute">
+                <option value="">Select University</option>
+                <option value="BUET">Bangladesh University of Engineering and Technology (BUET)</option>
+                <option value="DU">University of Dhaka (DU)</option>
+                <option value="RU">University of Rajshahi (RU)</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Result / CGPA & Scale</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <div class="flex-row">
+                <select id="gra_result" name="gra_result" style="max-width: 180px;">
+                  <option value="">Select Result</option>
+                  <option value="CGPA (out of 4.00)">CGPA (out of 4.00)</option>
+                </select>
+                <input type="text" id="gra_cgpa" name="gra_cgpa" placeholder="CGPA" style="max-width: 90px;" />
+                <select id="gra_scale" name="gra_scale" style="max-width: 90px;">
+                  <option value="4.00">4.00</option>
+                  <option value="5.00">5.00</option>
+                </select>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Passing Year</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="gra_year" name="gra_year">
+                <option value="">Select Year</option>
+                <option value="2018">2018</option>
+                <option value="2019">2019</option>
+                <option value="2020">2020</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </fieldset>
+
+      <!-- Scenario 25: Optional Masters Block -->
+      <fieldset id="sec_masters">
+        <legend>Masters / Equivalent (স্নাতকোত্তর বা সমমান) - Optional</legend>
+        <table class="form-table">
+          <tr>
+            <td class="label-col">Examination / Degree</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="mas_exam" name="mas_exam">
+                <option value="">Select Degree</option>
+                <option value="M.Sc">M.Sc</option>
+                <option value="M.B.A">M.B.A</option>
+                <option value="M.A">M.A</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Subject / Discipline</td>
+            <td class="colon-col">:</td>
+            <td class="input-col"><input type="text" id="mas_subject" name="mas_subject" /></td>
+          </tr>
+          <tr>
+            <td class="label-col">University / Institute</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="mas_institute" name="mas_institute">
+                <option value="">Select University</option>
+                <option value="University of Dhaka">University of Dhaka</option>
+                <option value="BUET">BUET</option>
+                <option value="RU">University of Rajshahi</option>
+              </select>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">CGPA & Scale</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <div class="flex-row">
+                <input type="text" id="mas_cgpa" name="mas_cgpa" placeholder="CGPA" style="max-width: 90px;" />
+                <select id="mas_scale" name="mas_scale" style="max-width: 90px;">
+                  <option value="4.00">4.00</option>
+                  <option value="5.00">5.00</option>
+                </select>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="label-col">Passing Year</td>
+            <td class="colon-col">:</td>
+            <td class="input-col">
+              <select id="mas_year" name="mas_year">
+                <option value="">Select Year</option>
+                <option value="2020">2020</option>
+                <option value="2021">2021</option>
+                <option value="2022">2022</option>
+              </select>
+            </td>
+          </tr>
+        </table>
+      </fieldset>
+
+      <!-- SECURITY & HUMAN VERIFICATION (MUST BE PROTECTED / SKIPPED BY ENGINE) -->
+      <fieldset id="sec_verification">
+        <legend>Security & Declaration (মানবীয় যাচাই ও অঙ্গীকার)</legend>
+        <div class="captcha-box">
+          <span>Validation Code:</span>
+          <span class="captcha-img">7 G K 9 X</span>
+          <input type="text" id="captcha_code" name="validation_code" placeholder="Enter code above" style="max-width: 140px;" />
+        </div>
+
+        <div class="declaration-box">
+          <label style="cursor: pointer; display: flex; align-items: flex-start; gap: 8px;">
+            <input type="checkbox" id="legal_declaration" name="declaration" style="margin-top: 3px;" />
+            <span>I declare that all the information provided in this application form is true, complete and correct. Any false statement or forgery will result in disqualification.</span>
+          </label>
+        </div>
+
+        <div style="text-align: center; margin-top: 16px;">
+          <button type="submit" id="btn_submit" class="submit-btn" disabled>Submit Application (আবেদন জমা দিন)</button>
+        </div>
+      </fieldset>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  // Cascading District -> Upazila logic
+  const upazilaMap = {
+    Dhaka: ['Dhanmondi', 'Gulshan', 'Mirpur', 'Uttara', 'Savar'],
+    Rajshahi: ['Boalia', 'Motihar', 'Rajpoot', 'Puthia', 'Bagmara'],
+    Chittagong: ['Kotwali', 'Panchlaish', 'Double Mooring']
+  };
+
+  function bindDistrictCascade(distId, upaId) {
+    const dSelect = document.getElementById(distId);
+    const uSelect = document.getElementById(upaId);
+    if (!dSelect || !uSelect) return;
+    dSelect.addEventListener('change', () => {
+      const dist = dSelect.value;
+      uSelect.innerHTML = '<option value="">Select Upazila</option>';
+      if (upazilaMap[dist]) {
+        upazilaMap[dist].forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u;
+          opt.textContent = u;
+          uSelect.appendChild(opt);
+        });
+      }
+    });
+  }
+  bindDistrictCascade('present_district', 'present_upazila');
+  bindDistrictCascade('permanent_district', 'permanent_upazila');
+
+  // Cascading Degree -> Subject logic
+  const degreeSubjectMap = {
+    'B.Sc Engineering': ['Computer Science & Engineering', 'Electrical & Electronic Engineering', 'Civil Engineering'],
+    'B.Sc (Hons)': ['Physics', 'Chemistry', 'Mathematics'],
+    'B.B.A': ['Finance', 'Marketing', 'Accounting']
+  };
+
+  const degSelect = document.getElementById('gra_exam');
+  const subjSelect = document.getElementById('gra_subject');
+  if (degSelect && subjSelect) {
+    degSelect.addEventListener('change', () => {
+      const deg = degSelect.value;
+      subjSelect.innerHTML = '<option value="">Select Subject</option>';
+      if (degreeSubjectMap[deg]) {
+        degreeSubjectMap[deg].forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s;
+          opt.textContent = s;
+          subjSelect.appendChild(opt);
+        });
+      }
+    });
+  }
+
+  // Same as Present Checkbox behavior
+  const sameCheck = document.getElementById('same_as_present');
+  if (sameCheck) {
+    sameCheck.addEventListener('change', () => {
+      if (sameCheck.checked) {
+        document.getElementById('permanent_care').value = document.getElementById('present_care').value;
+        document.getElementById('permanent_village').value = document.getElementById('present_village').value;
+        const presDist = document.getElementById('present_district').value;
+        const permDist = document.getElementById('permanent_district');
+        permDist.value = presDist;
+        permDist.dispatchEvent(new Event('change'));
+        setTimeout(() => {
+          document.getElementById('permanent_upazila').value = document.getElementById('present_upazila').value;
+        }, 30);
+        document.getElementById('permanent_post').value = document.getElementById('present_post').value;
+        document.getElementById('permanent_postcode').value = document.getElementById('present_postcode').value;
+      }
+    });
+  }
+</script>
+</body>
+</html>

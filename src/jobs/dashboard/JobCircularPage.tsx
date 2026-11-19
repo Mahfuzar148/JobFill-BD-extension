@@ -20,8 +20,27 @@ import {
   History,
   Trash2,
   Eye,
+  Award,
+  Layers,
+  Download,
+  Building2,
+  Calendar,
+  FileText,
+  Save,
+  Filter,
+  Sparkles,
+  Check,
+  BookmarkPlus,
 } from 'lucide-react';
 import { useApp } from '../../dashboard/context/AppContext';
+import { ProfileRepository } from '../../database/profile-repository';
+import type { UserProfile } from '../../types/profile';
+import {
+  NATIONAL_PAY_SCALE_2015,
+  getAscendingPayGrades,
+  formatGradeWithPayScale,
+} from '../services/pay-scale-metadata';
+import { ACADEMIC_DISCIPLINES, getSubjectById } from '../taxonomy/subject-taxonomy';
 import { CompactSourceHealthBar, LiveSourceProgressSnapshot } from './CompactSourceHealthBar';
 import { CaptchaExtractionPanel, ExtractionLifecycleState } from './CaptchaExtractionPanel';
 import {
@@ -41,6 +60,21 @@ import { JobRepository } from '../database/job-repository';
 import { BookmarkRepository } from '../database/bookmark-repository';
 import { ApplicationRepository } from '../database/application-repository';
 import { JobVisitRepository } from '../database/job-visit-repository';
+import {
+  ExamScheduleRepository,
+  AdmitCardNoticeRepository,
+  SeatPlanNoticeRepository,
+  JobResultRepository,
+  seedDefaultLifecycleStores,
+} from '../database';
+import type {
+  ExamSchedule,
+  AdmitCardNotice,
+  SeatPlanNotice,
+  JobResult,
+} from '../types/job-system.types';
+import { isNonGovernmentCategoryLetter } from '../types/job-system.types';
+import { CANONICAL_18_CATEGORIES, mapJobToCategoryLetter } from '../taxonomy/canonical-categories';
 import { JobVisitRecord } from '../types/job.types';
 import { JobSourceRegistry } from '../sources/source-registry';
 import { OFFICIAL_PORTAL_DIRECTORY } from '../sources/official-website.adapter';
@@ -62,6 +96,7 @@ import {
   isJobMatchingStatFilter,
 } from './JobFilters';
 import { SourceProgressEvent } from '../services/job-fetcher';
+import { evaluateProfileEligibility } from '../services/eligibility-helper';
 
 const VERIFICATION_PRIORITY: Record<SourceVerificationStatus, number> = {
   official_verified: 5,
@@ -176,9 +211,41 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     }
   }, [initialFilters]);
   const [applyMyPrefsFilter, setApplyMyPrefsFilter] = useState(false);
-  const [hubTab, setHubTab] = useState<'all' | 'recommended' | 'visited' | 'bookmarked' | 'closing_soon' | 'applied'>('all');
+  const [hubTab, setHubTab] = useState<
+    | 'all'
+    | 'government'
+    | 'private'
+    | 'categories'
+    | 'grades'
+    | 'eligible'
+    | 'upcoming_openings'
+    | 'deadline_tomorrow'
+    | 'upcoming_exams'
+    | 'admit_cards'
+    | 'seat_plans'
+    | 'results'
+    | 'recent_updates'
+    | 'recommended'
+    | 'visited'
+    | 'bookmarked'
+    | 'closing_soon'
+    | 'applied'
+  >('all');
+  const [comparedJobIds, setComparedJobIds] = useState<Set<string>>(new Set());
+  const [followedOrgs, setFollowedOrgs] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('jobfill_followed_organizations');
+      return stored ? new Set(JSON.parse(stored)) : new Set(['BPSC', 'Bangladesh Bank']);
+    } catch {
+      return new Set(['BPSC', 'Bangladesh Bank']);
+    }
+  });
   const [visitedRecords, setVisitedRecords] = useState<JobVisitRecord[]>([]);
   const [trackVisitsEnabled, setTrackVisitsEnabled] = useState(true);
+  const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([]);
+  const [admitCards, setAdmitCards] = useState<AdmitCardNotice[]>([]);
+  const [seatPlans, setSeatPlans] = useState<SeatPlanNotice[]>([]);
+  const [jobResults, setJobResults] = useState<JobResult[]>([]);
 
   const [selectedJob, setSelectedJob] = useState<NormalizedJobCircular | null>(null);
   const [missingAppJob, setMissingAppJob] = useState<NormalizedJobCircular | null>(null);
@@ -190,6 +257,18 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
   const [showPortalsModal, setShowPortalsModal] = useState(false);
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(24);
+  const [candidateProfile, setCandidateProfile] = useState<UserProfile | null>(null);
+  const [savedPresets, setSavedPresets] = useState<{ id: string; name: string; filters: JobSearchFilters }[]>(() => {
+    try {
+      const stored = localStorage.getItem('jobfill_saved_filter_presets');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showSavePresetModal, setShowSavePresetModal] = useState(false);
+  const [presetNameInput, setPresetNameInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [liveProgress, setLiveProgress] = useState<LiveSourceProgressSnapshot | null>(null);
@@ -320,9 +399,23 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     async (allowAutoSync: boolean = true) => {
       setLoading(true);
       setErrorMessage(null);
+      seedDefaultLifecycleStores().catch(() => {});
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
-        const [allJobs, bmIds, apps, prefs, outcomes, schedState, visits, visitsEnabled] = await Promise.race([
+        const [
+          allJobs,
+          bmIds,
+          apps,
+          prefs,
+          outcomes,
+          schedState,
+          visits,
+          visitsEnabled,
+          schedules,
+          admits,
+          seats,
+          results,
+        ] = await Promise.race([
           Promise.all([
             JobRepository.getAllJobs(),
             BookmarkRepository.getBookmarkedJobIds(),
@@ -332,6 +425,10 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
             JobRepository.getSchedulerState(),
             JobVisitRepository.getAllVisits(),
             JobVisitRepository.isVisitTrackingEnabled(),
+            ExamScheduleRepository.getAll(),
+            AdmitCardNoticeRepository.getAll(),
+            SeatPlanNoticeRepository.getAll(),
+            JobResultRepository.getAll(),
           ]),
           new Promise<never>((_, reject) => {
             timeoutId = setTimeout(
@@ -356,6 +453,10 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         setLastSuccessfulSyncAt(syncTs);
         setVisitedRecords(visits || []);
         setTrackVisitsEnabled(visitsEnabled !== false);
+        setExamSchedules(schedules || []);
+        setAdmitCards(admits || []);
+        setSeatPlans(seats || []);
+        setJobResults(results || []);
         setLoadState(computeHubState(cleanedJobs, outcomes));
 
         // Auto-repair any historical misclassified records in background without blocking UI
@@ -466,6 +567,24 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     return map;
   }, [applications]);
 
+  const examScheduleByJobId = useMemo(() => {
+    const map = new Map<string, ExamSchedule>();
+    for (const e of examSchedules) {
+      if (!map.has(e.circularId) || e.status === 'Announced') {
+        map.set(e.circularId, e);
+      }
+    }
+    return map;
+  }, [examSchedules]);
+
+  const latestResultByJobId = useMemo(() => {
+    const map = new Map<string, JobResult>();
+    for (const r of jobResults) {
+      map.set(r.circularId, r);
+    }
+    return map;
+  }, [jobResults]);
+
   const summary = useMemo(() => {
     const now = Date.now();
     return {
@@ -478,13 +597,141 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     };
   }, [jobs, bookmarkedIds, appByJobId]);
 
+  const m2Metrics = useMemo(() => {
+    const nowMs = Date.now();
+    const SEVEN_DAYS_MS = 7 * DAY_MS;
+
+    let totalCirculars = jobs.length;
+    let governmentJobs = 0;
+    let privateAndBankJobs = 0;
+    let applicationOpen = 0;
+    let closingSoon = 0;
+
+    for (const j of jobs) {
+      const catLetter = (j as any).categoryLetter || mapJobToCategoryLetter(j);
+      const isNonGov =
+        isNonGovernmentCategoryLetter(catLetter) ||
+        j.category === 'Private' ||
+        j.category === 'NGO' ||
+        (j as any).sector === 'Private' ||
+        (j as any).sector === 'NGO' ||
+        (j as any).sector === 'International';
+
+      if (isNonGov) {
+        privateAndBankJobs++;
+      } else {
+        governmentJobs++;
+      }
+
+      if (j.deadlineAt && j.deadlineVerified) {
+        if (j.deadlineAt >= nowMs) {
+          applicationOpen++;
+          if (j.deadlineAt - nowMs <= SEVEN_DAYS_MS) {
+            closingSoon++;
+          }
+        }
+      } else if (j.status === 'active') {
+        applicationOpen++;
+      }
+    }
+
+    const upcomingExamsSet = new Set(
+      examSchedules.filter((e) => e.status === 'Announced' || e.status === 'Rescheduled').map((e) => e.circularId)
+    );
+
+    const admitCardsSet = new Set(
+      admitCards.filter((a) => a.status === 'Available').map((a) => a.circularId)
+    );
+
+    const resultsSet = new Set(
+      jobResults
+        .filter(
+          (r) =>
+            r.publicationStatus === 'Result Published' ||
+            r.publicationStatus === 'Revised Result Published' ||
+            r.publicationStatus === 'Partially Published'
+        )
+        .map((r) => r.circularId)
+    );
+
+    return {
+      totalCirculars,
+      governmentJobs,
+      privateAndBankJobs,
+      applicationOpen,
+      closingSoon: closingSoon || summary.closingSoon,
+      upcomingExams: upcomingExamsSet.size,
+      admitCardsAvailable: admitCardsSet.size,
+      publishedResults: resultsSet.size,
+    };
+  }, [jobs, examSchedules, admitCards, jobResults, summary.closingSoon]);
+
+  const eligibleCount = useMemo(() => {
+    if (!candidateProfile) return 0;
+    let count = 0;
+    for (const j of jobs) {
+      try {
+        const rep = evaluateProfileEligibility(candidateProfile, j);
+        if (rep.overallStatus === 'ELIGIBLE') count++;
+      } catch {}
+    }
+    return count;
+  }, [jobs, candidateProfile]);
+
+  const deadlineTomorrowCount = useMemo(() => {
+    const now = Date.now();
+    return jobs.filter((j) => {
+      if (!j.deadlineVerified || typeof j.deadlineAt !== 'number') return false;
+      const diff = j.deadlineAt - now;
+      return diff > 0 && diff <= 48 * 3600 * 1000;
+    }).length;
+  }, [jobs]);
+
+  const upcomingOpeningsCount = useMemo(() => {
+    const now = Date.now();
+    return jobs.filter((j) => typeof j.applicationStartAt === 'number' && j.applicationStartAt > now).length;
+  }, [jobs]);
+
+  const enrichedJobs = useMemo(() => {
+    return jobs.map((job) => {
+      let verdict: string | undefined = undefined;
+      if (candidateProfile) {
+        try {
+          const rep = evaluateProfileEligibility(candidateProfile, job);
+          verdict = rep.overallStatus;
+        } catch {}
+      }
+      return {
+        ...job,
+        eligibilityVerdict: verdict,
+        examSchedules: examSchedules.filter((e) => e.circularId === job.id),
+        results: jobResults.filter((r) => r.circularId === job.id),
+      };
+    });
+  }, [jobs, candidateProfile, examSchedules, jobResults]);
+
   const displayedJobs = useMemo(() => {
-    let list = filterAndSortJobs(jobs, filters, bookmarkedIds, Date.now(), appByJobId);
+    let list = filterAndSortJobs(enrichedJobs, filters, bookmarkedIds, Date.now(), appByJobId);
     if (applyMyPrefsFilter || hubTab === 'recommended') {
       list = list.filter((j) => jobMatchesPreferences(j, preferences));
     }
     if (hubTab === 'bookmarked') {
       list = list.filter((j) => bookmarkedIds.has(j.id));
+    }
+    if (hubTab === 'eligible') {
+      list = list.filter((j) => (j as any).eligibilityVerdict === 'ELIGIBLE');
+    }
+    if (hubTab === 'deadline_tomorrow') {
+      const now = Date.now();
+      list = list.filter((j) => {
+        if (!j.deadlineVerified || typeof j.deadlineAt !== 'number') return false;
+        const diff = j.deadlineAt - now;
+        return diff > 0 && diff <= 48 * 3600 * 1000;
+      });
+    }
+    if (hubTab === 'upcoming_openings') {
+      const now = Date.now();
+      list = list.filter((j) => typeof j.applicationStartAt === 'number' && j.applicationStartAt > now);
     }
     if (hubTab === 'closing_soon') {
       const now = Date.now();
@@ -493,15 +740,162 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
     if (hubTab === 'applied') {
       list = list.filter((j) => appByJobId.get(j.id)?.status === 'Applied');
     }
+    if (hubTab === 'government') {
+      list = list.filter((j) => {
+        const catLetter = (j as any).categoryLetter || mapJobToCategoryLetter(j);
+        return ['A', 'B', 'K', 'L'].includes(catLetter) || j.category === 'Government' || j.isGovernmentJob;
+      });
+    }
+    if (hubTab === 'private') {
+      list = list.filter((j) => {
+        const catLetter = (j as any).categoryLetter || mapJobToCategoryLetter(j);
+        return ['D', 'N', 'O', 'P', 'Q'].includes(catLetter) || j.category === 'Private' || j.category === 'Bank';
+      });
+    }
+    if (hubTab === 'grades') {
+      list = list.filter((j) => j.gradeNumber !== null && j.gradeNumber !== undefined && j.gradeNumber >= 1 && j.gradeNumber <= 20);
+    }
+    if (hubTab === 'upcoming_exams') {
+      const examJobIds = new Set(examSchedules.filter((e) => e.status === 'Announced' || e.status === 'Rescheduled').map((e) => e.circularId));
+      list = list.filter((j) => examJobIds.has(j.id));
+    }
+    if (hubTab === 'admit_cards') {
+      const admitJobIds = new Set(admitCards.filter((a) => a.status === 'Available').map((a) => a.circularId));
+      list = list.filter((j) => admitJobIds.has(j.id));
+    }
+    if (hubTab === 'seat_plans') {
+      const seatJobIds = new Set(seatPlans.filter((s) => s.status === 'Announced').map((s) => s.circularId));
+      list = list.filter((j) => seatJobIds.has(j.id));
+    }
+    if (hubTab === 'results') {
+      const resultJobIds = new Set(jobResults.filter((r) => r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published' || r.publicationStatus === 'Partially Published').map((r) => r.circularId));
+      list = list.filter((j) => resultJobIds.has(j.id));
+    }
+    if (hubTab === 'recent_updates') {
+      list = list.filter((j) => Boolean(j.lastUpdatedAt || (j as any).updatedDate));
+    }
     return list;
-  }, [jobs, filters, bookmarkedIds, applyMyPrefsFilter, hubTab, preferences, appByJobId]);
+  }, [enrichedJobs, filters, bookmarkedIds, applyMyPrefsFilter, hubTab, preferences, appByJobId, examSchedules, admitCards, seatPlans, jobResults]);
 
-  const totalPages = Math.max(1, Math.ceil(displayedJobs.length / CIRCULARS_PAGE_SIZE));
+  useEffect(() => {
+    ProfileRepository.getAllProfiles().then((profs) => {
+      if (profs && profs.length > 0) {
+        setCandidateProfile(profs[0]);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(displayedJobs.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const paginatedJobs = useMemo(() => {
-    const start = (safeCurrentPage - 1) * CIRCULARS_PAGE_SIZE;
-    return displayedJobs.slice(start, start + CIRCULARS_PAGE_SIZE);
-  }, [displayedJobs, safeCurrentPage]);
+    const start = (safeCurrentPage - 1) * pageSize;
+    return displayedJobs.slice(start, start + pageSize);
+  }, [displayedJobs, safeCurrentPage, pageSize]);
+
+  const gradeJobCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (let g = 4; g <= 20; g++) counts[g] = 0;
+    for (const j of jobs) {
+      if (j.gradeNumber && j.gradeNumber >= 4 && j.gradeNumber <= 20) {
+        counts[j.gradeNumber] = (counts[j.gradeNumber] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [jobs]);
+
+  const profileReadiness = useMemo(() => {
+    if (!candidateProfile) return 0;
+    let score = 0;
+    // 1. Personal Information (10%)
+    if (candidateProfile.personal?.applicantNameEn && candidateProfile.personal?.fatherNameEn) score += 10;
+    // 2. Date of Birth (15%)
+    if (candidateProfile.personal?.dob) score += 15;
+    // 3. Address (10%)
+    if (candidateProfile.address?.permanent?.district) score += 10;
+    // 4. Contact / Mobile (10%)
+    if (candidateProfile.personal?.mobile) score += 10;
+    // 5. Secondary / Higher Secondary Education (15%)
+    if (candidateProfile.ssc?.examination || candidateProfile.hsc?.examination) score += 15;
+    // 6. Higher Education & Subject (15%)
+    if (
+      candidateProfile.graduation?.subjectDegree ||
+      candidateProfile.graduation?.examination ||
+      (candidateProfile.educationDegrees && candidateProfile.educationDegrees.length > 0)
+    ) {
+      score += 15;
+    }
+    // 7. Identity & Documents / NID (15%)
+    const docs = (candidateProfile as any).documents || [];
+    if (candidateProfile.personal?.nid || (Array.isArray(docs) && docs.length > 0)) {
+      score += 15;
+    }
+    // 8. Photo & Signature (10%)
+    const hasPhoto = Boolean(
+      (candidateProfile as any).photo?.dataUrl ||
+      (candidateProfile as any).photoUrl ||
+      (Array.isArray(docs) && docs.some((d: any) => d.category === 'photo'))
+    );
+    const hasSig = Boolean(
+      (candidateProfile as any).signature?.dataUrl ||
+      (candidateProfile as any).signatureUrl ||
+      (Array.isArray(docs) && docs.some((d: any) => d.category === 'signature'))
+    );
+    if (hasPhoto || hasSig) score += 10;
+
+    return Math.min(100, score);
+  }, [candidateProfile]);
+
+  const handleToggleFollowOrg = useCallback((orgName: string) => {
+    if (!orgName) return;
+    setFollowedOrgs((prev) => {
+      const next = new Set(prev);
+      if (next.has(orgName)) {
+        next.delete(orgName);
+      } else {
+        next.add(orgName);
+      }
+      try {
+        localStorage.setItem('jobfill_followed_organizations', JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleToggleCompareJob = useCallback((jobId: string) => {
+    setComparedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  }, []);
+
+  const handleSaveFilterPreset = (name: string) => {
+    if (!name.trim()) return;
+    const newPreset = {
+      id: 'preset_' + Date.now().toString(36),
+      name: name.trim(),
+      filters: { ...filters },
+    };
+    const updated = [...savedPresets, newPreset];
+    setSavedPresets(updated);
+    try {
+      localStorage.setItem('jobfill_saved_filter_presets', JSON.stringify(updated));
+    } catch {}
+    setShowSavePresetModal(false);
+    setPresetNameInput('');
+    if (showToast) {
+      showToast(bn ? 'ফিল্টার প্রিসেট সংরক্ষিত হয়েছে' : 'Filter preset saved successfully');
+    }
+  };
+
+  const handleDeleteFilterPreset = (presetId: string) => {
+    const updated = savedPresets.filter((p) => p.id !== presetId);
+    setSavedPresets(updated);
+    try {
+      localStorage.setItem('jobfill_saved_filter_presets', JSON.stringify(updated));
+    } catch {}
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -846,10 +1240,19 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         </div>
       </div>
 
-      {/* 6 Hub Navigation Tabs */}
+      {/* 10 Navigation Tabs (Milestone M2) + User Tracking Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto" role="tablist">
         {[
           { id: 'all', label: bn ? 'সব সার্কুলার' : 'All Jobs', count: jobs.length, icon: Briefcase },
+          { id: 'government', label: bn ? 'সরকারি চাকরি' : 'Government Jobs', count: m2Metrics.governmentJobs, icon: Award },
+          { id: 'private', label: bn ? 'বেসরকারি ও ব্যাংক' : 'Private & Bank', count: m2Metrics.privateAndBankJobs, icon: Building2 },
+          { id: 'categories', label: bn ? 'ক্যাটাগরি (A-R)' : 'Categories (A–R)', count: CANONICAL_18_CATEGORIES.length, icon: Layers },
+          { id: 'grades', label: bn ? 'পে গ্রেড (১-২০)' : 'Govt Grades', count: null, icon: Award },
+          { id: 'upcoming_exams', label: bn ? 'আসন্ন পরীক্ষা' : 'Upcoming Exams', count: m2Metrics.upcomingExams, icon: Calendar },
+          { id: 'admit_cards', label: bn ? 'প্রবেশপত্র' : 'Admit Cards', count: m2Metrics.admitCardsAvailable, icon: Download },
+          { id: 'seat_plans', label: bn ? 'আসন বিন্যাস' : 'Seat Plans', count: seatPlans.length, icon: FileText },
+          { id: 'results', label: bn ? 'ফলাফল ও মেধা তালিকা' : 'Published Results', count: m2Metrics.publishedResults, icon: Award },
+          { id: 'recent_updates', label: bn ? 'সাম্প্রতিক আপডেট' : 'Recent Updates', count: null, icon: Clock },
           { id: 'recommended', label: bn ? 'পছন্দের চাকরি' : 'Recommended', count: null, icon: CheckCircle2 },
           { id: 'visited', label: bn ? 'সম্প্রতি দেখা' : 'Visited History', count: visitedRecords.length, icon: History },
           { id: 'bookmarked', label: bn ? 'বুকমার্ক' : 'Bookmarked', count: bookmarkedIds.size, icon: Bookmark },
@@ -870,7 +1273,7 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
                   JobVisitRepository.getAllVisits().then(setVisitedRecords);
                 }
               }}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'bg-petro-600 text-white shadow-xs'
                   : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -894,84 +1297,240 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
         })}
       </div>
 
-      {/* Top 6 Interactive Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" role="group" aria-label={bn ? 'ড্যাশবোর্ড পরিসংখ্যান ফিল্টার' : 'Dashboard statistics filters'}>
-        {[
-          {
-            id: 'total' as DashboardStatFilter,
-            label: bn ? 'মোট সার্কুলার' : 'Total Job Circulars',
-            value: summary.total,
-            color: 'text-slate-800 dark:text-white',
-            bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
-            activeBg: 'ring-2 ring-petro-600 border-petro-600 bg-petro-50/40 dark:bg-petro-950/30',
-          },
-          {
-            id: 'new_this_week' as DashboardStatFilter,
-            label: bn ? 'এই সপ্তাহে নতুন' : 'New This Week',
-            value: summary.newThisWeek,
-            color: 'text-petro-600 dark:text-petro-400',
-            bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
-            activeBg: 'ring-2 ring-petro-600 border-petro-600 bg-petro-50/60 dark:bg-petro-950/40',
-          },
-          {
-            id: 'closing_soon' as DashboardStatFilter,
-            label: bn ? 'শীঘ্রই শেষ' : 'Closing Soon',
-            value: summary.closingSoon,
-            color: 'text-amber-600 dark:text-amber-400',
-            bg: 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900',
-            activeBg: 'ring-2 ring-amber-500 border-amber-600 bg-amber-100/70 dark:bg-amber-950/60',
-          },
-          {
-            id: 'expired' as DashboardStatFilter,
-            label: bn ? 'সময় শেষ' : 'Deadline Passed',
-            value: summary.expired,
-            color: 'text-rose-600 dark:text-rose-400',
-            bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
-            activeBg: 'ring-2 ring-rose-500 border-rose-600 bg-rose-50/70 dark:bg-rose-950/40',
-          },
-          {
-            id: 'bookmarked' as DashboardStatFilter,
-            label: bn ? 'বুকমার্ক করা' : 'Bookmarked Jobs',
-            value: summary.bookmarked,
-            color: 'text-purple-600 dark:text-purple-400',
-            bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
-            activeBg: 'ring-2 ring-purple-500 border-purple-600 bg-purple-50/70 dark:bg-purple-950/40',
-          },
-          {
-            id: 'in_progress' as DashboardStatFilter,
-            label: bn ? 'আবেদন চলমান' : 'Application In Progress',
-            value: summary.inProgress,
-            color: 'text-indigo-600 dark:text-indigo-400',
-            bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
-            activeBg: 'ring-2 ring-indigo-500 border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40',
-          },
-        ].map((card) => {
-          const isSelected = activeStat === card.id;
-          return (
-            <button
-              key={card.id}
-              type="button"
-              aria-pressed={isSelected}
-              aria-label={`${card.label}: ${card.value}`}
-              onClick={() => handleStatCardClick(card.id)}
-              className={`text-left p-3.5 rounded-2xl border shadow-xs hover:border-petro-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-petro-500 transition-all cursor-pointer ${
-                isSelected ? card.activeBg : card.bg
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-                {isSelected && card.id !== 'total' && (
-                  <span className="text-[9.5px] font-semibold uppercase px-1.5 py-0.5 rounded-full bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
-                    {bn ? 'সক্রিয়' : 'Active'}
-                  </span>
-                )}
-              </div>
-              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">
-                {card.label}
-              </div>
-            </button>
-          );
-        })}
+      {/* Categories A-R Quick Chips when categories tab is selected */}
+      {hubTab === 'categories' && (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar bg-slate-50 dark:bg-slate-850 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0 mr-1">
+            {bn ? 'ক্যাটাগরি বাছুন:' : 'Select Category:'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFilters((prev) => ({ ...prev, categoryLetter: 'All' }))}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+              !filters.categoryLetter || filters.categoryLetter === 'All'
+                ? 'bg-petro-600 text-white border-petro-600'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            {bn ? 'সব (A-R)' : 'All (A–R)'}
+          </button>
+          {CANONICAL_18_CATEGORIES.map((cat) => {
+            const isCatActive = filters.categoryLetter === cat.letter;
+            return (
+              <button
+                key={cat.letter}
+                type="button"
+                onClick={() => setFilters((prev) => ({ ...prev, categoryLetter: cat.letter }))}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors cursor-pointer shrink-0 ${
+                  isCatActive
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span className="font-bold">{cat.letter}.</span>
+                <span>{bn ? cat.nameBn : cat.nameEn}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 8 Primary Summary Metric Cards (Milestone M2) & Status Trackers in role="group" */}
+      <div className="space-y-2.5" role="group" aria-label={bn ? 'ড্যাশবোর্ড পরিসংখ্যান ফিল্টার' : 'Dashboard statistics filters'}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+          {[
+            {
+              id: 'total' as DashboardStatFilter,
+              label: bn ? 'মোট সার্কুলার' : 'Total Job Circulars',
+              value: summary.total,
+              color: 'text-slate-800 dark:text-white',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-petro-600 border-petro-600 bg-petro-50/40 dark:bg-petro-950/30',
+              onClick: () => handleStatCardClick('total'),
+            },
+            {
+              id: 'govt_jobs',
+              label: bn ? 'সরকারি চাকরি (১-২০)' : 'Government Jobs (Grade 1–20)',
+              value: m2Metrics.governmentJobs,
+              color: 'text-amber-600 dark:text-amber-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-amber-500 border-amber-600 bg-amber-50/50',
+              onClick: () => setHubTab('government'),
+            },
+            {
+              id: 'private_bank',
+              label: bn ? 'বেসরকারি ও ব্যাংক' : 'Private & Bank Jobs',
+              value: m2Metrics.privateAndBankJobs,
+              color: 'text-blue-600 dark:text-blue-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-blue-500 border-blue-600 bg-blue-50/50',
+              onClick: () => setHubTab('private'),
+            },
+            {
+              id: 'application_open',
+              label: bn ? 'আবেদন উন্মুক্ত' : 'Application Open',
+              value: m2Metrics.applicationOpen,
+              color: 'text-emerald-600 dark:text-emerald-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-emerald-500 border-emerald-600 bg-emerald-50/50',
+              onClick: () => handleStatCardClick('total'),
+            },
+            {
+              id: 'closing_soon' as DashboardStatFilter,
+              label: bn ? 'শীঘ্রই শেষ' : 'Closing Soon',
+              value: summary.closingSoon,
+              color: 'text-amber-600 dark:text-amber-400',
+              bg: 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900',
+              activeBg: 'ring-2 ring-amber-500 border-amber-600 bg-amber-100/70 dark:bg-amber-950/60',
+              onClick: () => handleStatCardClick('closing_soon'),
+            },
+            {
+              id: 'upcoming_exams',
+              label: bn ? 'আসন্ন পরীক্ষা' : 'Upcoming Exams Announced',
+              value: m2Metrics.upcomingExams,
+              color: 'text-cyan-600 dark:text-cyan-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-cyan-500 border-cyan-600 bg-cyan-50/50',
+              onClick: () => setHubTab('upcoming_exams'),
+            },
+            {
+              id: 'admit_cards',
+              label: bn ? 'প্রবেশপত্র উপলব্ধ' : 'Admit Cards Available',
+              value: m2Metrics.admitCardsAvailable,
+              color: 'text-indigo-600 dark:text-indigo-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-indigo-500 border-indigo-600 bg-indigo-50/50',
+              onClick: () => setHubTab('admit_cards'),
+            },
+            {
+              id: 'results',
+              label: bn ? 'প্রকাশিত ফলাফল' : 'Published Results',
+              value: m2Metrics.publishedResults,
+              color: 'text-purple-600 dark:text-purple-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-purple-500 border-purple-600 bg-purple-50/50',
+              onClick: () => setHubTab('results'),
+            },
+          ].map((card) => {
+            const isSelected = activeStat === card.id || hubTab === card.id;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`${card.label}: ${card.value}`}
+                onClick={card.onClick}
+                className={`text-left p-2.5 rounded-2xl border shadow-xs hover:border-petro-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-petro-500 transition-all cursor-pointer ${
+                  isSelected ? card.activeBg : card.bg
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <div className={`text-lg font-bold ${card.color}`}>{card.value}</div>
+                </div>
+                <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 leading-tight line-clamp-2">
+                  {card.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Status Tracker Quick Filters (Preserving Backward Compatibility) */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5">
+          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+            {bn ? 'স্ট্যাটাস ফিল্টার:' : 'Status Trackers:'}
+          </span>
+          {[
+            {
+              id: 'eligible',
+              label: bn ? 'আমার যোগ্য চাকরি' : 'Eligible Jobs',
+              value: eligibleCount,
+              color: 'text-emerald-600 dark:text-emerald-400',
+              bg: 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800',
+              activeBg: 'ring-2 ring-emerald-600 border-emerald-600 bg-emerald-100/70 dark:bg-emerald-950/50',
+              onClick: () => {
+                setHubTab('eligible');
+                setFilters((prev) => ({ ...prev, statFilter: 'total' }));
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: 'deadline_tomorrow',
+              label: bn ? 'আগামীকাল শেষ' : 'Deadline Tomorrow',
+              value: deadlineTomorrowCount,
+              color: 'text-rose-600 dark:text-rose-400',
+              bg: 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800',
+              activeBg: 'ring-2 ring-rose-500 border-rose-600 bg-rose-100/70 dark:bg-rose-950/50',
+              onClick: () => {
+                setHubTab('deadline_tomorrow');
+                setFilters((prev) => ({ ...prev, statFilter: 'total' }));
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: 'upcoming_openings',
+              label: bn ? 'আবেদন শুরু হবে' : 'Upcoming Openings',
+              value: upcomingOpeningsCount,
+              color: 'text-cyan-600 dark:text-cyan-400',
+              bg: 'bg-cyan-50/50 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800',
+              activeBg: 'ring-2 ring-cyan-500 border-cyan-600 bg-cyan-100/70 dark:bg-cyan-950/50',
+              onClick: () => {
+                setHubTab('upcoming_openings');
+                setFilters((prev) => ({ ...prev, statFilter: 'total' }));
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: 'new_this_week' as DashboardStatFilter,
+              label: bn ? 'এই সপ্তাহে নতুন' : 'New This Week',
+              value: summary.newThisWeek,
+              color: 'text-petro-600 dark:text-petro-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-petro-600 border-petro-600 bg-petro-50/60 dark:bg-petro-950/40',
+            },
+            {
+              id: 'expired' as DashboardStatFilter,
+              label: bn ? 'সময় শেষ' : 'Deadline Passed',
+              value: summary.expired,
+              color: 'text-rose-600 dark:text-rose-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-rose-500 border-rose-600 bg-rose-50/70 dark:bg-rose-950/40',
+            },
+            {
+              id: 'bookmarked' as DashboardStatFilter,
+              label: bn ? 'বুকমার্ক করা' : 'Bookmarked Jobs',
+              value: summary.bookmarked,
+              color: 'text-purple-600 dark:text-purple-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-purple-500 border-purple-600 bg-purple-50/70 dark:bg-purple-950/40',
+            },
+            {
+              id: 'in_progress' as DashboardStatFilter,
+              label: bn ? 'আবেদন চলমান' : 'Application In Progress',
+              value: summary.inProgress,
+              color: 'text-indigo-600 dark:text-indigo-400',
+              bg: 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+              activeBg: 'ring-2 ring-indigo-500 border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40',
+            },
+          ].map((card) => {
+            const isSelected = activeStat === card.id || hubTab === card.id;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`${card.label}: ${card.value}`}
+                onClick={(card as any).onClick || (() => handleStatCardClick(card.id as any))}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  isSelected ? card.activeBg : card.bg
+                }`}
+              >
+                <span className={`font-bold ${card.color}`}>{card.value}</span>
+                <span className="text-slate-600 dark:text-slate-300">{card.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Compact Single-Line Live Source Health Bar (Full Table Collapsed by Default) */}
@@ -1272,87 +1831,285 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
             onOpenDiagnostic={() => setShowDiagnosticModal(true)}
           />
 
-      {/* Active Filter Indicator + Clear Filter Bar + Preference Toggle */}
-      <div className="flex items-center justify-between flex-wrap gap-2 text-xs px-1">
-        <div className="flex items-center flex-wrap gap-2">
-          <div className="text-slate-500 dark:text-slate-400 font-medium">
-            {bn ? `মোট ${displayedJobs.length}টি বিজ্ঞপ্তি প্রদর্শিত হচ্ছে` : `Showing ${displayedJobs.length} of ${jobs.length} circular(s)`}
+          {/* Profile Readiness & Smart Eligibility Indicator */}
+          {candidateProfile && (
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="relative w-8 h-8 flex items-center justify-center rounded-full bg-emerald-600 text-white font-extrabold text-[11px] shadow-xs">
+                  {profileReadiness}%
+                </div>
+                <div>
+                  <div className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>
+                      {bn
+                        ? `প্রোফাইল সম্পূর্ণতা: ${profileReadiness}%`
+                        : `Profile Readiness: ${profileReadiness}%`}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                    {profileReadiness >= 90
+                      ? bn
+                        ? 'আপনার প্রোফাইল সম্পূর্ণ! স্মার্ট যোগ্যতা ফিল্টারিং নির্ভুলভাবে কাজ করছে।'
+                        : 'Profile complete! Smart eligibility matching is fully accurate.'
+                      : bn
+                        ? 'অনার্স/মাস্টার্সের বিষয় ও জেলা যোগ করলে যোগ্য চাকরির স্মার্ট ফিল্টারিং শতভাগ সক্রিয় হবে।'
+                        : 'Complete degree subject and district to unlock 100% smart eligibility filtering.'}
+                  </div>
+                </div>
+              </div>
+              {profileReadiness < 90 && onNavigateSettings && (
+                <button
+                  type="button"
+                  onClick={onNavigateSettings}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  {bn ? 'প্রোফাইল আপডেট করুন' : 'Complete Profile'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Grade 4–20 Explorer Sub-bar (NPS 2015 Ascending Order) */}
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-amber-600" />
+                <span>
+                  {bn
+                    ? 'জাতীয় বেতন স্কেল ২০১৫ অনুযায়ী গ্রেড ৪ হতে ২০ পর্যন্ত এক্সপ্লোরার'
+                    : 'National Pay Scale 2015: Grade 4 to 20 Explorer'}
+                </span>
+              </span>
+              {filters.selectedGrades && filters.selectedGrades.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFilters((prev) => ({ ...prev, selectedGrades: [] }))}
+                  className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                >
+                  {bn ? 'গ্রেড ফিল্টার মুছুন' : 'Clear Grade Filter'}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5">
+              {getAscendingPayGrades().map((meta) => {
+                const gStr = String(meta.gradeNumber);
+                const isSelected = (filters.selectedGrades || []).includes(gStr);
+                const count = gradeJobCounts[meta.gradeNumber] || 0;
+                return (
+                  <button
+                    key={meta.gradeNumber}
+                    type="button"
+                    onClick={() => {
+                      setFilters((prev) => {
+                        const current = prev.selectedGrades || [];
+                        const next = current.includes(gStr)
+                          ? current.filter((x) => x !== gStr)
+                          : [...current, gStr];
+                        return { ...prev, selectedGrades: next };
+                      });
+                    }}
+                    className={`shrink-0 px-2.5 py-1.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-amber-400 text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold leading-tight">{meta.banglaLabel}</div>
+                    <div className="text-[9px] opacity-80 whitespace-nowrap">{meta.payScale}</div>
+                    <div className={`text-[9.5px] font-bold mt-0.5 ${isSelected ? 'text-amber-100' : 'text-amber-600 dark:text-amber-400'}`}>
+                      {count} {bn ? 'বিজ্ঞপ্তি' : 'jobs'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {activeStat !== 'total' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-petro-100 dark:bg-petro-950/60 text-petro-800 dark:text-petro-200 font-bold text-[11px]">
-              <span>
-                {activeStat === 'new_this_week'
-                  ? bn ? 'ফিল্টার: এই সপ্তাহে নতুন' : 'Filter: New This Week'
-                  : activeStat === 'closing_soon'
-                    ? bn ? 'ফিল্টার: শীঘ্রই শেষ' : 'Filter: Closing Soon'
-                    : activeStat === 'expired'
-                      ? bn ? 'ফিল্টার: সময় শেষ' : 'Filter: Expired'
-                      : activeStat === 'bookmarked'
-                        ? bn ? 'ফিল্টার: বুকমার্ক করা' : 'Filter: Bookmarked'
-                        : bn ? 'ফিল্টার: আবেদন চলমান' : 'Filter: Applications In Progress'}
-              </span>
-              <button
-                type="button"
-                aria-label="Clear card filter"
-                onClick={() => handleStatCardClick(activeStat)}
-                className="hover:text-rose-600 cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
+          {/* Active Filter Chips Bar & Save Filter Presets */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2 text-xs px-1">
+              <div className="flex items-center flex-wrap gap-2">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                  {bn
+                    ? `মোট ${displayedJobs.length}টি বিজ্ঞপ্তি প্রদর্শিত হচ্ছে`
+                    : `Showing ${displayedJobs.length} of ${jobs.length} circular(s)`}
+                </span>
 
-          {(activeStat !== 'total' ||
-            filters.query.trim() ||
-            filters.category !== 'All' ||
-            filters.education !== 'All' ||
-            filters.employmentType !== 'All' ||
-            filters.deadline !== 'all' ||
-            filters.location !== 'All' ||
-            filters.bookmarkedOnly ||
-            applyMyPrefsFilter) && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
-            >
-              {bn ? 'সব ফিল্টার মুছুন' : 'Clear Filter'}
-            </button>
-          )}
-        </div>
+                {/* Save Filter Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowSavePresetModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-[11px] hover:bg-indigo-100 cursor-pointer"
+                >
+                  <Save className="w-3 h-3" />
+                  <span>{bn ? 'ফিল্টার সংরক্ষণ' : 'Save Filter'}</span>
+                </button>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          {onNavigateTracker && (
-            <button
-              type="button"
-              onClick={onNavigateTracker}
-              className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
-            >
-              {bn ? 'আবেদন ট্র্যাকার' : 'Open Tracker'}
-            </button>
-          )}
-          <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300 font-semibold">
-            <input
-              type="checkbox"
-              checked={applyMyPrefsFilter}
-              onChange={(e) => setApplyMyPrefsFilter(e.target.checked)}
-              className="rounded text-petro-600"
-            />
-            <span>{bn ? 'আমার পছন্দের ফিল্টার প্রয়োগ করুন' : 'Filter by My Job Preferences'}</span>
-          </label>
-          {onNavigateSettings && (
-            <button
-              type="button"
-              onClick={onNavigateSettings}
-              className="inline-flex items-center gap-1 text-petro-600 hover:underline font-bold cursor-pointer"
-            >
-              <SlidersHorizontal className="w-3 h-3" />
-              <span>{bn ? 'পছন্দ নির্ধারণ' : 'Edit Preferences'}</span>
-            </button>
-          )}
-        </div>
-      </div>
+                {/* Clear All Filters Button */}
+                {(filters.query ||
+                  filters.category !== 'All' ||
+                  filters.education !== 'All' ||
+                  filters.location !== 'All' ||
+                  (filters.selectedGrades && filters.selectedGrades.length > 0) ||
+                  (filters.academicDiscipline && filters.academicDiscipline !== 'All') ||
+                  (filters.academicSubject && filters.academicSubject !== 'All') ||
+                  filters.minSalary ||
+                  filters.minGpa ||
+                  filters.deadline !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    {bn ? 'সব ফিল্টার মুছুন' : 'Clear Filter'}
+                  </button>
+                )}
+              </div>
+
+              {/* Saved Filter Presets List */}
+              {savedPresets.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {bn ? 'সংরক্ষিত প্রিসেট:' : 'Saved Presets:'}
+                  </span>
+                  {savedPresets.map((preset) => (
+                    <span
+                      key={preset.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-[10.5px] font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setFilters(preset.filters)}
+                        className="hover:text-petro-600 cursor-pointer"
+                      >
+                        {preset.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFilterPreset(preset.id)}
+                        className="hover:text-rose-600 cursor-pointer"
+                        title="Delete preset"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Removable Active Filter Chips */}
+            <div className="flex items-center flex-wrap gap-1.5">
+              {filters.query && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-[11px] font-semibold">
+                  <span>অনুসন্ধান: "{filters.query}"</span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, query: '' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {(filters.selectedGrades || []).map((g) => (
+                <span key={g} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200 border border-amber-300 dark:border-amber-800 text-[11px] font-bold">
+                  <span>{formatGradeWithPayScale(Number(g))}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilters((p) => ({
+                        ...p,
+                        selectedGrades: (p.selectedGrades || []).filter((x) => x !== g),
+                      }))
+                    }
+                    className="hover:text-rose-600 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+
+              {filters.academicDiscipline && filters.academicDiscipline !== 'All' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200 border border-blue-300 dark:border-blue-800 text-[11px] font-bold">
+                  <span>
+                    {ACADEMIC_DISCIPLINES.find((d) => d.id === filters.academicDiscipline)?.[bn ? 'nameBn' : 'nameEn'] || filters.academicDiscipline}
+                  </span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, academicDiscipline: 'All', academicSubject: 'All' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filters.academicSubject && filters.academicSubject !== 'All' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 text-[11px] font-bold">
+                  <span>
+                    {getSubjectById(filters.academicSubject)?.[bn ? 'nameBn' : 'nameEn'] || filters.academicSubject}
+                  </span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, academicSubject: 'All' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filters.category && filters.category !== 'All' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-800 dark:bg-purple-950/60 dark:text-purple-200 border border-purple-300 dark:border-purple-800 text-[11px] font-semibold">
+                  <span>{filters.category}</span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, category: 'All' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filters.education && filters.education !== 'All' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-50 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200 border border-cyan-300 dark:border-cyan-800 text-[11px] font-semibold">
+                  <span>{filters.education}</span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, education: 'All' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {filters.location && filters.location !== 'All' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200 border border-indigo-300 dark:border-indigo-800 text-[11px] font-semibold">
+                  <span>{filters.location}</span>
+                  <button type="button" onClick={() => setFilters((p) => ({ ...p, location: 'All' }))} className="hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap pt-1">
+              {onNavigateTracker && (
+                <button
+                  type="button"
+                  onClick={onNavigateTracker}
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                >
+                  {bn ? 'আবেদন ট্র্যাকার' : 'Open Tracker'}
+                </button>
+              )}
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300 font-semibold">
+                <input
+                  type="checkbox"
+                  checked={applyMyPrefsFilter}
+                  onChange={(e) => setApplyMyPrefsFilter(e.target.checked)}
+                  className="rounded text-petro-600"
+                />
+                <span>{bn ? 'আমার পছন্দের ফিল্টার প্রয়োগ করুন' : 'Filter by My Job Preferences'}</span>
+              </label>
+              {onNavigateSettings && (
+                <button
+                  type="button"
+                  onClick={onNavigateSettings}
+                  className="inline-flex items-center gap-1 text-petro-600 hover:underline font-bold cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span>{bn ? 'পছন্দ নির্ধারণ' : 'Edit Preferences'}</span>
+                </button>
+              )}
+            </div>
+          </div>
 
       {/* Circular Grid */}
       {loading || (syncing && displayedJobs.length === 0) ? (
@@ -1466,10 +2223,16 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
                 job={job}
                 isBookmarked={bookmarkedIds.has(job.id)}
                 applicationStatus={appByJobId.get(job.id)?.status}
+                examSchedule={examScheduleByJobId.get(job.id)}
+                latestResult={latestResultByJobId.get(job.id)}
                 language={language}
                 onViewDetails={(j) => setSelectedJob(j)}
                 onApplyNow={handleApplyNow}
                 onToggleBookmark={handleToggleBookmark}
+                isOrganizationFollowed={followedOrgs.has(job.organization)}
+                onToggleFollowOrg={handleToggleFollowOrg}
+                isCompared={comparedJobIds.has(job.id)}
+                onToggleCompare={handleToggleCompareJob}
               />
             ))}
           </div>
@@ -1477,14 +2240,39 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           {totalPages > 1 && (
             <nav
               aria-label="Job circulars pagination"
-              className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs"
+              className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs"
             >
-              <span className="text-slate-500 dark:text-slate-400 font-semibold">
-                {bn
-                  ? `পৃষ্ঠা ${safeCurrentPage} / ${totalPages} (মোট ${displayedJobs.length}টি)`
-                  : `Page ${safeCurrentPage} of ${totalPages} (${displayedJobs.length} total)`}
-              </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                  {bn
+                    ? `পৃষ্ঠা ${safeCurrentPage} / ${totalPages} (মোট ${displayedJobs.length}টি)`
+                    : `Page ${safeCurrentPage} of ${totalPages} (${displayedJobs.length} total)`}
+                </span>
+
+                {/* Items Per Page Selector */}
+                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                  <span className="text-[11px] font-medium">{bn ? 'প্রতি পৃষ্ঠায়:' : 'Per page:'}</span>
+                  {[24, 48, 96].map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setPageSize(size);
+                        setCurrentPage(1);
+                      }}
+                      className={`px-2 py-0.5 rounded-md font-bold text-[11px] cursor-pointer transition-colors ${
+                        pageSize === size
+                          ? 'bg-petro-600 text-white'
+                          : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   disabled={safeCurrentPage <= 1}
@@ -1493,6 +2281,30 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
                 >
                   {bn ? 'পূর্ববর্তী' : 'Previous'}
                 </button>
+
+                {/* Direct Page Numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+                  let pNum = idx + 1;
+                  if (totalPages > 5 && safeCurrentPage > 3) {
+                    pNum = safeCurrentPage - 2 + idx;
+                    if (pNum > totalPages) pNum = totalPages - (4 - idx);
+                  }
+                  return (
+                    <button
+                      key={pNum}
+                      type="button"
+                      onClick={() => setCurrentPage(pNum)}
+                      className={`w-7 h-7 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                        safeCurrentPage === pNum
+                          ? 'bg-petro-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                      }`}
+                    >
+                      {pNum}
+                    </button>
+                  );
+                })}
+
                 <button
                   type="button"
                   disabled={safeCurrentPage >= totalPages}
@@ -1529,6 +2341,54 @@ export const JobCircularPage: React.FC<JobCircularPageProps> = ({
           }}
           onSave={handleSaveManualCircular}
         />
+      )}
+
+      {showSavePresetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Save className="w-4 h-4 text-petro-600" />
+                <span>{bn ? 'ফিল্টার প্রিসেট সংরক্ষণ' : 'Save Filter Preset'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSavePresetModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {bn
+                ? 'বর্তমান সক্রিয় ফিল্টার সেটিংটি নাম দিয়ে সংরক্ষণ করুন, যাতে পরে এক ক্লিকে প্রয়োগ করতে পারেন।'
+                : 'Save your current filter configuration to restore it anytime in one click.'}
+            </p>
+            <input
+              type="text"
+              value={presetNameInput}
+              onChange={(e) => setPresetNameInput(e.target.value)}
+              placeholder={bn ? 'প্রিসেটের নাম দিন (উদাঃ ৯ম গ্রেড সিএসই)' : 'Preset Name (e.g. 9th Grade CSE)'}
+              className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSavePresetModal(false)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                {bn ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveFilterPreset(presetNameInput || (bn ? 'আমার ফিল্টার' : 'My Preset'))}
+                className="px-4 py-1.5 rounded-xl text-xs font-bold bg-petro-600 hover:bg-petro-700 text-white shadow-xs cursor-pointer"
+              >
+                {bn ? 'সংরক্ষণ করুন' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showPortalsModal && (

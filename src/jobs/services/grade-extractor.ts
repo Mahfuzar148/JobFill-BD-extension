@@ -14,6 +14,8 @@ import {
   SourceVerificationStatus,
   JobCategory,
 } from '../types/job.types';
+import { isNonGovernmentCategoryLetter } from '../types/job-system.types';
+import { mapJobToCategoryLetter } from '../taxonomy/canonical-categories';
 
 export interface JobGradeExtractionResult {
   gradeNumber: GovernmentJobGrade | null;
@@ -139,6 +141,9 @@ export class JobGradeExtractor {
     description?: string;
     salaryText?: string;
     category?: JobCategory | string;
+    categoryLetter?: string | null;
+    sector?: string | null;
+    isGovernmentJob?: boolean;
     sourceVerification?: SourceVerificationStatus;
   }): JobGradeExtractionResult {
     const jobTitle = options.jobTitle || options.title || '';
@@ -149,11 +154,53 @@ export class JobGradeExtractor {
     const category = (options.category || 'Government').toString();
     const sourceVerification = options.sourceVerification || 'official_verified';
 
-    const catLower = category.toLowerCase();
+    const catLower = category.toLowerCase().trim();
+    const orgLower = org.toLowerCase().trim();
     const combinedText = `${jobTitle} ${position} ${org} ${salaryText} ${description.slice(0, 500)}`;
 
-    // 1. Strict Invariant: Private sector jobs never receive government pay grade
-    if (catLower === 'private' || catLower === 'international jobs') {
+    // Resolve category letter
+    const resolvedCategoryLetter =
+      options.categoryLetter ||
+      mapJobToCategoryLetter({
+        category,
+        categoryLetter: options.categoryLetter,
+        organization: org,
+        jobTitle,
+        position,
+      });
+
+    // 1. Strict Invariant: Private sector jobs, NGOs, international jobs, and private commercial banks never receive civil service grades
+    const isExplicitNonGovCategory =
+      catLower === 'private' ||
+      catLower === 'ngo' ||
+      catLower === 'international jobs' ||
+      catLower === 'international' ||
+      options.sector === 'Private' ||
+      options.sector === 'NGO' ||
+      options.sector === 'International' ||
+      options.isGovernmentJob === false;
+
+    const isNonGovLetter = isNonGovernmentCategoryLetter(resolvedCategoryLetter);
+
+    // Private bank check (Category D, or Bank category where resolved category is private bank D)
+    const isBankCategory = catLower === 'bank' || catLower.includes('bank');
+    const isPrivateBank = isBankCategory && resolvedCategoryLetter === 'D';
+
+    // Private entity text heuristic for mixed categories (e.g. Category N or R when private)
+    const isPrivateEntityText =
+      orgLower.includes('private') ||
+      orgLower.includes('বেসরকারি') ||
+      orgLower.includes('ltd') ||
+      orgLower.includes('limited') ||
+      orgLower.includes('think tank') ||
+      jobTitle.toLowerCase().includes('private') ||
+      position.toLowerCase().includes('private');
+
+    const isNonGovMixed =
+      (resolvedCategoryLetter === 'N' || resolvedCategoryLetter === 'R') &&
+      (isPrivateEntityText || options.sector === 'Private' || options.isGovernmentJob === false);
+
+    if (isExplicitNonGovCategory || isNonGovLetter || isPrivateBank || isNonGovMixed) {
       return {
         gradeNumber: null,
         gradeLabel: 'Private Salary-Based',
@@ -291,12 +338,19 @@ export class JobGradeExtractor {
       return true;
     }
 
+    const catLetter = (job as any).categoryLetter || mapJobToCategoryLetter(job);
     const isPrivateJob =
-      job.isGovernmentJob === false &&
-      (job.category?.toLowerCase() === 'private' ||
-        job.employerType === 'Private Enterprise' ||
-        job.employerType === 'Commercial Bank' ||
-        job.employerType === 'Multinational');
+      job.isGovernmentJob === false ||
+      isNonGovernmentCategoryLetter(catLetter) ||
+      job.category?.toLowerCase() === 'private' ||
+      job.category?.toLowerCase() === 'ngo' ||
+      (job as any).sector === 'Private' ||
+      (job as any).sector === 'NGO' ||
+      (job as any).sector === 'International' ||
+      job.employerType === 'Private Enterprise' ||
+      job.employerType === 'Commercial Bank' ||
+      job.employerType === 'Multinational' ||
+      job.gradeVerificationStatus === 'NOT_APPLICABLE';
 
     const jobGradeNum = job.gradeNumber !== undefined && job.gradeNumber !== null ? String(job.gradeNumber) : null;
     const isNotSpecified =

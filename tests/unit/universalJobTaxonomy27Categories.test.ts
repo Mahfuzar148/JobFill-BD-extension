@@ -17,6 +17,8 @@ import {
   FederatedSearchOrchestrator,
   SourceCoverageItem,
 } from '../../src/jobs/services/federated-search-orchestrator';
+import { JobSourceRegistry } from '../../src/jobs/sources/source-registry';
+import { JobRepository } from '../../src/jobs/database/job-repository';
 import { NormalizedJobCircular, JobSearchFilters } from '../../src/jobs/types/job.types';
 
 function createMockJob(overrides: Partial<NormalizedJobCircular> = {}): NormalizedJobCircular {
@@ -419,26 +421,52 @@ describe('Source-Category Capability Mapping & Federated Search', () => {
   });
 
   it('should record NOT_SUPPORTED instead of fake failure when searching a category not covered by a source', async () => {
-    const report = await FederatedSearchOrchestrator.executeFederatedSearch({
-      filters: {
-        ...DEFAULT_JOB_FILTERS,
-        taxonomyCategory: 'aviation_aerospace',
-      },
+    // Mock active adapters to prevent long network queries in unit tests
+    const adapters = JobSourceRegistry.getAll();
+    const spies = adapters.map((adapter) =>
+      vi.spyOn(adapter, 'fetchJobs').mockResolvedValue({
+        sourceId: adapter.sourceId,
+        success: true,
+        jobs: [],
+        checkedAt: Date.now(),
+        accessNotes: 'Mocked in unit test',
+        directPortalUrl: 'https://example.gov.bd',
+      })
+    );
+    const saveJobsSpy = vi.spyOn(JobRepository, 'saveJobs').mockResolvedValue({
+      saved: [],
+      duplicatesMerged: 0,
+      preservedUnchanged: 0,
+      validationFailed: 0,
     });
+    const indexSpy = vi.spyOn(JobRepository, 'ensureSearchIndexCurrent').mockResolvedValue(new Map());
 
-    expect(report.configuredSourcesCount).toBeGreaterThan(5);
+    try {
+      const report = await FederatedSearchOrchestrator.executeFederatedSearch({
+        filters: {
+          ...DEFAULT_JOB_FILTERS,
+          taxonomyCategory: 'aviation_aerospace',
+        },
+      });
 
-    // Sources like DPE and NTRCA should be marked NOT_SUPPORTED
-    const dpeOutcome = report.sourceOutcomes.find((s) => s.sourceId === 'dpe');
-    if (dpeOutcome) {
-      expect(dpeOutcome.status).toBe('NOT_SUPPORTED');
-      expect(dpeOutcome.coverageState).toBe('NOT_SUPPORTED');
-      expect(dpeOutcome.reason).toContain('does not index');
+      expect(report.configuredSourcesCount).toBeGreaterThan(5);
+
+      // Sources like DPE and NTRCA should be marked NOT_SUPPORTED
+      const dpeOutcome = report.sourceOutcomes.find((s) => s.sourceId === 'dpe');
+      if (dpeOutcome) {
+        expect(dpeOutcome.status).toBe('NOT_SUPPORTED');
+        expect(dpeOutcome.coverageState).toBe('NOT_SUPPORTED');
+        expect(dpeOutcome.reason).toContain('does not index');
+      }
+
+      // notSupportedSourcesCount should be properly tallied without being counted in failedSourcesCount
+      expect(report.notSupportedSourcesCount).toBeGreaterThan(0);
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+      saveJobsSpy.mockRestore();
+      indexSpy.mockRestore();
     }
-
-    // notSupportedSourcesCount should be properly tallied without being counted in failedSourcesCount
-    expect(report.notSupportedSourcesCount).toBeGreaterThan(0);
-  }, 30000);
+  });
 });
 
 describe('Category Proposal & Zero-Count Visibility', () => {

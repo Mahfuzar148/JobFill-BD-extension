@@ -371,6 +371,15 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleFocusField = async (selector: string) => {
+    if (!activeTabId || typeof chrome === 'undefined' || !chrome.tabs) return;
+    try {
+      await chrome.tabs.sendMessage(activeTabId, { action: 'FOCUS_FIELD', selector });
+    } catch (err) {
+      console.warn('Could not focus field:', err);
+    }
+  };
+
   const handleReviewFields = async () => {
     if (detection.status === 'restricted' || !activeTabId || typeof chrome === 'undefined') return;
     try {
@@ -685,6 +694,7 @@ export const App: React.FC = () => {
             onUndo={handleUndo}
             onScanAgain={scanActiveTab}
             onOpenDashboard={() => handleOpenDashboard()}
+            onFocusField={handleFocusField}
             isUndoing={isUndoing}
           />
         )}

@@ -307,14 +307,19 @@ export const SUBJECT_ALIAS_GROUPS: Array<{ canonical: string; patterns: RegExp[]
       /computer science/i,
       /computer engineering/i,
       /software engineering/i,
-      /information technology/i,
-      /\bict\b/i,
-      /data science/i,
-      /cyber security/i,
       /কম্পিউটার\s*সা[য়য]়?েন্স/i,
       /কম্পিউটার\s*ইঞ্জিনি[য়য]়?ারিং/i,
       /কম্পিউটার\s*প্রকৌশল/i,
+    ],
+  },
+  {
+    canonical: 'information technology',
+    patterns: [
+      /\bict\b/i,
+      /information technology/i,
+      /information and communication technology/i,
       /তথ্য\s*ও\s*যোগাযোগ\s*প্রযুক্তি/i,
+      /ইনফরমেশন\s*টেকনোলজি/i,
     ],
   },
   {
@@ -340,6 +345,22 @@ export const SUBJECT_ALIAS_GROUPS: Array<{ canonical: string; patterns: RegExp[]
     patterns: [/\bmechanical\b/i, /যন্ত্রকৌশল/i, /মেকানিক্যাল/i],
   },
   {
+    canonical: 'materials science',
+    patterns: [/\bmse\b/i, /materials?\s*science/i, /metallurgical/i, /বস্তু\s*ও\s*ধাতু\s*কৌশল/i],
+  },
+  {
+    canonical: 'applied chemistry',
+    patterns: [/\bacce\b/i, /applied chemistry/i, /ফলিত\s*রসায়ন\s*ও\s*রাসায়নিক\s*কৌশল/i],
+  },
+  {
+    canonical: 'industrial engineering',
+    patterns: [/\bipe\b/i, /industrial\s*(?:and|&)\s*production/i, /শিল্প\s*ও\s*উৎপাদন\s*কৌশল/i],
+  },
+  {
+    canonical: 'architecture',
+    patterns: [/\barchitecture\b/i, /স্থাপত্য|স্থাপত্যকলা/i],
+  },
+  {
     canonical: 'economics',
     patterns: [/\beconomics\b/i, /agricultural economics/i, /অর্থনীতি/i, /কৃষি\s*অর্থনীতি/i],
   },
@@ -349,11 +370,19 @@ export const SUBJECT_ALIAS_GROUPS: Array<{ canonical: string; patterns: RegExp[]
   },
   {
     canonical: 'finance',
-    patterns: [/\bfinance\b/i, /banking/i, /ফিন্যান্স/i, /ব্যাংকিং/i],
+    patterns: [/\bfinance\b/i, /ফিন্যান্স/i, /অর্থায়ন/i],
+  },
+  {
+    canonical: 'banking',
+    patterns: [/\bbanking\b/i, /banking and insurance/i, /ব্যাংকিং/i, /ব্যাংকিং\s*ও\s*বীমা/i],
   },
   {
     canonical: 'management',
-    patterns: [/\bmanagement\b/i, /\bhrm\b/i, /ব্যবস্থাপনা/i],
+    patterns: [/\bmanagement\b/i, /ব্যবস্থাপনা/i],
+  },
+  {
+    canonical: 'hrm',
+    patterns: [/\bhrm\b/i, /human resource/i, /মানবসম্পদ\s*ব্যবস্থাপনা/i],
   },
   {
     canonical: 'business administration',
@@ -385,11 +414,19 @@ export const SUBJECT_ALIAS_GROUPS: Array<{ canonical: string; patterns: RegExp[]
   },
   {
     canonical: 'chemistry',
-    patterns: [/\bchemistry\b/i, /applied chemistry/i, /biochemistry/i, /রসায়ন/i, /ফলিত\s*রসায়ন/i, /প্রাণরসায়ন/i],
+    patterns: [/\bchemistry\b/i, /রসায়ন\b/i, /রসায়ন\b/i],
+  },
+  {
+    canonical: 'biochemistry',
+    patterns: [/\bbiochemistry\b/i, /molecular biology/i, /প্রাণরসায়ন/i, /প্রাণরসায়ন/i],
   },
   {
     canonical: 'biology',
     patterns: [/\bbiology\b/i, /botany/i, /zoology/i, /microbiology/i, /উদ্ভিদবিজ্ঞান/i, /প্রাণিবিজ্ঞান/i, /অণুজীববিজ্ঞান/i],
+  },
+  {
+    canonical: 'biotechnology',
+    patterns: [/\bbiotechnology\b/i, /genetic engineering/i, /বায়োটেকনোলজি|জেনেটিক\s*ইঞ্জিনিয়ারিং/i],
   },
   {
     canonical: 'law',
@@ -421,7 +458,15 @@ export const SUBJECT_ALIAS_GROUPS: Array<{ canonical: string; patterns: RegExp[]
   },
   {
     canonical: 'sociology',
-    patterns: [/\bsociology\b/i, /social work/i, /সমাজবিজ্ঞান/i, /সমাজকর্ম/i],
+    patterns: [/\bsociology\b/i, /সমাজবিজ্ঞান/i],
+  },
+  {
+    canonical: 'social work',
+    patterns: [/\bsocial\s*work\b/i, /social welfare/i, /সমাজকর্ম/i, /সমাজকল্যাণ/i],
+  },
+  {
+    canonical: 'geography',
+    patterns: [/\bgeography\b/i, /ভূগোল/i, /ভূগোল\s*ও\s*পরিবেশ/i],
   },
 ];
 
@@ -659,15 +704,15 @@ export function extractJobRequirements(job: Partial<NormalizedJobCircular>): Par
   }
 
   const cutoffMatch = ageSrc.match(
-    /(?:as on|cutoff|তারিখ পর্যন্ত|তারিখে বয়স)\s*[:\-]?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i
+    /(?:as on|as of|cutoff|তারিখ পর্যন্ত|তারিখে বয়স)\s*[:\-]?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})/i
   );
   if (cutoffMatch) {
     const parsedCut = parseFlexibleDateString(cutoffMatch[1]);
     if (parsedCut) ageCutoffDate = formatIsoCalendarDate(parsedCut);
-  } else if (job.deadlineAt) {
-    const dParsed = parseFlexibleDateString(job.deadlineAt);
-    if (dParsed) ageCutoffDate = formatIsoCalendarDate(dParsed);
   }
+  // Note: Strict Anti-Fabrication Invariant: Never fabricate or guess age cutoff date from application deadline!
+  // If the circular text does not explicitly specify a reference/cutoff date, ageCutoffDate remains null
+  // and the age check marks 'Needs Verification' with an honest instruction to check the official circular.
 
   // 6. Experience Years
   let minExperienceYears: number | null = null;
@@ -943,6 +988,41 @@ export function resolveApplicantEducationProfile(profile: UserProfile): Candidat
       highestRank = rank;
       highestLevel = levelName;
       highestDegreeName = rec.degreeTitle;
+    }
+  }
+
+  // 5. Multi-degree candidate profile items (educationDegrees array)
+  const extraDegrees = (profile as any).educationDegrees;
+  if (Array.isArray(extraDegrees)) {
+    for (const deg of extraDegrees) {
+      if (!deg) continue;
+      const degLevel = deg.level || 'Bachelor';
+      const rank = EDUCATION_RANK[degLevel] ?? EDUCATION_RANK.Bachelor;
+      const rawSubj = deg.subjectOrGroup || deg.subject || '';
+      const normSubj = normalizeAcademicSubjectName(rawSubj, 'Higher');
+      const gpaNum = typeof deg.gpa === 'number' ? deg.gpa : parseFloat(normalizeBengaliDigits(String(deg.gpa || '')));
+      const scaleNum = typeof deg.gpaScale === 'number' ? deg.gpaScale : parseFloat(normalizeBengaliDigits(String(deg.gpaScale || '')));
+      const yr = typeof deg.passingYear === 'number' ? deg.passingYear : parseInt(normalizeBengaliDigits(String(deg.passingYear || '')), 10);
+
+      const rec: CandidateEducationRecord = {
+        level: degLevel,
+        degreeTitle: deg.degreeTitle?.trim() || `${degLevel} in ${rawSubj}`,
+        subjectOrGroup: normSubj || rawSubj || '',
+        normalizedSubject: normSubj || rawSubj || '',
+        gpa: Number.isFinite(gpaNum) && gpaNum > 0 ? gpaNum : null,
+        gpaScale: Number.isFinite(scaleNum) && scaleNum > 0 ? scaleNum : 4.0,
+        resultType: deg.resultType || 'CGPA (out of 4)',
+        passingYear: Number.isFinite(yr) && yr >= 1970 && yr <= 2100 ? yr : null,
+        institution: deg.institution?.trim() || '',
+      };
+      records.push(rec);
+      if (rec.normalizedSubject) allNormalizedSubjects.push(rec.normalizedSubject.toLowerCase());
+      if (rec.passingYear) passingYears.push(rec.passingYear);
+      if (rank > highestRank) {
+        highestRank = rank;
+        highestLevel = degLevel;
+        highestDegreeName = rec.degreeTitle;
+      }
     }
   }
 

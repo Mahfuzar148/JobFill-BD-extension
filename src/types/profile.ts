@@ -331,6 +331,21 @@ export interface UserProfile {
   documents: DocumentItem[];
   careerProfile?: StudentCareerProfile;
   customFields?: CustomProfileField[];
+  educationDegrees?: CandidateDegreeItem[];
+}
+
+export interface CandidateDegreeItem {
+  id: string;
+  level: 'SSC' | 'HSC' | 'Diploma' | 'Bachelor' | 'Honours' | 'Masters' | 'PhD';
+  degreeTitle: string;
+  subjectOrGroup: string;
+  subjectId?: string;
+  institution?: string;
+  passingYear?: string | number;
+  resultType?: string;
+  gpa?: string | number;
+  gpaScale?: string | number;
+  courseDurationYears?: number;
 }
 
 // --- Security & Settings Schema ---

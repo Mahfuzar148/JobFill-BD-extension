@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobFill BD",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Smart job application autofill and job circular discovery assistant for Bangladesh.",
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
@@ -28,7 +28,8 @@
     "https://remoteok.com/*",
     "https://himalayas.app/*",
     "https://www.arbeitnow.com/*",
-    "https://api.reliefweb.int/*"
+    "https://api.reliefweb.int/*",
+    "https://bdgovtjob.net/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -71,9 +72,7 @@
         "https://*.bb.org.bd/*",
         "https://*.org.bd/*",
         "https://*.ac.bd/*",
-            "https://*.bdjobs.com/*",
-        "http://127.0.0.1/*",
-        "http://localhost/*"
+        "https://*.bdjobs.com/*"
       ],
       "exclude_matches": [
         "*://meet.google.com/*",
@@ -92,8 +91,13 @@
         "*://calendar.google.com/*",
         "*://*.youtube.com/*"
       ],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "all_frames": true,
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -105,10 +109,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/*",
-        "dashboard.html",
-        "popup.html",
-        "test-pages/*"
+        "icons/*"
       ],
       "matches": [
         "https://*.teletalk.com.bd/*",
@@ -118,9 +119,7 @@
         "https://*.bb.org.bd/*",
         "https://*.org.bd/*",
         "https://*.ac.bd/*",
-            "https://*.bdjobs.com/*",
-        "http://127.0.0.1/*",
-        "http://localhost/*"
+        "https://*.bdjobs.com/*"
       ]
     }
   ]

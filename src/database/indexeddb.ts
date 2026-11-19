@@ -4,7 +4,7 @@
 // Fully local, persistent, and sandboxed inside Chrome.
 
 export const DB_NAME = 'JobFillBD_SecureStorage';
-export const DB_VERSION = 11;
+export const DB_VERSION = 12;
 
 export const STORES = {
   PROFILES: 'profiles',
@@ -30,6 +30,12 @@ export const STORES = {
   GOVT_ORGS: 'govt_orgs',
   SOURCE_HEALTH: 'source_health',
   MIGRATION_LOGS: 'migration_logs',
+  EXAM_SCHEDULES: 'exam_schedules',
+  ADMIT_CARD_NOTICES: 'admit_card_notices',
+  SEAT_PLAN_NOTICES: 'seat_plan_notices',
+  JOB_RESULTS: 'job_results',
+  LIFECYCLE_EVENTS: 'lifecycle_events',
+  NOTICE_HISTORY: 'notice_history',
 } as const;
 
 const OPEN_TIMEOUT_MS = 4000;
@@ -261,6 +267,53 @@ export class IndexedDBManager {
           visitStore.createIndex('canonicalUrl', 'canonicalUrl', { unique: false });
           visitStore.createIndex('lastVisitedAt', 'lastVisitedAt', { unique: false });
           visitStore.createIndex('sourceId', 'sourceId', { unique: false });
+        }
+
+        // 24. Exam Schedules Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.EXAM_SCHEDULES)) {
+          const examStore = db.createObjectStore(STORES.EXAM_SCHEDULES, { keyPath: 'id' });
+          examStore.createIndex('circularId', 'circularId', { unique: false });
+          examStore.createIndex('stage', 'stage', { unique: false });
+          examStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 25. Admit Card Notices Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.ADMIT_CARD_NOTICES)) {
+          const admitStore = db.createObjectStore(STORES.ADMIT_CARD_NOTICES, { keyPath: 'id' });
+          admitStore.createIndex('circularId', 'circularId', { unique: false });
+          admitStore.createIndex('stage', 'stage', { unique: false });
+          admitStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 26. Seat Plan Notices Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.SEAT_PLAN_NOTICES)) {
+          const seatStore = db.createObjectStore(STORES.SEAT_PLAN_NOTICES, { keyPath: 'id' });
+          seatStore.createIndex('circularId', 'circularId', { unique: false });
+          seatStore.createIndex('stage', 'stage', { unique: false });
+          seatStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 27. Job Results Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.JOB_RESULTS)) {
+          const resultStore = db.createObjectStore(STORES.JOB_RESULTS, { keyPath: 'id' });
+          resultStore.createIndex('circularId', 'circularId', { unique: false });
+          resultStore.createIndex('stage', 'stage', { unique: false });
+          resultStore.createIndex('publicationStatus', 'publicationStatus', { unique: false });
+        }
+
+        // 28. Lifecycle Events Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.LIFECYCLE_EVENTS)) {
+          const lifecycleStore = db.createObjectStore(STORES.LIFECYCLE_EVENTS, { keyPath: 'id' });
+          lifecycleStore.createIndex('circularId', 'circularId', { unique: false });
+          lifecycleStore.createIndex('eventType', 'eventType', { unique: false });
+          lifecycleStore.createIndex('eventDate', 'eventDate', { unique: false });
+        }
+
+        // 29. Notice History Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.NOTICE_HISTORY)) {
+          const noticeStore = db.createObjectStore(STORES.NOTICE_HISTORY, { keyPath: 'id' });
+          noticeStore.createIndex('circularId', 'circularId', { unique: false });
+          noticeStore.createIndex('noticeType', 'noticeType', { unique: false });
         }
       };
 

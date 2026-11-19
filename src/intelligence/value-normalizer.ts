@@ -43,16 +43,22 @@ export class ValueNormalizer {
     return cleaned.split(' ').filter((w) => w.length > 0);
   }
 
-  // Format Bangladesh mobile phone number consistently
-  public static normalizeMobileNumber(raw: string): string {
-    const englishDigits = this.toEnglishNumerals(raw).replace(/\D/g, '');
+  // Format Bangladesh mobile phone number consistently (strict string, leading zero preservation)
+  public static normalizeMobileNumber(raw: string | number): string {
+    if (!raw && raw !== 0) return '';
+    const str = String(raw).trim();
+    const englishDigits = this.toEnglishNumerals(str).replace(/\D/g, '');
     if (englishDigits.startsWith('8801') && englishDigits.length === 13) {
       return englishDigits.substring(2);
     }
     if (englishDigits.startsWith('01') && englishDigits.length === 11) {
       return englishDigits;
     }
-    return raw.trim();
+    // If leading zero was stripped by numeric parsing (e.g. 1712345678 -> 10 digits starting with 1)
+    if (englishDigits.startsWith('1') && englishDigits.length === 10) {
+      return '0' + englishDigits;
+    }
+    return str;
   }
 
   // Format National ID (strips hyphens/spaces, preserves leading zeros)
@@ -73,6 +79,16 @@ export class ValueNormalizer {
     );
   }
 
+  // Helper to compute standard ISO-8601 week string YYYY-Www
+  public static getISOWeekString(year: number, month: number, day: number): string {
+    const d = new Date(Date.UTC(year, month - 1, day));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  }
+
   // Robust date normalization: parses DD-MM-YYYY, YYYY-MM-DD, or DD/MM/YYYY into required target format
   public static formatDateForTarget(
     isoDate: string, // YYYY-MM-DD
@@ -84,12 +100,81 @@ export class ValueNormalizer {
 
     // HTML5 date inputs strictly require YYYY-MM-DD
     if (targetType === 'date') {
-      const match = norm.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-      if (match) {
-        const [, y, m, d] = match;
+      const matchYMD = norm.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+      if (matchYMD) {
+        const [, y, m, d] = matchYMD;
         const yNum = Number(y), mNum = Number(m), dNum = Number(d);
         if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
         return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      const matchDMY = norm.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+      if (matchDMY) {
+        const [, d, m, y] = matchDMY;
+        const yNum = Number(y), mNum = Number(m), dNum = Number(d);
+        if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+      return norm;
+    }
+
+    // HTML5 month inputs strictly require YYYY-MM
+    if (targetType === 'month') {
+      const matchYM = norm.match(/^(\d{4})[-/.](\d{1,2})$/);
+      if (matchYM) {
+        const [, y, m] = matchYM;
+        const yNum = Number(y), mNum = Number(m);
+        if (yNum < 1900 || yNum > 2100 || mNum < 1 || mNum > 12) return '';
+        return `${y}-${m.padStart(2, '0')}`;
+      }
+      const matchYMD = norm.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+      if (matchYMD) {
+        const [, y, m, d] = matchYMD;
+        const yNum = Number(y), mNum = Number(m), dNum = Number(d);
+        if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
+        return `${y}-${m.padStart(2, '0')}`;
+      }
+      const matchDMY = norm.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+      if (matchDMY) {
+        const [, d, m, y] = matchDMY;
+        const yNum = Number(y), mNum = Number(m), dNum = Number(d);
+        if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
+        return `${y}-${m.padStart(2, '0')}`;
+      }
+      return norm;
+    }
+
+    // HTML5 week inputs strictly require YYYY-Www
+    if (targetType === 'week') {
+      const matchWeek = norm.match(/^(\d{4})-W(\d{1,2})$/i);
+      if (matchWeek) {
+        return `${matchWeek[1]}-W${matchWeek[2].padStart(2, '0')}`;
+      }
+      const matchYMD = norm.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+      if (matchYMD) {
+        const [, y, m, d] = matchYMD;
+        const yNum = Number(y), mNum = Number(m), dNum = Number(d);
+        if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
+        return this.getISOWeekString(yNum, mNum, dNum);
+      }
+      const matchDMY = norm.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+      if (matchDMY) {
+        const [, d, m, y] = matchDMY;
+        const yNum = Number(y), mNum = Number(m), dNum = Number(d);
+        if (!this.isValidCalendarDate(yNum, mNum, dNum)) return '';
+        return this.getISOWeekString(yNum, mNum, dNum);
+      }
+      return norm;
+    }
+
+    // HTML5 time inputs strictly require HH:MM
+    if (targetType === 'time') {
+      const matchTime = norm.match(/^(\d{1,2}):(\d{2})(:(\d{2}))?$/);
+      if (matchTime) {
+        const h = Number(matchTime[1]);
+        const m = Number(matchTime[2]);
+        if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+          return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
       }
       return norm;
     }
@@ -116,10 +201,16 @@ export class ValueNormalizer {
     month = month.padStart(2, '0');
 
     const hintLower = placeholderHint.toLowerCase();
-    if (hintLower.includes('yyyy-mm-dd')) {
+    if (hintLower.includes('yyyy-mm-dd') || hintLower.includes('yyyy/mm/dd') || hintLower.includes('yyyy mm dd')) {
       return `${year}-${month}-${day}`;
     }
-    if (hintLower.includes('dd/mm/yyyy')) {
+    if (
+      hintLower.includes('dd/mm/yyyy') ||
+      hintLower.includes('/') ||
+      hintLower.includes('dd mm yyyy') ||
+      hintLower.includes('dd/mm/yy') ||
+      hintLower.includes('dd mm yy')
+    ) {
       return `${day}/${month}/${year}`;
     }
     if (hintLower.includes('dd-mm-yy') && !hintLower.includes('yyyy')) {

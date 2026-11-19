@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>JobFill BD — Profile Autofill Scenarios Controlled Test Form</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f8fafc; padding: 20px; color: #1e293b; }
+    h1, h2, h3 { color: #0f172a; }
+    .form-container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    .form-section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+    .section-title { font-weight: 700; font-size: 16px; margin-bottom: 16px; color: #0369a1; border-bottom: 2px solid #e0f2fe; padding-bottom: 6px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .field-group { display: flex; flex-direction: column; }
+    label { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155; }
+    input[type="text"], input[type="tel"], input[type="email"], input[type="date"], select {
+      padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; outline: none;
+    }
+    input:focus, select:focus { border-color: #0284c7; box-shadow: 0 0 0 2px #bae6fd; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h1>Bangladesh Government Job Application Form (Controlled QA Form)</h1>
+    <p>Controlled test form replicating the exact fields, cascading dependencies, and control types from verification screenshots.</p>
+
+    <form id="jobApplicationForm">
+      <!-- Scenario 1: Identity & Citizenship -->
+      <div class="form-section" id="scenario-1">
+        <div class="section-title">Scenario 1: Identity and Citizenship (ব্যক্তিগত ও নাগরিক পরিচয়)</div>
+        <div class="grid">
+          <div class="field-group">
+            <label for="applicant_name">Applicant's Name (English)</label>
+            <input type="text" id="applicant_name" name="applicant_name" placeholder="Applicant Name" />
+          </div>
+          <div class="field-group">
+            <label for="dob_text">Date of Birth (DD/MM/YYYY)</label>
+            <input type="text" id="dob_text" name="dob" placeholder="DD/MM/YYYY" />
+          </div>
+          <div class="field-group">
+            <label for="gender">Gender (লিঙ্গ)</label>
+            <select id="gender" name="gender">
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="religion">Religion (ধর্ম)</label>
+            <select id="religion" name="religion">
+              <option value="">Select Religion</option>
+              <option value="Islam">Islam</option>
+              <option value="Hinduism">Hinduism</option>
+              <option value="Christianity">Christianity</option>
+              <option value="Buddhism">Buddhism</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="nid">National ID (জাতীয় পরিচয়পত্র নম্বর)</label>
+            <input type="text" id="nid" name="nid" placeholder="National ID" />
+          </div>
+          <div class="field-group">
+            <label for="birth_reg">Birth Registration No</label>
+            <input type="text" id="birth_reg" name="birth_reg" placeholder="Birth Registration Number" />
+          </div>
+          <div class="field-group">
+            <label for="passport">Passport No</label>
+            <input type="text" id="passport" name="passport" placeholder="Passport Number" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 2: Contact & Quota -->
+      <div class="form-section" id="scenario-2">
+        <div class="section-title">Scenario 2: Contact and Quota (যোগাযোগ ও কোটা)</div>
+        <div class="grid">
+          <div class="field-group">
+            <label for="mobile">Mobile Number (মোবাইল নম্বর)</label>
+            <input type="tel" id="mobile" name="mobile" placeholder="01XXXXXXXXX" />
+          </div>
+          <div class="field-group">
+            <label for="confirm_mobile">Confirm Mobile Number (মোবাইল নম্বর পুনরায় লিখুন)</label>
+            <input type="tel" id="confirm_mobile" name="confirm_mobile" placeholder="Retype Mobile Number" />
+          </div>
+          <div class="field-group">
+            <label for="email">Email Address (ইমেইল ঠিকানা)</label>
+            <input type="email" id="email" name="email" placeholder="example@email.com" />
+          </div>
+          <div class="field-group">
+            <label for="quota">Quota Category (কোটা)</label>
+            <select id="quota" name="quota">
+              <option value="">Select Quota</option>
+              <option value="General">General</option>
+              <option value="Freedom Fighter">Freedom Fighter</option>
+              <option value="Child of Freedom Fighter">Child of Freedom Fighter</option>
+              <option value="Grandchild of Freedom Fighter">Grandchild of Freedom Fighter</option>
+              <option value="Tribal">Tribal</option>
+              <option value="Physically Challenged">Physically Challenged</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ff_quota">Freedom Fighter Status (মুক্তিযোদ্ধা কোটা)</label>
+            <select id="ff_quota" name="ff_quota">
+              <option value="">Select Status</option>
+              <option value="Non Freedom Fighter">Non Freedom Fighter</option>
+              <option value="Freedom Fighter">Freedom Fighter</option>
+              <option value="Child of Freedom Fighter">Child of Freedom Fighter</option>
+              <option value="Grandchild of Freedom Fighter">Grandchild of Freedom Fighter</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="departmental_status">Departmental Status</label>
+            <select id="departmental_status" name="departmental_status">
+              <option value="No">No</option>
+              <option value="Government Employee">Government Employee</option>
+              <option value="Semi-Government Employee">Semi-Government Employee</option>
+              <option value="Autonomous Body">Autonomous Body</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 3: Address & Cascading Dropdowns -->
+      <div class="form-section" id="scenario-3">
+        <div class="section-title">Scenario 3: Address Details (বর্তমান ও স্থায়ী ঠিকানা)</div>
+        
+        <h3>Present Address (বর্তমান ঠিকানা)</h3>
+        <div class="grid present-address-box">
+          <div class="field-group">
+            <label for="present_care">Care Of</label>
+            <input type="text" id="present_care" name="present_care" placeholder="Care Of" />
+          </div>
+          <div class="field-group">
+            <label for="present_village">Village/Town/Road/House</label>
+            <input type="text" id="present_village" name="present_village" placeholder="Village/Road" />
+          </div>
+          <div class="field-group">
+            <label for="present_district">District (জেলা)</label>
+            <select id="present_district" name="present_district">
+              <option value="">Select District</option>
+              <option value="Dhaka">Dhaka</option>
+              <option value="Rajshahi">Rajshahi</option>
+              <option value="Chittagong">Chittagong</option>
+              <option value="Khulna">Khulna</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="present_upazila">Upazila / P.S. (উপজেলা/থানা)</label>
+            <select id="present_upazila" name="present_upazila">
+              <option value="">Select Upazila</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="present_post">Post Office</label>
+            <input type="text" id="present_post" name="present_post" placeholder="Post Office" />
+          </div>
+          <div class="field-group">
+            <label for="present_postcode">Post Code</label>
+            <input type="text" id="present_postcode" name="present_postcode" placeholder="Postal Code" />
+          </div>
+        </div>
+
+        <div class="checkbox-group">
+          <input type="checkbox" id="same_as_present" name="same_as_present" />
+          <label for="same_as_present">Same as Present Address (বর্তমান ঠিকানার অনুরূপ)</label>
+        </div>
+
+        <h3>Permanent Address (স্থায়ী ঠিকানা)</h3>
+        <div class="grid permanent-address-box">
+          <div class="field-group">
+            <label for="permanent_care">Care Of</label>
+            <input type="text" id="permanent_care" name="permanent_care" placeholder="Care Of" />
+          </div>
+          <div class="field-group">
+            <label for="permanent_village">Village/Town/Road/House</label>
+            <input type="text" id="permanent_village" name="permanent_village" placeholder="Permanent Village" />
+          </div>
+          <div class="field-group">
+            <label for="permanent_district">Permanent District (স্থায়ী জেলা)</label>
+            <select id="permanent_district" name="permanent_district">
+              <option value="">Select District</option>
+              <option value="Dhaka">Dhaka</option>
+              <option value="Rajshahi">Rajshahi</option>
+              <option value="Chittagong">Chittagong</option>
+              <option value="Khulna">Khulna</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="permanent_upazila">Permanent Upazila / P.S. (স্থায়ী উপজেলা/থানা)</label>
+            <select id="permanent_upazila" name="permanent_upazila">
+              <option value="">Select Upazila</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="permanent_post">Post Office</label>
+            <input type="text" id="permanent_post" name="permanent_post" placeholder="Post Office" />
+          </div>
+          <div class="field-group">
+            <label for="permanent_postcode">Post Code</label>
+            <input type="text" id="permanent_postcode" name="permanent_postcode" placeholder="Postal Code" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 4: Academic Information (SSC & HSC) -->
+      <div class="form-section edu-block" id="scenario-4">
+        <div class="section-title">Scenario 4: Secondary & Higher Secondary Education (এসএসসি ও এইচএসসি)</div>
+
+        <h3>SSC or Equivalent Information</h3>
+        <div class="grid">
+          <div class="field-group">
+            <label for="ssc_exam">Examination</label>
+            <select id="ssc_exam" name="ssc_exam">
+              <option value="">Select Examination</option>
+              <option value="S.S.C">S.S.C</option>
+              <option value="Dakhil">Dakhil</option>
+              <option value="S.S.C Vocational">S.S.C Vocational</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ssc_board">Board</label>
+            <select id="ssc_board" name="ssc_board">
+              <option value="">Select Board</option>
+              <option value="Dhaka">Dhaka</option>
+              <option value="Rajshahi">Rajshahi</option>
+              <option value="Madrasah">Madrasah</option>
+              <option value="Technical">Technical</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ssc_roll">Roll No</label>
+            <input type="text" id="ssc_roll" name="ssc_roll" placeholder="Roll No" />
+          </div>
+          <div class="field-group">
+            <label for="ssc_reg">Registration No</label>
+            <input type="text" id="ssc_reg" name="ssc_reg" placeholder="Registration No" />
+          </div>
+          <div class="field-group">
+            <label for="ssc_result_type">Result</label>
+            <select id="ssc_result_type" name="ssc_result">
+              <option value="">Select Result</option>
+              <option value="GPA (out of 5)">GPA (out of 5)</option>
+              <option value="First Division">First Division</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ssc_gpa">GPA</label>
+            <input type="text" id="ssc_gpa" name="ssc_gpa" placeholder="GPA" />
+          </div>
+          <div class="field-group">
+            <label for="ssc_group">Group</label>
+            <select id="ssc_group" name="ssc_group">
+              <option value="">Select Group</option>
+              <option value="Science">Science</option>
+              <option value="Humanities">Humanities</option>
+              <option value="Business Studies">Business Studies</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="ssc_year">Passing Year</label>
+            <select id="ssc_year" name="ssc_year">
+              <option value="">Select Year</option>
+              <option value="2012">2012</option>
+              <option value="2013">2013</option>
+              <option value="2014">2014</option>
+            </select>
+          </div>
+        </div>
+
+        <h3 style="margin-top:20px;">HSC or Equivalent Information</h3>
+        <div class="grid">
+          <div class="field-group">
+            <label for="hsc_exam">Examination</label>
+            <select id="hsc_exam" name="hsc_exam">
+              <option value="">Select Examination</option>
+              <option value="H.S.C">H.S.C</option>
+              <option value="Alim">Alim</option>
+              <option value="Diploma in Engineering">Diploma in Engineering</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="hsc_board">Board</label>
+            <select id="hsc_board" name="hsc_board">
+              <option value="">Select Board</option>
+              <option value="Dhaka">Dhaka</option>
+              <option value="Rajshahi">Rajshahi</option>
+              <option value="Madrasah">Madrasah</option>
+              <option value="Technical">Technical</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="hsc_roll">Roll No</label>
+            <input type="text" id="hsc_roll" name="hsc_roll" placeholder="Roll No" />
+          </div>
+          <div class="field-group">
+            <label for="hsc_reg">Registration No</label>
+            <input type="text" id="hsc_reg" name="hsc_reg" placeholder="Registration No" />
+          </div>
+          <div class="field-group">
+            <label for="hsc_result_type">Result</label>
+            <select id="hsc_result_type" name="hsc_result">
+              <option value="">Select Result</option>
+              <option value="GPA (out of 5)">GPA (out of 5)</option>
+              <option value="First Division">First Division</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="hsc_gpa">GPA</label>
+            <input type="text" id="hsc_gpa" name="hsc_gpa" placeholder="GPA" />
+          </div>
+          <div class="field-group">
+            <label for="hsc_group">Group</label>
+            <select id="hsc_group" name="hsc_group">
+              <option value="">Select Group</option>
+              <option value="Science">Science</option>
+              <option value="Humanities">Humanities</option>
+              <option value="Business Studies">Business Studies</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="hsc_year">Passing Year</label>
+            <select id="hsc_year" name="hsc_year">
+              <option value="">Select Year</option>
+              <option value="2014">2014</option>
+              <option value="2015">2015</option>
+              <option value="2016">2016</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 5: Graduation & Higher Education -->
+      <div class="form-section edu-block" id="scenario-5">
+        <div class="section-title">Scenario 5: Graduation / Equivalent (স্নাতক বা সমমান)</div>
+        <div class="grid">
+          <div class="field-group">
+            <label for="gra_exam">Examination / Degree</label>
+            <select id="gra_exam" name="gra_exam">
+              <option value="">Select Degree</option>
+              <option value="B.Sc Engineering">B.Sc Engineering</option>
+              <option value="B.Sc (Hons)">B.Sc (Hons)</option>
+              <option value="B.B.A">B.B.A</option>
+              <option value="B.A (Hons)">B.A (Hons)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_subject">Subject / Discipline</label>
+            <select id="gra_subject" name="gra_subject">
+              <option value="">Select Subject</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_institute">University / Institute</label>
+            <select id="gra_institute" name="gra_institute">
+              <option value="">Select University</option>
+              <option value="BUET">Bangladesh University of Engineering and Technology (BUET)</option>
+              <option value="DU">University of Dhaka (DU)</option>
+              <option value="RU">University of Rajshahi (RU)</option>
+              <option value="CU">University of Chittagong (CU)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_result">Result Type</label>
+            <select id="gra_result" name="gra_result">
+              <option value="">Select Result</option>
+              <option value="CGPA (out of 4.00)">CGPA (out of 4.00)</option>
+              <option value="First Class">First Class</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_cgpa">CGPA</label>
+            <input type="text" id="gra_cgpa" name="gra_cgpa" placeholder="CGPA" />
+          </div>
+          <div class="field-group">
+            <label for="gra_scale">Result Scale</label>
+            <select id="gra_scale" name="gra_scale">
+              <option value="">Select Scale</option>
+              <option value="4.00">4.00</option>
+              <option value="5.00">5.00</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_year">Passing Year</label>
+            <select id="gra_year" name="gra_year">
+              <option value="">Select Year</option>
+              <option value="2018">2018</option>
+              <option value="2019">2019</option>
+              <option value="2020">2020</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="gra_duration">Course Duration</label>
+            <select id="gra_duration" name="gra_duration">
+              <option value="">Select Duration</option>
+              <option value="4 Years">4 Years</option>
+              <option value="3 Years">3 Years</option>
+              <option value="5 Years">5 Years</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Dynamic Cascading Behavior for District -> Upazila
+    const upazilaData = {
+      Dhaka: ['Dhanmondi', 'Gulshan', 'Mirpur', 'Uttara', 'Savar'],
+      Rajshahi: ['Boalia', 'Motihar', 'Rajpoot', 'Puthia', 'Bagmara', 'Godagari'],
+      Chittagong: ['Kotwali', 'Panchlaish', 'Double Mooring', 'Hathazari'],
+      Khulna: ['Kotwali', 'Sonadanga', 'Daulatpur', 'Khalishpur']
+    };
+
+    function setupDistrictUpazilaCascade(districtId, upazilaId) {
+      const distSelect = document.getElementById(districtId);
+      const upaSelect = document.getElementById(upazilaId);
+      if (!distSelect || !upaSelect) return;
+
+      distSelect.addEventListener('change', () => {
+        const dist = distSelect.value;
+        upaSelect.innerHTML = '<option value="">Select Upazila</option>';
+        if (upazilaData[dist]) {
+          upazilaData[dist].forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u;
+            opt.textContent = u;
+            upaSelect.appendChild(opt);
+          });
+        }
+      });
+    }
+
+    setupDistrictUpazilaCascade('present_district', 'present_upazila');
+    setupDistrictUpazilaCascade('permanent_district', 'permanent_upazila');
+
+    // Dynamic Cascading Behavior for Degree -> Subject
+    const subjectData = {
+      'B.Sc Engineering': ['Computer Science & Engineering', 'Electrical & Electronic Engineering', 'Civil Engineering', 'Mechanical Engineering'],
+      'B.Sc (Hons)': ['Physics', 'Chemistry', 'Mathematics', 'Statistics'],
+      'B.B.A': ['Finance', 'Marketing', 'Accounting', 'Management'],
+      'B.A (Hons)': ['English', 'Bangla', 'History', 'Philosophy']
+    };
+
+    const degreeSelect = document.getElementById('gra_exam');
+    const subjectSelect = document.getElementById('gra_subject');
+    if (degreeSelect && subjectSelect) {
+      degreeSelect.addEventListener('change', () => {
+        const deg = degreeSelect.value;
+        subjectSelect.innerHTML = '<option value="">Select Subject</option>';
+        if (subjectData[deg]) {
+          subjectData[deg].forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            subjectSelect.appendChild(opt);
+          });
+        }
+      });
+    }
+
+    // Same as Present Checkbox handler
+    const sameCheckbox = document.getElementById('same_as_present');
+    if (sameCheckbox) {
+      sameCheckbox.addEventListener('change', () => {
+        if (sameCheckbox.checked) {
+          document.getElementById('permanent_care').value = document.getElementById('present_care').value;
+          document.getElementById('permanent_village').value = document.getElementById('present_village').value;
+          const presDist = document.getElementById('present_district').value;
+          const permDist = document.getElementById('permanent_district');
+          permDist.value = presDist;
+          permDist.dispatchEvent(new Event('change'));
+          setTimeout(() => {
+            document.getElementById('permanent_upazila').value = document.getElementById('present_upazila').value;
+          }, 50);
+          document.getElementById('permanent_post').value = document.getElementById('present_post').value;
+          document.getElementById('permanent_postcode').value = document.getElementById('present_postcode').value;
+        }
+      });
+    }
+  </script>
+</body>
+</html>

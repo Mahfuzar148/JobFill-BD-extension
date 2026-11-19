@@ -24,6 +24,7 @@ export const TRUSTED_OFFICIAL_DOMAIN_SUFFIXES = [
   'erecruitment.bb.org.bd',
   'bpsc.gov.bd',
   'bdjobs.com',
+  'bdgovtjob.net',
 ];
 
 const REDIRECT_PARAM_NAMES = ['url', 'redirect', 'redirect_uri', 'next', 'target', 'dest', 'destination', 'goto', 'to', 'r'];

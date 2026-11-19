@@ -54,7 +54,7 @@ import {
   inferDocumentMimeType,
 } from '../documents';
 
-export type AutofillMode = 'profile_first' | 'strict_review';
+export type AutofillMode = 'profile_first' | 'strict_review' | 'assisted' | 'full' | 'preview';
 
 let currentProfile: UserProfile = createEmptyProfile('Vault Locked');
 let isVaultLocked: boolean = false;
@@ -1111,17 +1111,53 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     return null;
   }
 
+  // Preview Mode: analyze form and display mappings without modifying DOM
+  if (activeAutofillMode === 'preview') {
+    const completenessReport = VerificationEngine.buildCompletenessReport(currentScanResult.planItems);
+    lastCompletenessReport = completenessReport;
+    openReviewModal();
+    return {
+      scan: currentScanResult,
+      totalFilled: 0,
+      totalFailed: 0,
+      alreadyCorrect: completenessReport.filter((c) => c.status === 'Already Correct').length,
+      missingInfo: completenessReport.filter((c) => c.status === 'Profile Information Missing').length,
+      ambiguous: currentScanResult.ambiguousCount,
+      conflicts: currentScanResult.conflictsCount,
+      confirmationRequired: currentScanResult.confirmationRequiredCount || 0,
+      completenessReport,
+      allItems: currentScanResult.planItems,
+      imagesAttached: 0,
+      pendingDocsCount: 0,
+    };
+  }
+
+  const isAssistedMode = activeAutofillMode === 'assisted' || activeAutofillMode === 'strict_review';
+  const hasAmbiguousOrReviewNeeded =
+    currentScanResult.ambiguousCount > 0 ||
+    (currentScanResult.confirmationRequiredCount || 0) > 0 ||
+    currentScanResult.planItems.some((item) => {
+      const exp = currentScanResult!.explanations?.get(item.selector);
+      return exp && exp.decisionTier === 'MEDIUM_CONFIDENCE';
+    });
+
   const trackedByElement = new Map<HTMLElement, FillPlanItem>();
   for (const item of currentScanResult.planItems) {
     trackedByElement.set(item.element, item);
   }
 
-  // Profile-First Mode: approve matched items; strictly withhold User Confirmation Required (e.g. Quota)
+  // Profile-First / Assisted Mode: approve matched items; in assisted mode, only fill HIGH_CONFIDENCE fields
   const pass1Items = currentScanResult.planItems.filter((item) => {
     if (!item.proposedValue) return false;
     if (item.status === 'Already Correct') return false;
     if (item.status === 'User Confirmation Required') return false;
     if (item.hasConflict && !allowReplaceExisting) return false;
+    if (isAssistedMode) {
+      const exp = currentScanResult!.explanations?.get(item.selector);
+      if (!exp || exp.decisionTier !== 'HIGH_CONFIDENCE') {
+        return false;
+      }
+    }
     return item.status === 'Matched' || item.isApproved;
   });
 
@@ -1159,6 +1195,22 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
       console.warn('Post fill hook error:', e);
     }
 
+    // Coordinate cascading dropdown pairs (District -> Upazila, Degree -> Subject) with bounded MutationObserver option waits
+    try {
+      await PageScanner.resolveCascadingFields(document, currentProfile);
+    } catch (cascadeErr) {
+      console.warn('Cascading dropdown resolution error:', cascadeErr);
+    }
+
+    // Coordinate multi-control composite Date of Birth triplets if present
+    if (currentProfile.personal?.dob) {
+      try {
+        await PageScanner.coordinateCompositeDob(document, currentProfile.personal.dob);
+      } catch (dobErr) {
+        console.warn('Composite DOB resolution error:', dobErr);
+      }
+    }
+
     // Pass 2: Follow-up check for newly revealed / unlocked fields (e.g. ssc_gpa, nid_no, birth_reg_no, dependent upazila/group)
     await new Promise((r) => setTimeout(r, 350));
     try {
@@ -1175,6 +1227,12 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
         if (item.status === 'Already Correct') return false;
         if (item.status === 'User Confirmation Required') return false;
         if (item.hasConflict && !allowReplaceExisting) return false;
+        if (isAssistedMode) {
+          const exp = pass2Scan.explanations?.get(item.selector);
+          if (!exp || exp.decisionTier !== 'HIGH_CONFIDENCE') {
+            return false;
+          }
+        }
         const alreadyFilledInPass1 = pass1Items.some((p1) => p1.element === item.element && p1.status === 'Filled');
         if (alreadyFilledInPass1) return false;
         return item.status === 'Matched' || item.isApproved;
@@ -1223,6 +1281,11 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     }
   } catch (docErr) {
     console.warn('JobFill BD: Auto document attach notice:', docErr);
+  }
+
+  // Assisted Mode: prompt review modal for medium-confidence or ambiguous mappings
+  if (isAssistedMode && hasAmbiguousOrReviewNeeded) {
+    void openReviewModal();
   }
 
   return {
@@ -2873,6 +2936,11 @@ if (
           await openDocumentApprovalModal();
           sendResponse({ status: 'opened' });
         } else if (message.action === 'AUTO_FILL_NOW' || message.action === 'EXECUTE_AUTO_FILL') {
+          if (message.payload?.mode) {
+            activeAutofillMode = message.payload.mode;
+          } else if (message.mode) {
+            activeAutofillMode = message.mode;
+          }
           await ensureAssistantUiInitialized(true);
           await loadProfile();
           if (isVaultLocked) {
@@ -2951,6 +3019,49 @@ if (
           await ensureAssistantUiInitialized(true);
           openReviewModal();
           sendResponse({ status: 'opened' });
+        } else if (message.action === 'SET_AUTOFILL_MODE') {
+          if (message.mode) {
+            activeAutofillMode = message.mode;
+          }
+          sendResponse({ status: 'ok', mode: activeAutofillMode });
+        } else if (message.action === 'FOCUS_FIELD') {
+          const sel = message.selector;
+          if (sel) {
+            let el: HTMLElement | null = null;
+            try {
+              el = document.querySelector<HTMLElement>(sel);
+            } catch {
+              // ignore invalid querySelector
+            }
+            if (!el && sel.startsWith('#')) {
+              const cleanId = sel.replace(/^#/, '');
+              el = document.getElementById(cleanId);
+            }
+            if (!el) {
+              const cleanName = sel.replace(/^[#\[name="]+|["\]]+$/g, '');
+              el = document.querySelector<HTMLElement>(`[name="${cleanName}"]`) || document.getElementById(cleanName);
+            }
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.focus?.();
+              const prevOutline = el.style.outline;
+              const prevBoxShadow = el.style.boxShadow;
+              const prevTransition = el.style.transition;
+              el.style.transition = 'all 0.3s ease';
+              el.style.outline = '3px solid #f59e0b';
+              el.style.boxShadow = '0 0 14px rgba(245, 158, 11, 0.75)';
+              setTimeout(() => {
+                if (el) {
+                  el.style.outline = prevOutline;
+                  el.style.boxShadow = prevBoxShadow;
+                  el.style.transition = prevTransition;
+                }
+              }, 2000);
+              sendResponse({ status: 'ok', focused: true });
+              return;
+            }
+          }
+          sendResponse({ status: 'not_found' });
         } else if (message.action === 'DETECT_LOGIN_FORM') {
           const loginScan = LoginFormDetector.scan(document);
           sendResponse({

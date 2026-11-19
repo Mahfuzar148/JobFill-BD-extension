@@ -297,6 +297,14 @@ const DashboardContent: React.FC = () => {
       await setActiveProfileId(found.id);
       setCurrentProfile(found);
       setHasUnsavedChanges(false);
+
+      // Invalidate cached profile snapshots across extension contexts
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: found.id } }));
+      }
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: found.id }).catch(() => {});
+      }
     }
   };
 
@@ -314,6 +322,14 @@ const DashboardContent: React.FC = () => {
     setProfiles(updated);
     setCurrentProfile(newProf);
     setHasUnsavedChanges(false);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: newProf.id } }));
+    }
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: newProf.id }).catch(() => {});
+    }
+
     showToast(language === 'bn' ? `✅ "${name}" প্রোফাইল তৈরি হয়েছে!` : `✅ "${name}" profile created!`);
   };
 
@@ -321,12 +337,22 @@ const DashboardContent: React.FC = () => {
     setIsSaving(true);
     try {
       await saveActiveProfile(currentProfile);
+
+      // Read back from persistent storage to verify transaction commit
+      const verified = await getActiveProfile();
+      setCurrentProfile(verified);
+      const allUpdated = await getAllProfiles();
+      setProfiles(allUpdated);
       setHasUnsavedChanges(false);
-      const idx = profiles.findIndex((p) => p.id === currentProfile.id);
-      if (idx >= 0) {
-        profiles[idx] = currentProfile;
-        setProfiles([...profiles]);
+
+      // Invalidate cached profile snapshot across extension contexts
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: verified.id } }));
       }
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: verified.id }).catch(() => {});
+      }
+
       showToast(language === 'bn' ? '💾 সমস্ত তথ্য সফলভাবে সংরক্ষিত হয়েছে!' : '💾 All profile data saved securely!');
     } catch (err: any) {
       alert('Error saving data: ' + err.message);

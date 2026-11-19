@@ -5,6 +5,7 @@
 
 import { UserProfile } from '../types/profile';
 import { setSelectValue } from './dropdownMatcher';
+import { CascadingDropdownEngine } from './cascadingDropdownEngine';
 
 export class DynamicFormHandler {
   // Prepares the form by triggering conditional reveals based on applicant's profile data
@@ -123,13 +124,25 @@ export class DynamicFormHandler {
     // Step 1: Set Division if present
     if (divSelect && division) {
       setSelectValue(divSelect, division);
-      await this.sleep(120);
+      if (distSelect) {
+        await CascadingDropdownEngine.waitForChildOptions(
+          distSelect,
+          distSelect.options.length <= 1 ? distSelect.options.length : 0,
+          1500
+        );
+      }
     }
 
     // Step 2: Set District
     if (distSelect && district) {
       setSelectValue(distSelect, district);
-      await this.sleep(150);
+      if (upzSelect) {
+        await CascadingDropdownEngine.waitForChildOptions(
+          upzSelect,
+          upzSelect.options.length <= 1 ? upzSelect.options.length : 0,
+          1500
+        );
+      }
     }
 
     // Step 3: Set Upazila
