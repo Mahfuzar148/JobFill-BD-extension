@@ -1,9 +1,10 @@
-// JobFill BD - Bdjobs Public Feed Adapter
+// JobFill BD - Bdjobs Public Feed & Search Adapter
 // Reads only Bdjobs' publicly exposed homepage spotlight JSON
 // (https://storage.googleapis.com/bdjobs-home-static/GovtJobs.json).
 // Community Apify scrapers (hipersoft/bdjobs-scraper, steadyscrape/bdjobs-jobs-scraper) were
 // evaluated and intentionally NOT enabled (third-party hosted scrapers requiring paid Apify tokens,
 // zero official Bdjobs authorization).
+// For general listings, user-initiated external search links to official Bdjobs pages are generated.
 
 import {
   JobSourceAdapter,
@@ -15,12 +16,13 @@ import { NormalizedJobCircular } from '../../types/job.types';
 import { safePublicGet } from '../../services/job-fetcher';
 import { normalizeJobRecord } from '../../services/job-normalizer';
 import { validateJobCircular } from '../../services/job-validator';
+import { JobTaxonomyClassifier } from '../../services/taxonomy-classifier';
 
-const BDJOBS_GOVT_JSON_URL = 'https://storage.googleapis.com/bdjobs-home-static/GovtJobs.json';
-const BDJOBS_HOME_URL = 'https://www.bdjobs.com/';
+export const BDJOBS_GOVT_JSON_URL = 'https://storage.googleapis.com/bdjobs-home-static/GovtJobs.json';
+export const BDJOBS_HOME_URL = 'https://www.bdjobs.com/';
 
 export const BDJOBS_COVERAGE_DISCLOSURE =
-  'Limited public job highlights retrieved. Full private job coverage is not available through the currently configured public source.';
+  'Limited public job highlights retrieved. Full private job coverage is not available through automated background crawling due to platform Terms of Service.';
 export const BDJOBS_DEADLINE_DISCLOSURE =
   'Deadline verification: Required where unknown (static highlights omit closing dates; never fabricated).';
 
@@ -45,12 +47,60 @@ export const BDJOBS_COMMUNITY_EVALUATION = {
   ],
 };
 
-interface BdjobsStaticEntry {
+export interface BdjobsStaticEntry {
   CompanyName?: string;
   CompanyNameBng?: string;
   JobTitle?: string;
   JobTitleBng?: string;
   JP_ID?: number | string;
+  Deadline?: string;
+  ExpDate?: string;
+  PublishDate?: string;
+  EduReq?: string;
+  Experience?: string;
+  Salary?: string;
+  Location?: string;
+  Vacancies?: string | number;
+  Category?: string;
+  CatName?: string;
+  JobDescription?: string;
+  EmploymentType?: string;
+}
+
+/**
+ * Builds an official, authorized search URL on Bdjobs.com for user-initiated browsing in a new tab.
+ */
+export function buildBdjobsSearchUrl(query?: string, categoryId?: string): string {
+  const base = 'https://jobs.bdjobs.com/jobsearch.asp';
+  const params = new URLSearchParams();
+  if (query && query.trim()) {
+    params.set('txtsearch', query.trim());
+  }
+  if (categoryId && categoryId !== 'All') {
+    params.set('qcat', categoryId);
+  }
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : 'https://www.bdjobs.com/';
+}
+
+/**
+ * Category mapping for Bdjobs categories to universal taxonomy
+ */
+export function inferBdjobsCategory(catName?: string, title?: string, org?: string): any {
+  const norm = (catName || '').toLowerCase().trim();
+  if (norm.includes('bank') || norm.includes('ব্যাংক')) return 'Bank';
+  if (norm.includes('it') || norm.includes('software') || norm.includes('আইটি')) return 'IT / Technology';
+  if (norm.includes('medical') || norm.includes('health') || norm.includes('স্বাস্থ্য')) return 'Healthcare';
+  if (norm.includes('education') || norm.includes('teaching') || norm.includes('শিক্ষা')) return 'Education';
+  if (norm.includes('ngo') || norm.includes('development') || norm.includes('এনজিও')) return 'NGO';
+  if (norm.includes('govt') || norm.includes('government') || norm.includes('সরকারি')) return 'Government';
+  if (norm.includes('private') || norm.includes('commercial') || norm.includes('বেসরকারি')) return 'Private';
+
+  // Fallback to checking title and org
+  const text = `${title || ''} ${org || ''}`.toLowerCase();
+  if (text.includes('bank') || text.includes('ব্যাংক')) return 'Bank';
+  if (text.includes('মন্ত্রণালয়') || text.includes('অধিদপ্তর') || text.includes('কমিশন')) return 'Government';
+  return 'Private';
 }
 
 export function parseBdjobsStaticJson(jsonText: string): RawSourceJobItem[] {
@@ -72,6 +122,18 @@ export function parseBdjobsStaticJson(jsonText: string): RawSourceJobItem[] {
       if (!jpId || !org || !title) return null;
 
       const detailUrl = `https://jobs.bdjobs.com/jobdetails/?id=${encodeURIComponent(jpId)}`;
+      const deadlineText = (entry.Deadline || entry.ExpDate || '').trim() || undefined;
+      const publishedDateText = (entry.PublishDate || '').trim() || undefined;
+      const qualification = (entry.EduReq || '').trim() || 'Any Qualification';
+      const experience = (entry.Experience || '').trim() || undefined;
+      const salary = (entry.Salary || '').trim() || undefined;
+      const location = (entry.Location || '').trim() || 'All Bangladesh';
+      const vacancies = entry.Vacancies ? Number(entry.Vacancies) || undefined : undefined;
+      const category = inferBdjobsCategory(entry.CatName || entry.Category, title, org);
+      const desc = entry.JobDescription && entry.JobDescription.trim()
+        ? entry.JobDescription.trim()
+        : `${title} at ${org}. Published on Bdjobs; view official listing to inspect full job description, eligibility and apply online.`;
+
       return {
         externalId: `bdjobs_${jpId}`,
         sourceJobId: jpId,
@@ -80,15 +142,20 @@ export function parseBdjobsStaticJson(jsonText: string): RawSourceJobItem[] {
         jobTitle: title,
         titleBn,
         position: title,
-        category: 'Government',
-        employmentType: 'Full Time',
-        location: 'All Bangladesh',
-        deadlineText: undefined,
-        circularUrl: undefined,
+        category,
+        employmentType: (entry.EmploymentType as any) || 'Full Time',
+        location,
+        qualification,
+        experience,
+        salary,
+        vacancies,
+        deadlineText,
+        publishedDateText,
+        circularUrl: detailUrl,
         organizationUrl: BDJOBS_HOME_URL,
         sourceUrl: detailUrl,
         applicationUrl: detailUrl,
-        description: `${title} at ${org}. Listed on Bdjobs Government Spotlight; open official Bdjobs detail page to verify deadline and apply.`,
+        description: desc,
       };
     })
     .filter((item): item is RawSourceJobItem => item !== null);
@@ -102,7 +169,7 @@ export const BdjobsAdapter: JobSourceAdapter = {
   compatibilityStatus: 'partially_supported',
   accessMethodType: 'Undocumented Static Feed',
   publisherType: 'Third-Party',
-  accessMethod: 'Undocumented public homepage static JSON (storage.googleapis.com/bdjobs-home-static/GovtJobs.json — NOT an official API; private feeds & Apify scrapers disabled)',
+  accessMethod: 'Public spotlight JSON feed (storage.googleapis.com/bdjobs-home-static/GovtJobs.json) & verified user browsing links; bulk private scrapers disabled per ToS',
   verificationLevel: 'official_partial',
   directSourceUrl: BDJOBS_HOME_URL,
   minPollCooldownMs: 60 * 60 * 1000,
@@ -128,7 +195,7 @@ export const BdjobsAdapter: JobSourceAdapter = {
         blockedByCaptcha: Boolean(res.blockedByCaptcha),
         dataCoverageNote: BDJOBS_COVERAGE_DISCLOSURE,
         deadlineVerificationNote: BDJOBS_DEADLINE_DISCLOSURE,
-        accessNotes: res.blockedReason || 'Bdjobs undocumented static highlight feed unavailable; open Bdjobs directly.',
+        accessNotes: res.blockedReason || 'Bdjobs public highlight feed unavailable; open Bdjobs directly.',
         directPortalUrl: BDJOBS_HOME_URL,
         error: res.blockedReason,
       };
@@ -171,6 +238,29 @@ export const BdjobsAdapter: JobSourceAdapter = {
     const rawItems = parseBdjobsStaticJson(res.body);
     const jobs = rawItems.map((raw) => this.parseJob(raw, checkedAt)).filter((j) => this.validateJob(j).isValid);
 
+    if (jobs.length === 0) {
+      const outcome: SourceFetchOutcome = {
+        sourceId: this.sourceId,
+        sourceName: this.sourceName,
+        compatibilityStatus: 'partially_supported',
+        status: 'PARTIAL_SUCCESS',
+        accessMethodType: 'Undocumented Static Feed',
+        publisherType: 'Third-Party',
+        success: false,
+        jobs: [],
+        checkedAt,
+        httpStatus: res.status ?? null,
+        blockedByCaptcha: false,
+        retryPolicy: 'partial_scheduled',
+        dataCoverageNote: BDJOBS_COVERAGE_DISCLOSURE,
+        deadlineVerificationNote: BDJOBS_DEADLINE_DISCLOSURE,
+        accessNotes: 'No job records found in Bdjobs public highlight feed.',
+        directPortalUrl: BDJOBS_HOME_URL,
+      };
+      outcome.connectionStatus = deriveSourceConnectionStatus(outcome);
+      return outcome;
+    }
+
     const outcome: SourceFetchOutcome = {
       sourceId: this.sourceId,
       sourceName: this.sourceName,
@@ -186,7 +276,7 @@ export const BdjobsAdapter: JobSourceAdapter = {
       retryPolicy: 'partial_scheduled',
       dataCoverageNote: BDJOBS_COVERAGE_DISCLOSURE,
       deadlineVerificationNote: BDJOBS_DEADLINE_DISCLOSURE,
-      accessNotes: `Fetched ${jobs.length} Bdjobs public GovtJobs highlight(s). ${BDJOBS_COVERAGE_DISCLOSURE}`,
+      accessNotes: `Fetched ${jobs.length} Bdjobs public highlight(s). ${BDJOBS_COVERAGE_DISCLOSURE}`,
       directPortalUrl: BDJOBS_HOME_URL,
     };
     outcome.connectionStatus = deriveSourceConnectionStatus(outcome);
@@ -194,12 +284,14 @@ export const BdjobsAdapter: JobSourceAdapter = {
   },
 
   parseJob(raw: RawSourceJobItem, checkedAt?: number): NormalizedJobCircular {
-    return normalizeJobRecord(raw, {
+    const normalized = normalizeJobRecord(raw, {
       sourceId: this.sourceId,
       sourceName: this.sourceName,
       verificationLevel: this.verificationLevel,
       checkedAt,
     });
+    JobTaxonomyClassifier.enrichJobWithTaxonomy(normalized);
+    return normalized;
   },
 
   validateJob(job: NormalizedJobCircular) {

@@ -13,6 +13,15 @@ import { EducationPage } from './pages/EducationPage';
 import { AdditionalQualPage } from './pages/AdditionalQualPage';
 import { ExperiencePage } from './pages/ExperiencePage';
 import { DocumentsPage } from './pages/DocumentsPage';
+import { CredentialVaultPage } from './pages/CredentialVaultPage';
+import { EligibilityCheckerPage } from './pages/EligibilityCheckerPage';
+import { CvBuilderPage } from './pages/CvBuilderPage';
+import { CareerCalendarPage } from './pages/CareerCalendarPage';
+import { ApplicationReadinessPage } from './pages/ApplicationReadinessPage';
+import { JobComparisonPage } from './pages/JobComparisonPage';
+import { OpportunitiesPage } from './pages/OpportunitiesPage';
+import { CareerPlannerPage } from './pages/CareerPlannerPage';
+import { ExamCenterPage } from './pages/ExamCenterPage';
 
 // Automation Pages
 import { SmartAutoFillPage } from './pages/SmartAutoFillPage';
@@ -62,6 +71,13 @@ const VALID_TABS: DashboardTab[] = [
   'overview',
   'search',
   'circulars',
+  'eligibility',
+  'readiness',
+  'calendar',
+  'compare',
+  'opportunities',
+  'career_planner',
+  'exam_center',
   'govt_orgs',
   'portals',
   'notifications',
@@ -73,6 +89,8 @@ const VALID_TABS: DashboardTab[] = [
   'additional',
   'experience',
   'documents',
+  'cv_builder',
+  'credentials',
   'autofill',
   'mappings',
   'history',
@@ -101,6 +119,7 @@ const DashboardContent: React.FC = () => {
   const initialRoute = parseInitialDashboardRoute();
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialRoute.tab);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(initialRoute.jobId);
+  const [pendingJobFilters, setPendingJobFilters] = useState<any>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [closingSoonCount, setClosingSoonCount] = useState(0);
   const [trackerRecords, setTrackerRecords] = useState<ApplicationTrackerRecord[]>([]);
@@ -278,6 +297,14 @@ const DashboardContent: React.FC = () => {
       await setActiveProfileId(found.id);
       setCurrentProfile(found);
       setHasUnsavedChanges(false);
+
+      // Invalidate cached profile snapshots across extension contexts
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: found.id } }));
+      }
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: found.id }).catch(() => {});
+      }
     }
   };
 
@@ -295,6 +322,14 @@ const DashboardContent: React.FC = () => {
     setProfiles(updated);
     setCurrentProfile(newProf);
     setHasUnsavedChanges(false);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: newProf.id } }));
+    }
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: newProf.id }).catch(() => {});
+    }
+
     showToast(language === 'bn' ? `✅ "${name}" প্রোফাইল তৈরি হয়েছে!` : `✅ "${name}" profile created!`);
   };
 
@@ -302,12 +337,22 @@ const DashboardContent: React.FC = () => {
     setIsSaving(true);
     try {
       await saveActiveProfile(currentProfile);
+
+      // Read back from persistent storage to verify transaction commit
+      const verified = await getActiveProfile();
+      setCurrentProfile(verified);
+      const allUpdated = await getAllProfiles();
+      setProfiles(allUpdated);
       setHasUnsavedChanges(false);
-      const idx = profiles.findIndex((p) => p.id === currentProfile.id);
-      if (idx >= 0) {
-        profiles[idx] = currentProfile;
-        setProfiles([...profiles]);
+
+      // Invalidate cached profile snapshot across extension contexts
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jobfill_profile_updated', { detail: { profileId: verified.id } }));
       }
+      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'PROFILE_UPDATED', profileId: verified.id }).catch(() => {});
+      }
+
       showToast(language === 'bn' ? '💾 সমস্ত তথ্য সফলভাবে সংরক্ষিত হয়েছে!' : '💾 All profile data saved securely!');
     } catch (err: any) {
       alert('Error saving data: ' + err.message);
@@ -445,7 +490,23 @@ const DashboardContent: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-6 max-w-5xl w-full mx-auto">
           {/* Overview */}
           {activeTab === 'overview' && (
-            <OverviewPage profile={currentProfile} onNavigateTab={setActiveTab} />
+            <OverviewPage
+              profile={currentProfile}
+              onNavigateTab={(tab: any, filterOptions?: any) => {
+                const targetTab = tab === 'jobs' ? 'circulars' : tab;
+                setActiveTab(targetTab);
+                if (filterOptions) {
+                  setPendingJobFilters(filterOptions);
+                }
+                if (targetTab !== 'circulars' && targetTab !== 'search') setSelectedJobId(null);
+                refreshJobHubStats();
+              }}
+              onChangeProfile={(p) => {
+                setCurrentProfile(p);
+                setHasUnsavedChanges(true);
+              }}
+              showToast={showToast}
+            />
           )}
 
           {/* Job Circular Hub */}
@@ -458,6 +519,7 @@ const DashboardContent: React.FC = () => {
           {activeTab === 'circulars' && (
             <JobCircularPage
               initialSelectedJobId={selectedJobId}
+              initialFilters={pendingJobFilters || undefined}
               onNavigateNotifications={() => setActiveTab('notifications')}
               onNavigateTracker={() => setActiveTab('tracker')}
               onNavigateSettings={() => setActiveTab('settings')}
@@ -465,6 +527,49 @@ const DashboardContent: React.FC = () => {
               onDataChanged={refreshJobHubStats}
             />
           )}
+          {activeTab === 'eligibility' && (
+            <EligibilityCheckerPage
+              profile={currentProfile}
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+            />
+          )}
+          {activeTab === 'readiness' && (
+            <ApplicationReadinessPage
+              profile={currentProfile}
+              onNavigateTab={setActiveTab}
+            />
+          )}
+          {activeTab === 'calendar' && (
+            <CareerCalendarPage profile={currentProfile} showToast={showToast} />
+          )}
+          {activeTab === 'compare' && (
+            <JobComparisonPage
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+            />
+          )}
+          {activeTab === 'opportunities' && (
+            <OpportunitiesPage
+              onOpenJobCircular={(jobId) => {
+                setSelectedJobId(jobId);
+                setActiveTab('circulars');
+              }}
+              showToast={showToast}
+            />
+          )}
+          {activeTab === 'career_planner' && (
+            <CareerPlannerPage
+              profile={currentProfile}
+              onNavigateTab={setActiveTab}
+              showToast={showToast}
+            />
+          )}
+          {activeTab === 'exam_center' && <ExamCenterPage showToast={showToast} />}
           {activeTab === 'govt_orgs' && (
             <GovtOrganizationsPage onDataChanged={refreshJobHubStats} />
           )}
@@ -488,7 +593,18 @@ const DashboardContent: React.FC = () => {
               onUpdateRecord={async (rec) => {
                 await ApplicationRepository.upsert(rec);
                 await JobAlarmManager.scheduleFeePaymentReminder(rec);
-                if (['Applied', 'Exam Scheduled', 'Result Published', 'Rejected', 'Selected'].includes(rec.status)) {
+                if (
+                  [
+                    'Applied',
+                    'Payment Pending',
+                    'Payment Completed',
+                    'Admit Card Available',
+                    'Exam Scheduled',
+                    'Result Published',
+                    'Rejected',
+                    'Selected',
+                  ].includes(rec.status)
+                ) {
                   await NotificationScheduler.markJobAsApplied(rec.jobId, true);
                   await NotificationScheduler.runCycle();
                 }
@@ -505,6 +621,7 @@ const DashboardContent: React.FC = () => {
                 setSelectedJobId(jobId);
                 setActiveTab('circulars');
               }}
+              onRefreshRecords={refreshJobHubStats}
             />
           )}
 
@@ -542,6 +659,10 @@ const DashboardContent: React.FC = () => {
                 setCurrentProfile((p) => ({ ...p, additionalQualifications: quals }));
                 setHasUnsavedChanges(true);
               }}
+              onChangeCareerProfile={(careerProfile) => {
+                setCurrentProfile((p) => ({ ...p, careerProfile }));
+                setHasUnsavedChanges(true);
+              }}
             />
           )}
           {activeTab === 'experience' && (
@@ -567,12 +688,18 @@ const DashboardContent: React.FC = () => {
               showToast={showToast}
             />
           )}
+          {activeTab === 'cv_builder' && (
+            <CvBuilderPage profile={currentProfile} showToast={showToast} />
+          )}
+          {activeTab === 'credentials' && (
+            <CredentialVaultPage showToast={showToast} />
+          )}
 
           {/* Automation Engine */}
           {activeTab === 'autofill' && <SmartAutoFillPage />}
           {activeTab === 'mappings' && <SavedMappingsPage />}
           {activeTab === 'history' && (
-            <ApplicationHistoryPage showToast={showToast} />
+            <ApplicationHistoryPage showToast={showToast} onNavigateTab={(tab) => setActiveTab(tab as any)} />
           )}
 
           {/* Preferences & System */}

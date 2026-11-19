@@ -1,6 +1,6 @@
 {
   "name": "jobfill-bd",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "JobFill BD — Smart Bangladesh Government Job Application Assistant Chrome Extension",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
     "build:edge-store": "node scripts/package-stores.mjs --target=edge",
     "build:stores": "node scripts/package-stores.mjs --target=both",
     "validate:stores": "node scripts/package-stores.mjs --validate-only",
+    "publish:edge": "node scripts/publish-edge.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint-check.mjs",
     "test": "vitest run"

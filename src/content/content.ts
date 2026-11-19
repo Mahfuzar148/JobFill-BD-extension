@@ -2,7 +2,7 @@
 // Simplified Profile-First Autofill Architecture
 // FIELD NAME + SECTION CONTEXT -> MATCH PROFILE FIELD -> GET SAVED VALUE -> FILL WEBSITE FIELD -> VERIFY RESULT
 
-import { UserProfile, DocumentCategory } from '../types/profile';
+import { UserProfile, DocumentCategory, AutofillFieldAuditItem, AutofillFieldFillStatus, CustomFieldCategory, CustomFieldDataType } from '../types/profile';
 import { FieldCompletenessEntry } from '../types/field-status';
 import { createEmptyProfile } from '../types/defaults';
 import { PageScanner, PageScanResult, toCanonicalProfile } from './page-scanner';
@@ -16,13 +16,34 @@ import { MappingRepository } from '../database/mapping-repository';
 import { DocumentRepository } from '../database/document-repository';
 import { extractElementFingerprint } from '../intelligence/mapping-memory';
 import { DynamicDomObserver } from './dom-observer';
-import { addAutofillHistory, applyCanonicalProfileFieldUpdate } from '../services/storage';
+import { addAutofillHistory, applyCanonicalProfileFieldUpdate, getAutoSaveSafeFieldsSetting } from '../services/storage';
+import { FieldClassifier } from '../intelligence/field-classifier';
+import { sanitizeHistoryFieldRecord } from '../database/history-repository';
 import {
   isExcludedSiteUrl,
   assessHttpSensitiveAutofillRisk,
 } from '../security/site-policy';
 import { recordExtensionDiagnostic } from '../security/diagnostics';
 import { detectAccessRestrictionWithReason } from '../jobs/services/captcha-detector';
+import { LoginFormDetector } from '../credentials/login-detector';
+import {
+  detectJobCircularPage,
+  detectApplicationConfirmation,
+  isJobApplicationForm,
+  showSaveCredentialDialog,
+  showAccountChooserDialog,
+  injectLoginAutofillPill,
+} from './assistant-workflows';
+import {
+  ProfileDiffEngine,
+  DetectedProfileDiffItem,
+  ProfileDestination,
+} from '../services/profile-diff-engine';
+import {
+  showProfileUpdatePill,
+  removeProfileUpdatePill,
+  showProfileUpdateReviewModal,
+} from './profile-update-dialog';
 import {
   DocumentFieldDetector,
   DocumentUploadCoordinator,
@@ -33,7 +54,7 @@ import {
   inferDocumentMimeType,
 } from '../documents';
 
-export type AutofillMode = 'profile_first' | 'strict_review';
+export type AutofillMode = 'profile_first' | 'strict_review' | 'assisted' | 'full' | 'preview';
 
 let currentProfile: UserProfile = createEmptyProfile('Vault Locked');
 let isVaultLocked: boolean = false;
@@ -48,12 +69,184 @@ let lastScannedTime: string = '';
 let toastHideTimer: any = null;
 
 function maskSensitiveHistoryValue(canonicalKey: string, val: string): string {
-  if (!val) return '';
-  const k = canonicalKey.toLowerCase();
-  if (k.includes('nationalid') || k.includes('nid') || k.includes('passport') || k.includes('birthreg')) {
-    return val.length > 4 ? `***${val.slice(-4)}` : '****';
+  return sanitizeHistoryFieldRecord(canonicalKey, '', val);
+}
+
+async function dispatchAutofillSessionStart(
+  sessionId: string,
+  totalDetected: number,
+  totalAmbiguous: number
+): Promise<void> {
+  const profileName = currentProfile.profileName || currentProfile.personal.applicantNameEn || 'Default Profile';
+  const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+  const payload = {
+    id: sessionId,
+    sessionId,
+    url: cleanUrl,
+    domain: window.location.hostname || 'Local Form',
+    pageTitle: document.title || 'Job Application Form',
+    profileId: currentProfile.id,
+    profileName,
+    totalDetected,
+    totalAmbiguous,
+    startedAt: Date.now(),
+  };
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: 'RECORD_AUTOFILL_SESSION_START', payload },
+          () => resolve()
+        );
+      });
+      return;
+    } catch (e) {
+      console.warn('JobFill BD: Background session start dispatch error:', e);
+    }
   }
-  return val;
+
+  // Fallback: storageAdapter
+  try {
+    await addAutofillHistory({
+      ...payload,
+      timestamp: Date.now(),
+      totalFilled: 0,
+      totalFailed: 0,
+      status: 'in_progress',
+    });
+  } catch (err) {
+    console.warn('JobFill BD: Fallback session start storage error:', err);
+  }
+}
+
+function mapPlanItemToAudit(item: FillPlanItem): AutofillFieldAuditItem {
+  let fillStatus: AutofillFieldFillStatus = 'UNSUPPORTED';
+  const itemStatus = String(item.status || '');
+
+  // Legal declaration checkboxes must NEVER be treated as automatically filled
+  const isLegalDeclaration =
+    item.canonicalId.includes('declaration') ||
+    item.canonicalId.includes('certify') ||
+    item.fieldLabel.toLowerCase().includes('declare') ||
+    item.fieldLabel.toLowerCase().includes('declaration');
+
+  if (isLegalDeclaration) {
+    fillStatus = 'NEEDS_MANUAL_INPUT';
+  } else if (itemStatus === 'Filled') {
+    fillStatus = 'FILLED';
+  } else if (itemStatus === 'Already Correct') {
+    fillStatus = 'ALREADY_CORRECT';
+  } else if (itemStatus === 'Failed Verification') {
+    fillStatus = 'FAILED';
+  } else if (itemStatus === 'Skipped') {
+    fillStatus = 'SKIPPED';
+  } else if (itemStatus === 'Not Found') {
+    fillStatus = 'NOT_FOUND';
+  } else if (itemStatus === 'Ambiguous') {
+    fillStatus = 'AMBIGUOUS';
+  } else if (itemStatus.includes('Confirmation') || itemStatus.includes('Missing')) {
+    fillStatus = 'NEEDS_MANUAL_INPUT';
+  }
+
+  return {
+    fieldKey: item.canonicalId,
+    fieldLabel: item.fieldLabel,
+    fieldType: item.element?.tagName?.toLowerCase() || 'input',
+    mappingStatus: item.canonicalId ? 'matched' : 'unmapped',
+    fillStatus,
+    failureReason: itemStatus === 'Failed Verification' ? 'DOM verification mismatch after dispatch' : undefined,
+    confidence: item.status,
+    value: sanitizeHistoryFieldRecord(item.canonicalId, item.fieldLabel, item.proposedValue),
+  };
+}
+
+async function dispatchAutofillSessionComplete(
+  sessionId: string,
+  totalDetected: number,
+  allItems: FillPlanItem[],
+  totalFilledCount: number,
+  totalFailedCount: number,
+  totalAmbiguousCount: number
+): Promise<void> {
+  const profileName = currentProfile.profileName || currentProfile.personal.applicantNameEn || 'Default Profile';
+  const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+  const fieldResults: AutofillFieldAuditItem[] = allItems.map(mapPlanItemToAudit);
+
+  const filledFields = fieldResults
+    .filter((f) => f.fillStatus === 'FILLED')
+    .map((f) => ({
+      fieldLabel: f.fieldLabel,
+      canonicalKey: f.fieldKey,
+      value: f.value || '(Selected)',
+      confidence: f.confidence || 'HIGH',
+      fillStatus: f.fillStatus,
+      failureReason: f.failureReason,
+    }));
+
+  const alreadyCorrectCount = fieldResults.filter((f) => f.fillStatus === 'ALREADY_CORRECT').length;
+  const skippedCount = fieldResults.filter(
+    (f) => f.fillStatus === 'SKIPPED' || f.fillStatus === 'NEEDS_MANUAL_INPUT'
+  ).length;
+
+  let sessionStatus: 'completed' | 'partial' | 'failed' = 'completed';
+  if (totalFilledCount === 0 && totalFailedCount > 0) {
+    sessionStatus = 'failed';
+  } else if (totalFailedCount > 0) {
+    sessionStatus = 'partial';
+  }
+
+  const payload = {
+    id: sessionId,
+    sessionId,
+    timestamp: Date.now(),
+    completedAt: Date.now(),
+    url: cleanUrl,
+    domain: window.location.hostname || 'Local Form',
+    pageTitle: document.title || 'Job Application Form',
+    profileId: currentProfile.id,
+    profileName,
+    totalDetected,
+    totalFilled: totalFilledCount,
+    totalFailed: totalFailedCount,
+    totalAmbiguous: totalAmbiguousCount,
+    attemptedFields: totalFilledCount + totalFailedCount,
+    skippedFields: skippedCount,
+    alreadyCorrectFields: alreadyCorrectCount,
+    status: sessionStatus,
+    fieldResults,
+    filledFields,
+  };
+
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: 'RECORD_AUTOFILL_SESSION_COMPLETE', payload },
+          () => resolve()
+        );
+      });
+      return;
+    } catch (e) {
+      console.warn('JobFill BD: Background session complete dispatch error:', e);
+    }
+  }
+
+  // Fallback: storageAdapter
+  try {
+    await addAutofillHistory(payload as any);
+  } catch (err) {
+    console.warn('JobFill BD: Fallback session complete storage error:', err);
+  }
+}
+
+function dispatchAutofillSessionReverted(sessionId: string): void {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({
+      action: 'RECORD_AUTOFILL_SESSION_UPDATE',
+      payload: { id: sessionId, status: 'reverted' },
+    }).catch(() => {});
+  }
 }
 
 function isExtensionRuntime(): boolean {
@@ -246,6 +439,465 @@ async function initAssistant() {
   }
 
   await ensureAssistantUiInitialized(false);
+
+  // 1. Automatic Job Circular Visit Tracking (non-intrusive)
+  try {
+    const circular = detectJobCircularPage(document);
+    if (circular && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'RECORD_JOB_CIRCULAR_VISIT',
+        payload: {
+          jobId: null,
+          sourceId: circular.sourceId,
+          organization: circular.organization,
+          jobTitle: circular.jobTitle,
+          circularUrl: circular.circularUrl,
+          verificationStatus: 'verified',
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Circular visit notice:', err);
+  }
+
+  // 2. Post-Submission Confirmation Detection
+  try {
+    const confirmation = detectApplicationConfirmation(document);
+    if (confirmation.isConfirmed && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'CONFIRM_APPLICATION_SUBMISSION',
+        payload: {
+          teletalkUserId: confirmation.teletalkUserId,
+          applicantId: confirmation.applicantId,
+          confirmedAt: Date.now(),
+        },
+      });
+      showToast(
+        `🎉 আবেদন সফলভাবে গৃহীত হয়েছে!` +
+          (confirmation.teletalkUserId ? ` (User ID: ${confirmation.teletalkUserId})` : '')
+      );
+    } else if (confirmation.needsManualConfirmation && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({
+        action: 'FLAG_APPLICATION_NEEDS_CONFIRMATION',
+        payload: {
+          teletalkUserId: confirmation.teletalkUserId,
+          applicantId: confirmation.applicantId,
+        },
+      });
+    }
+    // Also check for newly generated portal credentials
+    const generated = LoginFormDetector.detectGeneratedPortalCredentials(document);
+    if (generated.hasGeneratedCredentials && isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      showSaveCredentialDialog(
+        {
+          origin: window.location.origin,
+          portalName: generated.portalName,
+          portalUrl: window.location.href,
+          username: generated.userId || generated.applicantId || '',
+          password: generated.password,
+        },
+        async () => {
+          chrome.runtime.sendMessage({
+            action: 'CRED_VAULT_SAVE_MANUAL',
+            payload: {
+              origin: window.location.origin,
+              portalName: generated.portalName,
+              portalUrl: window.location.href,
+              username: generated.userId || generated.applicantId || '',
+              password: generated.password || '',
+            },
+          });
+          showToast('🔐 নতুন পোর্টাল লগইন সফলভাবে ভল্টে সংরক্ষিত হয়েছে!');
+        },
+        () => {}
+      );
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Confirmation check notice:', err);
+  }
+
+  // 3. Passive Form Submission Observer (captures application submits & login submits)
+  setupPassiveSubmissionObserver();
+
+  // 4. Smart Login Autofill Pill / Trusted Origin Autofill
+  void setupSmartLoginAutofill();
+
+  // 5. Smart Profile Diff & Update Observer
+  setupProfileDiffObserver();
+}
+
+function setupPassiveSubmissionObserver() {
+  if (typeof window === 'undefined') return;
+  if ((window as any).__jobfillSubmitObserverAttached) return;
+  (window as any).__jobfillSubmitObserverAttached = true;
+
+  document.addEventListener(
+    'submit',
+    (event) => {
+      try {
+        const form = event.target as HTMLFormElement | null;
+        if (!form || form.tagName?.toLowerCase() !== 'form') return;
+
+        // A. Login / Registration Form Submission
+        const formKind = LoginFormDetector.classifyForm(form);
+        if (formKind === 'login' || formKind === 'registration') {
+          const candidate = LoginFormDetector.readExplicitCaptureCandidate(document, window.location.href, true);
+          if (candidate.ok && candidate.password) {
+            chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
+              const existingMatches = credRes?.matches || credRes?.credentials || [];
+              showSaveCredentialDialog(
+                {
+                  origin: candidate.origin || window.location.origin,
+                  portalName: candidate.portalName || document.title,
+                  portalUrl: candidate.portalUrl || window.location.href,
+                  username: candidate.username || '',
+                  password: candidate.password,
+                  organization: document.title.split('-')[0].trim(),
+                },
+                async (saveMode, targetAccountId) => {
+                  if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                    chrome.runtime.sendMessage({
+                      action: 'CRED_VAULT_SAVE_MANUAL',
+                      payload: {
+                        id: saveMode === 'update' ? targetAccountId : undefined,
+                        origin: candidate.origin,
+                        portalName: candidate.portalName,
+                        portalUrl: candidate.portalUrl,
+                        username: candidate.username,
+                        password: candidate.password,
+                        organization: document.title.split('-')[0].trim(),
+                        accountType: 'Job-Specific Account',
+                      },
+                    });
+                    showToast('🔐 পোর্টাল লগইন ক্রেডেনশিয়াল ভল্টে সংরক্ষিত হয়েছে!');
+                  }
+                },
+                () => {},
+                existingMatches
+              );
+            });
+          }
+          return;
+        }
+
+        // B. Job Application Form Submission
+        if (isJobApplicationForm(form)) {
+          showToast('📝 আবেদন সাবমিট সম্পন্ন হচ্ছে — ফলাফল ভেরিফিকেশন চলছে...');
+          if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+            chrome.runtime.sendMessage({
+              action: 'RECORD_APPLICATION_SUBMIT_ATTEMPT',
+              payload: {
+                organization: document.title.split('-')[0].trim() || 'Recruitment Portal',
+                jobTitle: document.querySelector('h1, h2')?.textContent?.trim() || 'Online Job Application',
+                applicationUrl: window.location.href,
+              },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('JobFill BD: Submit observation notice:', err);
+      }
+    },
+    true
+  );
+}
+
+async function setupSmartLoginAutofill() {
+  if (typeof window === 'undefined' || !window.location.protocol.startsWith('https')) return;
+  const loginScan = LoginFormDetector.scan(document);
+  if (!loginScan.hasLoginForm || !loginScan.usernameInputSelector) return;
+
+  const uEl = document.querySelector<HTMLInputElement>(loginScan.usernameInputSelector);
+  if (!uEl) return;
+
+  if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.storage?.local?.get(['jobfill_active_portal_login_context'], (ctxRes) => {
+      const activeCtx = ctxRes?.jobfill_active_portal_login_context;
+      const targetCredId = activeCtx?.credentialId;
+
+      chrome.runtime.sendMessage({ action: 'GET_TRUSTED_AUTOFILL_ORIGINS' }, (trustedRes) => {
+        const trustedList = Array.isArray(trustedRes?.origins) ? trustedRes.origins : [];
+        const isTrusted = trustedList.includes(window.location.origin);
+
+        chrome.runtime.sendMessage({ action: 'CRED_VAULT_FIND_FOR_TAB' }, (credRes) => {
+          const matches: Array<any> = credRes?.matches || credRes?.credentials || [];
+          if (!credRes || (credRes.status !== 'ok' && credRes.status !== 'locked') || matches.length === 0) {
+            return;
+          }
+
+          if (credRes.status === 'locked') {
+            injectLoginAutofillPill(uEl, '🔐 ভল্ট লকড (Unlock Vault to Login)', () => {
+              showToast('🔒 অনুগ্রহ করে ড্যাশবোর্ড থেকে ক্রেডেনশিয়াল ভল্ট আনলক করুন।');
+            });
+            return;
+          }
+
+          // Case A: A specific credential was linked to the active job application
+          if (targetCredId) {
+            const linkedMatch = matches.find((m) => m.id === targetCredId);
+            if (linkedMatch) {
+              const label = `${activeCtx.organization || linkedMatch.portalName} (${linkedMatch.userId || linkedMatch.username || 'Linked Account'})`;
+              injectLoginAutofillPill(uEl, label, () => {
+                chrome.runtime.sendMessage(
+                  {
+                    action: 'CRED_VAULT_FILL_TAB',
+                    payload: {
+                      tabId: null,
+                      tabUrl: window.location.href,
+                      credentialId: linkedMatch.id,
+                      fillMode: 'both',
+                      explicitUserInitiated: true,
+                    },
+                  },
+                  () => {
+                    showToast('🔐 চাকরির নির্ধারিত অ্যাকাউন্টের তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
+                  }
+                );
+              });
+              return;
+            }
+          }
+
+          const portalName = matches[0].portalName || 'Portal';
+
+          // Case B: Multiple accounts exist on this origin!
+          if (matches.length > 1) {
+            injectLoginAutofillPill(uEl, `${portalName} (${matches.length} accounts)`, () => {
+              showAccountChooserDialog(
+                portalName,
+                matches,
+                async (selectedAccId) => {
+                  chrome.runtime.sendMessage(
+                    {
+                      action: 'CRED_VAULT_FILL_TAB',
+                      payload: {
+                        tabId: null,
+                        tabUrl: window.location.href,
+                        credentialId: selectedAccId,
+                        fillMode: 'both',
+                        explicitUserInitiated: true,
+                      },
+                    },
+                    () => {
+                      showToast('🔐 নির্বাচিত অ্যাকাউন্টের লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
+                    }
+                  );
+                },
+                () => {}
+              );
+            });
+            return;
+          }
+
+          // Case C: Exactly one matching account
+          const cred = matches[0];
+          if (isTrusted && credRes.vaultUnlocked) {
+            // Trusted origin explicit autofill
+            chrome.runtime.sendMessage({
+              action: 'CRED_VAULT_FILL_TAB',
+              payload: {
+                tabId: null,
+                tabUrl: window.location.href,
+                credentialId: cred.id,
+                fillMode: 'both',
+                explicitUserInitiated: true,
+              },
+            });
+            showToast(`🔐 বিশ্বস্ত পোর্টালে (${cred.portalName}) লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।`);
+          } else {
+            // Suggest Autofill Pill
+            injectLoginAutofillPill(uEl, `${cred.portalName || 'Portal'} (${cred.userId || cred.username || 'Account'})`, () => {
+              chrome.runtime.sendMessage({
+                action: 'CRED_VAULT_FILL_TAB',
+                payload: {
+                  tabId: null,
+                  tabUrl: window.location.href,
+                  credentialId: cred.id,
+                  fillMode: 'both',
+                  explicitUserInitiated: true,
+                },
+              });
+              showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে। এখন নিজে লগইন সম্পন্ন করুন।');
+            });
+          }
+        });
+      });
+    });
+  }
+}
+
+let isAutofillingActive = false;
+let profileDiffDebounceTimer: any = null;
+let currentDetectedDiffs: DetectedProfileDiffItem[] = [];
+
+async function evaluateLiveFormProfileDiffs(): Promise<void> {
+  if (isAutofillingActive) return;
+  if (typeof window === 'undefined' || isExcludedSiteUrl(window.location?.href)) return;
+  if (!currentProfile || isVaultLocked || currentProfile.id === 'locked_vault_session') return;
+
+  const candidateForm =
+    Array.from(document.querySelectorAll('form')).find((f) => isJobApplicationForm(f)) ||
+    document.querySelector('form') ||
+    document.body;
+
+  if (!candidateForm) return;
+
+  const inputs = Array.from(
+    candidateForm.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      'input:not([type="hidden"]):not([type="password"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]), select, textarea'
+    )
+  );
+
+  if (inputs.length < 2) return;
+
+  const scannedItems: Array<{
+    canonicalKey?: string;
+    label?: string;
+    value: string;
+    sectionContext?: string;
+    destination?: ProfileDestination;
+    isSensitive?: boolean;
+    isCustomField?: boolean;
+    category?: CustomFieldCategory;
+    dataType?: CustomFieldDataType;
+  }> = [];
+
+  for (const input of inputs) {
+    const val = input.value?.trim();
+    if (!val) continue;
+
+    const classification = FieldClassifier.classifyElement(input);
+    if (!classification.isSupported || classification.isBlockedSecurity) {
+      continue;
+    }
+
+    scannedItems.push({
+      canonicalKey: classification.canonicalKey,
+      label: classification.fieldLabelEn,
+      value: val,
+      destination: classification.destination as ProfileDestination,
+      isSensitive: classification.isSensitive,
+      isCustomField: classification.isCustomField,
+      category: classification.category,
+      dataType: classification.dataType,
+    });
+  }
+
+  const diffs = ProfileDiffEngine.detectFormDiffs(scannedItems, currentProfile);
+
+  // Auto-Save Safe Profile Changes Check
+  let remainingDiffs = diffs;
+  try {
+    const autoSaveSafeEnabled = await getAutoSaveSafeFieldsSetting();
+    if (autoSaveSafeEnabled) {
+      const autoSavable = diffs.filter((d) => ProfileDiffEngine.canAutoSave(d, true));
+      if (autoSavable.length > 0) {
+        if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+          const res: any = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              {
+                action: 'PROFILE_UPDATE_APPROVE',
+                payload: { approvedItems: autoSavable, sourceOrigin: window.location.origin },
+              },
+              resolve
+            );
+          });
+          if (res?.updatedProfile) {
+            currentProfile = res.updatedProfile;
+          }
+        } else {
+          const res = await ProfileDiffEngine.applyApprovedDiffs(
+            currentProfile,
+            autoSavable,
+            window.location.origin
+          );
+          currentProfile = res.updatedProfile;
+        }
+        remainingDiffs = diffs.filter((d) => !autoSavable.includes(d));
+      }
+    }
+  } catch (err) {
+    console.warn('JobFill BD: Auto-save check error:', err);
+  }
+
+  currentDetectedDiffs = remainingDiffs;
+
+  if (remainingDiffs.length > 0) {
+    const lang = (localStorage.getItem('jobfill_language') === 'en' ? 'en' : 'bn') as 'bn' | 'en';
+    const newCount = remainingDiffs.filter((d) => d.diffType === 'NEW').length;
+    const changeCount = remainingDiffs.filter((d) => d.diffType === 'CHANGED').length;
+
+    showProfileUpdatePill(
+      remainingDiffs.length,
+      () => {
+        showProfileUpdateReviewModal({
+          diffs: currentDetectedDiffs,
+          lang,
+          onApprove: async (approved) => {
+            if (isExtensionRuntime() && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+              const res: any = await new Promise((resolve) => {
+                chrome.runtime.sendMessage(
+                  {
+                    action: 'PROFILE_UPDATE_APPROVE',
+                    payload: { approvedItems: approved, sourceOrigin: window.location.origin },
+                  },
+                  resolve
+                );
+              });
+              if (res && res.status === 'ok') {
+                if (res.updatedProfile) {
+                  currentProfile = res.updatedProfile;
+                }
+                showToast(
+                  lang === 'bn'
+                    ? `✅ ${res.appliedCount} টি তথ্য প্রোফাইলে সফলভাবে আপডেট হয়েছে!`
+                    : `✅ Successfully updated ${res.appliedCount} profile field(s)!`
+                );
+              }
+            } else {
+              const res = await ProfileDiffEngine.applyApprovedDiffs(
+                currentProfile,
+                approved,
+                window.location.origin
+              );
+              currentProfile = res.updatedProfile;
+              showToast(
+                lang === 'bn'
+                  ? `✅ ${res.appliedCount} টি তথ্য প্রোফাইলে সফলভাবে আপডেট হয়েছে!`
+                  : `✅ Successfully updated ${res.appliedCount} profile field(s)!`
+              );
+            }
+            removeProfileUpdatePill();
+          },
+          onDismiss: () => {},
+        });
+      },
+      () => {},
+      lang,
+      { newCount, changeCount }
+    );
+  } else {
+    removeProfileUpdatePill();
+  }
+}
+
+function setupProfileDiffObserver() {
+  if (typeof window === 'undefined') return;
+  if ((window as any).__jobfillProfileDiffObserverAttached) return;
+  (window as any).__jobfillProfileDiffObserverAttached = true;
+
+  const handleInputOrChange = () => {
+    if (isAutofillingActive) return;
+    clearTimeout(profileDiffDebounceTimer);
+    profileDiffDebounceTimer = setTimeout(() => {
+      if (isAutofillingActive) return;
+      void evaluateLiveFormProfileDiffs();
+    }, 500);
+  };
+
+  document.addEventListener('input', handleInputOrChange, true);
+  document.addEventListener('change', handleInputOrChange, true);
+  document.addEventListener('blur', handleInputOrChange, true);
 }
 
 // Load active profile from trusted MV3 Service Worker or fallback local cache
@@ -394,6 +1046,8 @@ interface TwoPassExecutionSummary {
   confirmationRequired: number;
   completenessReport: FieldCompletenessEntry[];
   allItems: FillPlanItem[];
+  imagesAttached: number;
+  pendingDocsCount: number;
 }
 
 const approvedInsecureHttpOrigins = new Set<string>();
@@ -446,26 +1100,64 @@ async function confirmInsecureHttpSensitiveFillIfNeeded(items: FillPlanItem[]): 
 }
 
 async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null> {
-  await loadProfile();
-  await loadSettings();
-  currentScanResult = await UniversalPageScanner.scanPage(currentProfile, document);
+  isAutofillingActive = true;
+  try {
+    await loadProfile();
+    await loadSettings();
+    currentScanResult = await UniversalPageScanner.scanPage(currentProfile, document);
 
   if (!currentScanResult || currentScanResult.planItems.length === 0) {
     lastCompletenessReport = [];
     return null;
   }
 
+  // Preview Mode: analyze form and display mappings without modifying DOM
+  if (activeAutofillMode === 'preview') {
+    const completenessReport = VerificationEngine.buildCompletenessReport(currentScanResult.planItems);
+    lastCompletenessReport = completenessReport;
+    openReviewModal();
+    return {
+      scan: currentScanResult,
+      totalFilled: 0,
+      totalFailed: 0,
+      alreadyCorrect: completenessReport.filter((c) => c.status === 'Already Correct').length,
+      missingInfo: completenessReport.filter((c) => c.status === 'Profile Information Missing').length,
+      ambiguous: currentScanResult.ambiguousCount,
+      conflicts: currentScanResult.conflictsCount,
+      confirmationRequired: currentScanResult.confirmationRequiredCount || 0,
+      completenessReport,
+      allItems: currentScanResult.planItems,
+      imagesAttached: 0,
+      pendingDocsCount: 0,
+    };
+  }
+
+  const isAssistedMode = activeAutofillMode === 'assisted' || activeAutofillMode === 'strict_review';
+  const hasAmbiguousOrReviewNeeded =
+    currentScanResult.ambiguousCount > 0 ||
+    (currentScanResult.confirmationRequiredCount || 0) > 0 ||
+    currentScanResult.planItems.some((item) => {
+      const exp = currentScanResult!.explanations?.get(item.selector);
+      return exp && exp.decisionTier === 'MEDIUM_CONFIDENCE';
+    });
+
   const trackedByElement = new Map<HTMLElement, FillPlanItem>();
   for (const item of currentScanResult.planItems) {
     trackedByElement.set(item.element, item);
   }
 
-  // Profile-First Mode: approve matched items; strictly withhold User Confirmation Required (e.g. Quota)
+  // Profile-First / Assisted Mode: approve matched items; in assisted mode, only fill HIGH_CONFIDENCE fields
   const pass1Items = currentScanResult.planItems.filter((item) => {
     if (!item.proposedValue) return false;
     if (item.status === 'Already Correct') return false;
     if (item.status === 'User Confirmation Required') return false;
     if (item.hasConflict && !allowReplaceExisting) return false;
+    if (isAssistedMode) {
+      const exp = currentScanResult!.explanations?.get(item.selector);
+      if (!exp || exp.decisionTier !== 'HIGH_CONFIDENCE') {
+        return false;
+      }
+    }
     return item.status === 'Matched' || item.isApproved;
   });
 
@@ -477,6 +1169,11 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
   }
 
   activeSessionId = 'session_' + Date.now();
+  await dispatchAutofillSessionStart(
+    activeSessionId,
+    currentScanResult.totalVisibleInputs,
+    currentScanResult.ambiguousCount || 0
+  );
   let totalFilled = 0;
   let totalFailed = 0;
 
@@ -498,8 +1195,24 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
       console.warn('Post fill hook error:', e);
     }
 
+    // Coordinate cascading dropdown pairs (District -> Upazila, Degree -> Subject) with bounded MutationObserver option waits
+    try {
+      await PageScanner.resolveCascadingFields(document, currentProfile);
+    } catch (cascadeErr) {
+      console.warn('Cascading dropdown resolution error:', cascadeErr);
+    }
+
+    // Coordinate multi-control composite Date of Birth triplets if present
+    if (currentProfile.personal?.dob) {
+      try {
+        await PageScanner.coordinateCompositeDob(document, currentProfile.personal.dob);
+      } catch (dobErr) {
+        console.warn('Composite DOB resolution error:', dobErr);
+      }
+    }
+
     // Pass 2: Follow-up check for newly revealed / unlocked fields (e.g. ssc_gpa, nid_no, birth_reg_no, dependent upazila/group)
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 350));
     try {
       const pass2Scan = await UniversalPageScanner.scanPage(currentProfile, document);
       for (const item of pass2Scan.planItems) {
@@ -514,6 +1227,12 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
         if (item.status === 'Already Correct') return false;
         if (item.status === 'User Confirmation Required') return false;
         if (item.hasConflict && !allowReplaceExisting) return false;
+        if (isAssistedMode) {
+          const exp = pass2Scan.explanations?.get(item.selector);
+          if (!exp || exp.decisionTier !== 'HIGH_CONFIDENCE') {
+            return false;
+          }
+        }
         const alreadyFilledInPass1 = pass1Items.some((p1) => p1.element === item.element && p1.status === 'Filled');
         if (alreadyFilledInPass1) return false;
         return item.status === 'Matched' || item.isApproved;
@@ -547,6 +1266,28 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
   const ambiguous = mergedItems.filter((i) => i.status === 'Ambiguous Field').length;
   const conflicts = mergedItems.filter((i) => i.status === 'Existing Value Conflict').length;
 
+  // Pass 3: Automatic Document & Image Attachment (Photo, Signature, etc.)
+  let imagesAttached = 0;
+  let pendingDocsCount = 0;
+  try {
+    const docResult = await DocumentUploadCoordinator.autoAttachEligibleDocuments(
+      document,
+      fetchDocumentForActiveProfile
+    );
+    imagesAttached = docResult.attachedCount;
+    pendingDocsCount = docResult.pendingManualReview.length;
+    if (docResult.results.length > 0) {
+      lastDocResults = docResult.results;
+    }
+  } catch (docErr) {
+    console.warn('JobFill BD: Auto document attach notice:', docErr);
+  }
+
+  // Assisted Mode: prompt review modal for medium-confidence or ambiguous mappings
+  if (isAssistedMode && hasAmbiguousOrReviewNeeded) {
+    void openReviewModal();
+  }
+
   return {
     scan: currentScanResult,
     totalFilled,
@@ -558,34 +1299,26 @@ async function executeTwoPassAutofill(): Promise<TwoPassExecutionSummary | null>
     confirmationRequired,
     completenessReport,
     allItems: mergedItems,
+    imagesAttached,
+    pendingDocsCount,
   };
+  } finally {
+    setTimeout(() => {
+      isAutofillingActive = false;
+    }, 800);
+  }
 }
 
 async function recordAutofillHistoryEntry(summary: TwoPassExecutionSummary): Promise<void> {
   try {
-    const cleanUrl = window.location.href.split('?')[0].split('#')[0];
-    await addAutofillHistory({
-      id: activeSessionId,
-      timestamp: Date.now(),
-      url: cleanUrl,
-      domain: window.location.hostname || 'Local Document',
-      pageTitle: document.title || 'Job Application Form',
-      profileId: currentProfile.id,
-      profileName: 'Applicant Profile',
-      totalDetected: summary.scan.totalVisibleInputs,
-      totalFilled: summary.totalFilled,
-      totalFailed: summary.totalFailed,
-      totalAmbiguous: summary.ambiguous || 0,
-      status: summary.totalFailed === 0 ? 'completed' : 'partial',
-      filledFields: summary.allItems
-        .filter((i) => i.status === 'Filled')
-        .map((item) => ({
-          fieldLabel: item.fieldLabel,
-          canonicalKey: item.canonicalId,
-          value: maskSensitiveHistoryValue(item.canonicalId, item.proposedValue),
-          confidence: item.status,
-        })),
-    });
+    await dispatchAutofillSessionComplete(
+      activeSessionId,
+      summary.scan.totalVisibleInputs,
+      summary.allItems,
+      summary.totalFilled,
+      summary.totalFailed,
+      summary.ambiguous || 0
+    );
   } catch (e) {
     console.warn('JobFill BD: Could not save quick fill history', e);
   }
@@ -624,30 +1357,34 @@ async function executeQuickFill() {
 
   const detectedDocs = DocumentFieldDetector.scanDocumentFields(document);
   const attentionPending = summary.confirmationRequired + summary.missingInfo + summary.totalFailed;
+  const imagesAttached = summary.imagesAttached || 0;
+  const pendingDocFields = detectedDocs.filter(
+    (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
+  );
+  const imgSuccessText = imagesAttached > 0 ? ` ও ${imagesAttached}টি ছবি/স্বাক্ষর` : '';
 
-  if (summary.totalFilled === 0 && summary.alreadyCorrect > 0 && attentionPending === 0) {
+  if (summary.totalFilled === 0 && imagesAttached > 0 && attentionPending === 0) {
+    showToast(`✅ ছবি ও স্বাক্ষর (${imagesAttached}টি) সফলভাবে সংযুক্ত করা হয়েছে!`);
+  } else if (summary.totalFilled === 0 && summary.alreadyCorrect > 0 && attentionPending === 0 && imagesAttached === 0) {
     showToast(`ℹ️ ফর্মের ${summary.alreadyCorrect}টি ফিল্ড আগেই সঠিক তথ্য দিয়ে পূরণ করা রয়েছে।`);
   } else if (summary.totalFilled === 0 && attentionPending > 0) {
     showToast(`⚠️ ${attentionPending}টি ফিল্ডে আপনার নিশ্চিতকরণ বা তথ্য প্রয়োজন — [Review] দেখুন।`);
-  } else if (detectedDocs.length > 0 && attentionPending > 0) {
+  } else if (pendingDocFields.length > 0 && attentionPending > 0) {
     showToast(
-      `✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ডের জন্য Review এবং ছবির জন্য [📷 Photo & Sig] দেখুন।`
+      `✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ডের জন্য Review এবং বাকি ছবির জন্য [📷 Photo & Sig] দেখুন।`
     );
-  } else if (detectedDocs.length > 0) {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! 📷 ছবি ও স্বাক্ষর আপলোড অনুমোদনের জন্য [📷 Photo & Sig] ক্লিক করুন।`);
+  } else if (pendingDocFields.length > 0) {
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! 📷 বাকি ছবি ও স্বাক্ষর অনুমোদনের জন্য [📷 Photo & Sig] ক্লিক করুন।`);
   } else if (attentionPending > 0) {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড (যেমন Quota/Missing Info) নিশ্চিত করতে [Review] দেখুন।`);
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড (যেমন Quota/Missing Info) নিশ্চিত করতে [Review] দেখুন।`);
   } else {
-    showToast(`✅ ${summary.totalFilled}টি ফিল্ড সফলভাবে স্বয়ংক্রিয় পূরণ ও যাচাই হয়েছে!`);
+    showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} সফলভাবে স্বয়ংক্রিয় পূরণ ও যাচাই হয়েছে!`);
   }
 
   // Record to Application History
   await recordAutofillHistoryEntry(summary);
 
-  // Auto-open the Smart Photo & Signature Approval Modal when empty file upload fields are detected
-  const pendingDocFields = detectedDocs.filter(
-    (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
-  );
+  // Auto-open the Smart Photo & Signature Approval Modal when empty file upload fields remain
   if (pendingDocFields.length > 0) {
     await openDocumentApprovalModal();
   }
@@ -920,6 +1657,7 @@ function createReviewModal() {
   // Undo button
   document.getElementById('jobfill-undo-btn')?.addEventListener('click', () => {
     const { restoredCount, preservedCount } = VerificationEngine.undoLastFill(activeSessionId);
+    dispatchAutofillSessionReverted(activeSessionId);
     showToast(
       preservedCount > 0
         ? `↩️ ${restoredCount}টি ফিল্ড আগের অবস্থায় ফিরেছে (${preservedCount}টি ম্যানুয়াল পরিবর্তন সংরক্ষিত)।`
@@ -946,6 +1684,11 @@ function createReviewModal() {
     if (!activeSessionId) {
       activeSessionId = 'session_' + Date.now();
     }
+    await dispatchAutofillSessionStart(
+      activeSessionId,
+      currentScanResult.totalVisibleInputs,
+      currentScanResult.ambiguousCount || 0
+    );
     const approvedItems = currentScanResult.planItems.filter((item) => item.isApproved && item.proposedValue);
 
     if (approvedItems.length === 0) {
@@ -984,26 +1727,14 @@ function createReviewModal() {
 
     // Record to Application History
     try {
-      await addAutofillHistory({
-        id: activeSessionId,
-        timestamp: Date.now(),
-        url: window.location.href,
-        domain: window.location.hostname || 'Local Document',
-        pageTitle: document.title || 'Job Application Form',
-        profileId: currentProfile.id,
-        profileName: currentProfile.personal.applicantNameEn || currentProfile.profileName,
-        totalDetected: currentScanResult.totalVisibleInputs,
-        totalFilled: report.successfullyFilled,
-        totalFailed: report.failedVerification,
-        totalAmbiguous: currentScanResult.ambiguousCount || 0,
-        status: report.failedVerification === 0 ? 'completed' : 'partial',
-        filledFields: approvedItems.map((item) => ({
-          fieldLabel: item.fieldLabel,
-          canonicalKey: item.canonicalId,
-          value: maskSensitiveHistoryValue(item.canonicalId, item.proposedValue),
-          confidence: item.status,
-        })),
-      });
+      await dispatchAutofillSessionComplete(
+        activeSessionId,
+        currentScanResult.totalVisibleInputs,
+        report.items,
+        report.successfullyFilled,
+        report.failedVerification,
+        currentScanResult.ambiguousCount || 0
+      );
     } catch (e) {
       console.warn('JobFill BD: Could not save autofill history', e);
     }
@@ -1529,22 +2260,49 @@ async function fetchDocumentForActiveProfile(docType: DocumentCategory): Promise
     }
 
     if (response && response.status === 'ok') {
-      return response.documents?.[docType] || null;
+      const doc = response.documents?.[docType];
+      if (doc && doc.dataUrl) return doc;
     }
 
     if (isExtensionRuntime() && response?.status !== 'runtime_error') {
-      return null;
+      // Background was reached and responded cleanly
     }
   }
 
   try {
-    return await DocumentRepository.getByCategory(currentProfile.id, docType, false);
+    const directDoc = await DocumentRepository.getByCategory(currentProfile.id, docType, true);
+    if (directDoc && directDoc.dataUrl) return directDoc;
   } catch (err: any) {
     if (String(err?.message || '').includes('VAULT_LOCKED')) {
       throw err;
     }
-    return null;
   }
+
+  // 3. Fallback to in-memory profile documents if embedded
+  const normType = docType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const inMemDoc = currentProfile?.documents?.find((d) => {
+    const dType = (d.type || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return (dType === normType || dType.includes(normType) || normType.includes(dType)) && d.dataUrl;
+  });
+  if (inMemDoc && inMemDoc.dataUrl) {
+    return {
+      metadata: {
+        documentId: inMemDoc.id,
+        documentType: inMemDoc.type,
+        profileId: currentProfile.id,
+        title: inMemDoc.title,
+        fileName: inMemDoc.fileName,
+        mimeType: inMemDoc.mimeType,
+        fileSize: inMemDoc.fileSize || Math.round((inMemDoc.fileSizeKb || 0) * 1024),
+        width: inMemDoc.dimensions?.width || 0,
+        height: inMemDoc.dimensions?.height || 0,
+        createdAt: inMemDoc.uploadedAt || new Date().toISOString(),
+      },
+      dataUrl: inMemDoc.dataUrl,
+    };
+  }
+
+  return null;
 }
 
 async function readLocalDocumentFile(file: File): Promise<{
@@ -2178,6 +2936,11 @@ if (
           await openDocumentApprovalModal();
           sendResponse({ status: 'opened' });
         } else if (message.action === 'AUTO_FILL_NOW' || message.action === 'EXECUTE_AUTO_FILL') {
+          if (message.payload?.mode) {
+            activeAutofillMode = message.payload.mode;
+          } else if (message.mode) {
+            activeAutofillMode = message.mode;
+          }
           await ensureAssistantUiInitialized(true);
           await loadProfile();
           if (isVaultLocked) {
@@ -2208,19 +2971,28 @@ if (
           } else {
             await recordAutofillHistoryEntry(summary);
             const attentionPending = summary.confirmationRequired + summary.missingInfo + summary.totalFailed;
-            if (detectedDocs.length > 0 && attentionPending > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] এবং ছবি আপলোডের জন্য [📷 Photo & Sig] দেখুন।`);
-            } else if (detectedDocs.length > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! 📷 ছবি ও স্বাক্ষর অনুমোদন করে আপলোড করুন।`);
+            const imagesAttached = summary.imagesAttached || 0;
+            const pendingDocFields = detectedDocs.filter(
+              (df) => df.documentType !== 'unknown' && (!df.element.files || df.element.files.length === 0)
+            );
+            const imgSuccessText = imagesAttached > 0 ? ` ও ${imagesAttached}টি ছবি/স্বাক্ষর` : '';
+
+            if (pendingDocFields.length > 0 && attentionPending > 0) {
+              showToast(
+                `✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] এবং বাকি ছবির জন্য [📷 Photo & Sig] দেখুন।`
+              );
+            } else if (pendingDocFields.length > 0) {
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! 📷 বাকি ছবি ও স্বাক্ষর অনুমোদন করে আপলোড করুন।`);
             } else if (attentionPending > 0) {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] দেখুন।`);
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} পূরণ হয়েছে! ⚠️ ${attentionPending}টি ফিল্ড নিশ্চিত করতে [Review] দেখুন।`);
             } else {
-              showToast(`✅ ${summary.totalFilled}টি ফিল্ড সফলভাবে স্বয়ংক্রিয় পূরণ হয়েছে!`);
+              showToast(`✅ ${summary.totalFilled}টি ফিল্ড${imgSuccessText} সফলভাবে স্বয়ংক্রিয় পূরণ হয়েছে!`);
             }
 
             sendResponse({
               status: 'ok',
               documentFieldCount: detectedDocs.length,
+              imagesAttached,
               report: {
                 successfullyFilled: summary.totalFilled,
                 alreadyCorrect: summary.alreadyCorrect,
@@ -2229,12 +3001,14 @@ if (
                 conflicts: summary.conflicts,
                 confirmationRequired: summary.confirmationRequired,
                 failed: summary.totalFailed,
+                imagesAttached,
                 completenessReport: summary.completenessReport,
               },
             });
           }
         } else if (message.action === 'UNDO_LAST_FILL') {
           const { restoredCount, preservedCount } = VerificationEngine.undoLastFill(activeSessionId);
+          dispatchAutofillSessionReverted(activeSessionId);
           showToast(
             preservedCount > 0
               ? `↩️ ${restoredCount}টি ফিল্ড আগের অবস্থায় ফিরেছে (${preservedCount}টি ম্যানুয়াল পরিবর্তন সংরক্ষিত)।`
@@ -2245,6 +3019,91 @@ if (
           await ensureAssistantUiInitialized(true);
           openReviewModal();
           sendResponse({ status: 'opened' });
+        } else if (message.action === 'SET_AUTOFILL_MODE') {
+          if (message.mode) {
+            activeAutofillMode = message.mode;
+          }
+          sendResponse({ status: 'ok', mode: activeAutofillMode });
+        } else if (message.action === 'FOCUS_FIELD') {
+          const sel = message.selector;
+          if (sel) {
+            let el: HTMLElement | null = null;
+            try {
+              el = document.querySelector<HTMLElement>(sel);
+            } catch {
+              // ignore invalid querySelector
+            }
+            if (!el && sel.startsWith('#')) {
+              const cleanId = sel.replace(/^#/, '');
+              el = document.getElementById(cleanId);
+            }
+            if (!el) {
+              const cleanName = sel.replace(/^[#\[name="]+|["\]]+$/g, '');
+              el = document.querySelector<HTMLElement>(`[name="${cleanName}"]`) || document.getElementById(cleanName);
+            }
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.focus?.();
+              const prevOutline = el.style.outline;
+              const prevBoxShadow = el.style.boxShadow;
+              const prevTransition = el.style.transition;
+              el.style.transition = 'all 0.3s ease';
+              el.style.outline = '3px solid #f59e0b';
+              el.style.boxShadow = '0 0 14px rgba(245, 158, 11, 0.75)';
+              setTimeout(() => {
+                if (el) {
+                  el.style.outline = prevOutline;
+                  el.style.boxShadow = prevBoxShadow;
+                  el.style.transition = prevTransition;
+                }
+              }, 2000);
+              sendResponse({ status: 'ok', focused: true });
+              return;
+            }
+          }
+          sendResponse({ status: 'not_found' });
+        } else if (message.action === 'DETECT_LOGIN_FORM') {
+          const loginScan = LoginFormDetector.scan(document);
+          sendResponse({
+            status: 'ok',
+            url: window.location?.href || '',
+            ...loginScan,
+          });
+        } else if (message.action === 'FILL_CREDENTIAL_LOGIN') {
+          if (isExcludedSiteUrl(window.location?.href)) {
+            sendResponse({ status: 'denied', ok: false, reason: 'Excluded site.' });
+            return;
+          }
+          const fillResult = LoginFormDetector.executeExplicitFill(
+            document,
+            window.location?.href || '',
+            {
+              expectedOrigin: String(message.payload?.expectedOrigin || ''),
+              username: message.payload?.username,
+              userId: message.payload?.userId,
+              applicantId: message.payload?.applicantId,
+              password: message.payload?.password,
+              fillMode: message.payload?.fillMode || 'username_only',
+              explicitUserInitiated: Boolean(message.explicitUserInitiated),
+            }
+          );
+          if (fillResult.ok) {
+            showToast('🔐 পোর্টাল লগইন তথ্য পূরণ করা হয়েছে।');
+          } else {
+            showToast(`⚠️ ${fillResult.reason}`);
+          }
+          sendResponse({ status: fillResult.ok ? 'ok' : 'error', ...fillResult });
+        } else if (message.action === 'CAPTURE_LOGIN_FORM') {
+          if (isExcludedSiteUrl(window.location?.href)) {
+            sendResponse({ status: 'denied', ok: false, reason: 'Excluded site.' });
+            return;
+          }
+          const captureRes = LoginFormDetector.readExplicitCaptureCandidate(
+            document,
+            window.location?.href || '',
+            Boolean(message.explicitUserInitiated)
+          );
+          sendResponse({ status: captureRes.ok ? 'ok' : 'error', ...captureRes });
         } else if (message.action === 'EXTRACT_OPEN_PORTAL_NOTICES') {
           const host = (window.location?.hostname || '').toLowerCase();
           if (host !== 'bb.org.bd' && !host.endsWith('.bb.org.bd')) {

@@ -324,6 +324,12 @@ export const OFFICIAL_PORTAL_DIRECTORY: OfficialPortalDirectoryEntry[] = [
     notes: 'Primary Assistant Teacher & DPE recruitment circulars.',
   },
   {
+    name: 'Directorate of Registration (Sub-Registrar / DOR)',
+    category: 'Government',
+    url: 'http://dor.gov.bd/site/view/notices',
+    notes: 'Sub-Registrar & registration directorate departmental notices.',
+  },
+  {
     name: 'Ministry of Public Administration (MOPA)',
     category: 'Government',
     url: 'https://mopa.gov.bd/pages/notices',
@@ -386,6 +392,9 @@ export interface PublicUrlExtractionResult {
   message: string;
 }
 
+import { parseBdGovtJobTable } from '../bdgovtjob';
+export { parseBdGovtJobTable };
+
 export async function inspectPublicCircularUrl(
   publicUrl: string,
   signal?: AbortSignal
@@ -411,6 +420,38 @@ export async function inspectPublicCircularUrl(
       },
       message: res.blockedReason || 'Could not fetch public page; please fill details manually.',
     };
+  }
+
+  // Specialized high-precision extraction for bdgovtjob.net and structured circular portals
+  if (urlCheck.hostname.includes('bdgovtjob.net') || res.body.includes('jc-table')) {
+    const bdParsed = parseBdGovtJobTable(res.body, urlCheck.normalizedUrl);
+    if (bdParsed.jobTitle || bdParsed.organization) {
+      return {
+        success: true,
+        uncertain: false,
+        extracted: {
+          organization: bdParsed.organization || urlCheck.hostname.replace(/^www\./, ''),
+          organizationBn: bdParsed.organizationBn,
+          jobTitle: bdParsed.jobTitle || 'Government Job Circular',
+          titleBn: bdParsed.titleBn,
+          position: bdParsed.position || bdParsed.jobTitle || 'Government Post',
+          vacancies: bdParsed.vacancies ?? undefined,
+          salary: bdParsed.salary || undefined,
+          cadreStatus: bdParsed.cadreStatus || 'Non-Cadre',
+          deadlineText: bdParsed.deadlineText || undefined,
+          circularUrl: bdParsed.circularUrl || urlCheck.normalizedUrl,
+          organizationUrl: bdParsed.organizationUrl || `https://${urlCheck.hostname}`,
+          applicationUrl: bdParsed.applicationUrl || undefined,
+          sourceUrl: urlCheck.normalizedUrl,
+          circularNumber: bdParsed.circularNumber || undefined,
+          category: 'Government',
+          location: bdParsed.location || 'All Bangladesh',
+          qualification: bdParsed.qualification || 'Bachelor',
+          description: stripHtmlTags(res.body).slice(0, 500),
+        },
+        message: 'Verified circular details extracted from bdgovtjob.net.',
+      };
+    }
   }
 
   const titleTag = extractTagText(res.body, 'title');

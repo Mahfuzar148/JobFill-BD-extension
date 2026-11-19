@@ -27,7 +27,8 @@ export async function openJobApplicationWithContext(
   job: NormalizedJobCircular,
   showToast: (msg: string) => void,
   bn: boolean,
-  onMissingApplicationUrl?: (job: NormalizedJobCircular) => void
+  onMissingApplicationUrl?: (job: NormalizedJobCircular) => void,
+  options?: { trackStarted?: boolean }
 ): Promise<{ opened: boolean; reason?: 'missing_application_url' | 'unsafe_url' | 'cancelled' }> {
   const rawAppUrl = (job.applicationUrl || '').trim();
   const classification = classifyApplicationDestination(rawAppUrl);
@@ -74,6 +75,24 @@ export async function openJobApplicationWithContext(
         openedAt: Date.now(),
       },
     });
+  }
+
+  if (options?.trackStarted) {
+    try {
+      await ApplicationRepository.setStatus(
+        {
+          ...job,
+          applicationUrl: check.normalizedUrl,
+        },
+        'Application Started',
+        {
+          circularId: job.circularNumber,
+          applicationDate: new Date().toISOString().slice(0, 10),
+        }
+      );
+    } catch (err) {
+      console.warn('JobFill BD: Could not record Application Started draft:', err);
+    }
   }
 
   await openSafeExternalTab(check.normalizedUrl);
@@ -166,4 +185,83 @@ export async function shareJobCircular(
   } catch {
     showToast(targetUrl || job.organization);
   }
+}
+
+export async function openApplicationPortalLoginTab(
+  application: ApplicationTrackerRecord,
+  showToast: (msg: string) => void,
+  bn: boolean,
+  onMissingLoginUrl?: (app: ApplicationTrackerRecord) => void
+): Promise<{ opened: boolean; reason?: 'missing_login_url' | 'unsafe_url' | 'cancelled' | 'pdf_circular' }> {
+  const rawLoginUrl = (application.loginUrl || '').trim();
+
+  // If no loginUrl is set, alert user and offer to add
+  if (!rawLoginUrl) {
+    showToast(
+      bn
+        ? 'ℹ️ এই চাকরির জন্য নির্দিষ্ট পোর্টাল লগইন লিংক যোগ করা নেই।'
+        : 'ℹ️ No portal login link saved for this application.'
+    );
+    onMissingLoginUrl?.(application);
+    return { opened: false, reason: 'missing_login_url' };
+  }
+
+  // Validate URL with sanitizeAndValidateUrl
+  const check = ApplicationRepository.sanitizeAndValidateUrl(rawLoginUrl);
+  if (check.isPdfCircular) {
+    showToast(
+      bn
+        ? '⚠️ সার্কুলার পিডিএফ ফাইল পোর্টাল লগইন লিংক হিসেবে ব্যবহারযোগ্য নয়।'
+        : '⚠️ A circular PDF file cannot be used as a portal login URL.'
+    );
+    return { opened: false, reason: 'pdf_circular' };
+  }
+
+  if (!check.isValid) {
+    showToast(
+      bn
+        ? `⚠️ অবৈধ পোর্টাল লিংক: ${check.warnings[0] || ''}`
+        : `⚠️ Invalid portal login URL: ${check.warnings[0] || 'Malformed link'}`
+    );
+    return { opened: false, reason: 'unsafe_url' };
+  }
+
+  if (check.warnings.length > 0 || !application.loginUrlVerified) {
+    const proceed = window.confirm(
+      `${bn ? 'নিরাপত্তা সতর্কতা:' : 'Security Notice:'}\n${
+        bn
+          ? 'এই পোর্টাল লিংকটি এখনও যাচাইকৃত নয়। আপনি কি নিশ্চিত যে এটি অফিশিয়াল পোর্টাল?'
+          : 'This portal URL is unverified. Are you sure this is the official job portal?'
+      }\n\nURL: ${check.normalizedUrl}`
+    );
+    if (!proceed) {
+      return { opened: false, reason: 'cancelled' };
+    }
+  }
+
+  // Save active login context so the content script in the newly opened tab
+  // can immediately match the exact job application and credential
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    await chrome.storage.local.set({
+      jobfill_active_portal_login_context: {
+        jobId: application.jobId,
+        jobTitle: application.jobTitle,
+        organization: application.organization,
+        loginUrl: check.normalizedUrl,
+        credentialId: application.credentialId || null,
+        openedAt: Date.now(),
+      },
+    });
+  }
+
+  // Open in a new tab without replacing or navigating the current dashboard tab
+  await openSafeExternalTab(check.normalizedUrl);
+
+  showToast(
+    bn
+      ? `🚀 "${application.organization}" পোর্টাল নতুন ট্যাবে খোলা হয়েছে।`
+      : `🚀 "${application.organization}" portal opened in new tab.`
+  );
+
+  return { opened: true };
 }

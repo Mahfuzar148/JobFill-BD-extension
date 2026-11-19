@@ -242,4 +242,69 @@ describe('JobFill BD - Daily Digest & Smart Deadline Reminder Scheduler', () => 
       window.open = origOpen;
     }
   });
+
+  it('17. Enforces exact 48h, 24h, 12h, 6h, and 1h milestone deadline reminders with bitmask deduplication', () => {
+    const deadline = dhakaWallTimeToUtcMs(2026, 11, 20, 18, 0, 0);
+    const job = makeJob('milestone_job_1', 'Assistant Director', deadline);
+
+    // Milestone 1: 48h
+    const t48h = deadline - 47.5 * HOUR_MS;
+    const eval48 = evaluateJobReminderSchedule(job, undefined, DEFAULT_JOB_PREFERENCES, t48h);
+    expect(eval48.shouldNotifyNow).toBe(true);
+    expect(eval48.isUrgent).toBe(true);
+    expect(eval48.schedule.sentMilestones).toBe(1);
+
+    // Repeated call 10 mins later does not duplicate
+    const eval48Dup = evaluateJobReminderSchedule(
+      job,
+      { ...eval48.schedule, lastReminderAt: t48h },
+      DEFAULT_JOB_PREFERENCES,
+      t48h + 10 * 60_000
+    );
+    expect(eval48Dup.shouldNotifyNow).toBe(false);
+
+    // Milestone 2: 24h
+    const t24h = deadline - 23.5 * HOUR_MS;
+    const eval24 = evaluateJobReminderSchedule(
+      job,
+      { ...eval48.schedule, lastReminderAt: t48h },
+      DEFAULT_JOB_PREFERENCES,
+      t24h
+    );
+    expect(eval24.shouldNotifyNow).toBe(true);
+    expect(eval24.schedule.sentMilestones).toBe(1 | 2);
+
+    // Milestone 3: 12h
+    const t12h = deadline - 11.5 * HOUR_MS;
+    const eval12 = evaluateJobReminderSchedule(
+      job,
+      { ...eval24.schedule, lastReminderAt: t24h },
+      DEFAULT_JOB_PREFERENCES,
+      t12h
+    );
+    expect(eval12.shouldNotifyNow).toBe(true);
+    expect(eval12.schedule.sentMilestones).toBe(1 | 2 | 4);
+
+    // Milestone 4: 6h
+    const t6h = deadline - 5.5 * HOUR_MS;
+    const eval6 = evaluateJobReminderSchedule(
+      job,
+      { ...eval12.schedule, lastReminderAt: t12h },
+      DEFAULT_JOB_PREFERENCES,
+      t6h
+    );
+    expect(eval6.shouldNotifyNow).toBe(true);
+    expect(eval6.schedule.sentMilestones).toBe(1 | 2 | 4 | 8);
+
+    // Milestone 5: 1h
+    const t1h = deadline - 45 * 60_000;
+    const eval1 = evaluateJobReminderSchedule(
+      job,
+      { ...eval6.schedule, lastReminderAt: t6h },
+      DEFAULT_JOB_PREFERENCES,
+      t1h
+    );
+    expect(eval1.shouldNotifyNow).toBe(true);
+    expect(eval1.schedule.sentMilestones).toBe(1 | 2 | 4 | 8 | 16);
+  });
 });

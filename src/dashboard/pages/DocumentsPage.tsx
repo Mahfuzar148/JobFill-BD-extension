@@ -13,6 +13,11 @@ import {
   Award,
   FolderPlus,
   Scissors,
+  Eye,
+  EyeOff,
+  Lock,
+  GraduationCap,
+  BookOpen,
 } from 'lucide-react';
 import { ImageCropModal } from '../components/ImageCropModal';
 import { ProcessedImageResult } from '../../services/image-processor';
@@ -27,6 +32,7 @@ import {
 } from '../../services/indexedDB';
 import { ImageProcessor } from '../../services/image-processor';
 import { DocumentValidator } from '../../validation/document-validator';
+import { DocumentRepository } from '../../database/document-repository';
 
 interface DocumentsPageProps {
   profile: UserProfile;
@@ -34,34 +40,102 @@ interface DocumentsPageProps {
   showToast: (msg: string) => void;
 }
 
-const OTHER_DOC_CATEGORIES: Array<{
+export interface DocumentCategoryConfig {
   type: DocumentCategory;
   title: string;
   titleBn: string;
   accept: string;
   icon: React.ReactNode;
-}> = [
+  isSensitiveNid?: boolean;
+}
+
+export const IDENTITY_DOC_CATEGORIES: DocumentCategoryConfig[] = [
   {
-    type: 'nid',
-    title: 'National ID (NID)',
-    titleBn: 'জাতীয় পরিচয়পত্র',
+    type: 'nid_front',
+    title: 'NID Front Part',
+    titleBn: 'জাতীয় পরিচয়পত্র সম্মুখভাগ',
     accept: 'image/jpeg,image/jpg,image/png,application/pdf',
     icon: <CreditCard className="w-4 h-4 text-sky-600" />,
+    isSensitiveNid: true,
+  },
+  {
+    type: 'nid_back',
+    title: 'NID Back Part',
+    titleBn: 'জাতীয় পরিচয়পত্র বিপরীতভাগ',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <CreditCard className="w-4 h-4 text-sky-600" />,
+    isSensitiveNid: true,
+  },
+  {
+    type: 'nid',
+    title: 'NID Full / Smart Card',
+    titleBn: 'জাতীয় পরিচয়পত্র সম্পূর্ণ কপি',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <CreditCard className="w-4 h-4 text-indigo-600" />,
+    isSensitiveNid: true,
   },
   {
     type: 'birth_certificate',
-    title: 'Birth Certificate',
-    titleBn: 'জন্ম নিবন্ধন সনদ',
+    title: 'Birth Registration Certificate',
+    titleBn: 'জন্ম নিবন্ধন সনদপত্র',
     accept: 'image/jpeg,image/jpg,image/png,application/pdf',
     icon: <FileText className="w-4 h-4 text-emerald-600" />,
   },
+];
+
+export const ACADEMIC_DOC_CATEGORIES: DocumentCategoryConfig[] = [
   {
-    type: 'educational_certificate',
-    title: 'Educational Certificates',
-    titleBn: 'শিক্ষাগত সনদপত্র',
+    type: 'ssc_cert',
+    title: 'SSC Certificate',
+    titleBn: 'এসএসসি সনদপত্র',
     accept: 'image/jpeg,image/jpg,image/png,application/pdf',
     icon: <Award className="w-4 h-4 text-violet-600" />,
   },
+  {
+    type: 'ssc_marksheet',
+    title: 'SSC Marksheet / Transcript',
+    titleBn: 'এসএসসি মার্কশিট / নম্বরপত্র',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <BookOpen className="w-4 h-4 text-purple-600" />,
+  },
+  {
+    type: 'hsc_cert',
+    title: 'HSC Certificate',
+    titleBn: 'এইচএসসি সনদপত্র',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <Award className="w-4 h-4 text-blue-600" />,
+  },
+  {
+    type: 'hsc_marksheet',
+    title: 'HSC Marksheet / Transcript',
+    titleBn: 'এইচএসসি মার্কশিট / নম্বরপত্র',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <BookOpen className="w-4 h-4 text-cyan-600" />,
+  },
+  {
+    type: 'grad_cert',
+    title: 'Graduation Certificate / Degree',
+    titleBn: 'স্নাতক সনদ / ডিগ্রি',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <GraduationCap className="w-4 h-4 text-emerald-600" />,
+  },
+  {
+    type: 'transcript',
+    title: 'Academic Transcript',
+    titleBn: 'একাডেমিক ট্রান্সক্রিপ্ট / মার্কশিট',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <BookOpen className="w-4 h-4 text-teal-600" />,
+  },
+  {
+    type: 'educational_certificate',
+    title: 'Diploma & Other Educational Certificates',
+    titleBn: 'ডিপ্লোমা ও অন্যান্য শিক্ষাগত সনদপত্র',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <Award className="w-4 h-4 text-amber-600" />,
+  },
+];
+
+export const GENERAL_DOC_CATEGORIES: DocumentCategoryConfig[] = [
   {
     type: 'cv',
     title: 'CV / Resume',
@@ -71,12 +145,25 @@ const OTHER_DOC_CATEGORIES: Array<{
     icon: <FileText className="w-4 h-4 text-amber-600" />,
   },
   {
+    type: 'training_cert',
+    title: 'Training & Professional Certifications',
+    titleBn: 'প্রশিক্ষণ ও পেশাগত সনদ',
+    accept: 'image/jpeg,image/jpg,image/png,application/pdf',
+    icon: <Award className="w-4 h-4 text-rose-600" />,
+  },
+  {
     type: 'other',
-    title: 'Other Documents',
+    title: 'Other Supporting Documents',
     titleBn: 'অন্যান্য কাগজপত্র',
     accept: 'image/jpeg,image/jpg,image/png,application/pdf,.doc,.docx',
     icon: <FolderPlus className="w-4 h-4 text-slate-600" />,
   },
+];
+
+export const OTHER_DOC_CATEGORIES = [
+  ...IDENTITY_DOC_CATEGORIES,
+  ...ACADEMIC_DOC_CATEGORIES,
+  ...GENERAL_DOC_CATEGORIES,
 ];
 
 export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeProfile, showToast }) => {
@@ -88,6 +175,16 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeP
   const [sigOriginal, setSigOriginal] = useState<StoredDocument | null>(null);
   const [sigProcessed, setSigProcessed] = useState<StoredDocument | null>(null);
   const [cropTarget, setCropTarget] = useState<'photo' | 'signature' | null>(null);
+  const [revealedDocIds, setRevealedDocIds] = useState<Set<string>>(new Set());
+
+  const toggleRevealDoc = (docId: string) => {
+    setRevealedDocIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) next.delete(docId);
+      else next.add(docId);
+      return next;
+    });
+  };
 
   const handleApplyCropResult = async (result: ProcessedImageResult) => {
     if (!cropTarget) return;
@@ -380,6 +477,191 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeP
     a.click();
   };
 
+  const renderCategoryCard = (cat: DocumentCategoryConfig) => {
+    const catDocs = savedDocs.filter((d) => (d.documentType || d.type) === cat.type);
+    return (
+      <div key={cat.type} className="border border-slate-200 rounded-xl p-4 bg-slate-50/70 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+            {cat.icon}
+            <span>{cat.title}</span>
+            <span className="text-[10px] font-normal text-slate-500">({cat.titleBn})</span>
+          </div>
+          <label className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-semibold px-2.5 py-1 rounded-md cursor-pointer transition-colors shadow-sm">
+            <Upload className="w-3 h-3" />
+            Upload
+            <input
+              type="file"
+              accept={cat.accept}
+              onChange={(e) => handleOtherDocUpload(cat.type, cat.title, e)}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        {catDocs.length === 0 ? (
+          <div className="text-[11px] text-slate-400 italic py-1">No saved {cat.title.toLowerCase()} yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {catDocs.map((d) => {
+              const isRevealed = revealedDocIds.has(d.id);
+              const isNid = cat.isSensitiveNid;
+              const isImage = d.mimeType?.startsWith('image/') || d.dataUrl?.startsWith('data:image/');
+              const canSetValidity = cat.type === 'other' || cat.type === 'training_cert';
+              const daysLeft = d.expiresAt
+                ? Math.ceil((new Date(`${d.expiresAt}T23:59:59+06:00`).getTime() - Date.now()) / 86400000)
+                : null;
+
+              return (
+                <div
+                  key={d.id}
+                  className="bg-white border border-slate-200 p-2.5 rounded-lg text-[11px] space-y-2 shadow-xs"
+                >
+                  {/* Sensitive NID Masking Banner or Preview */}
+                  {isNid ? (
+                    <div className="border border-sky-100 rounded-md overflow-hidden bg-sky-50/40 p-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-sky-900">
+                          <Lock className="w-3.5 h-3.5 text-sky-600" />
+                          <span>
+                            {isRevealed
+                              ? 'NID Preview (Unlocked)'
+                              : '🔒 NID Masked for Privacy (AES-256-GCM)'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleRevealDoc(d.id)}
+                          className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-sky-700 hover:text-sky-900 bg-white border border-sky-200 px-2 py-0.5 rounded shadow-xs cursor-pointer"
+                        >
+                          {isRevealed ? (
+                            <>
+                              <EyeOff className="w-3 h-3" /> Mask
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3" /> Reveal
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {isRevealed && isImage && d.dataUrl ? (
+                        <div className="w-full max-h-48 rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                          <img
+                            src={d.dataUrl}
+                            alt={d.title}
+                            className="w-full h-full object-contain max-h-48"
+                          />
+                        </div>
+                      ) : !isRevealed ? (
+                        <div className="py-3 text-center text-[10.5px] text-slate-400 bg-slate-100/70 rounded border border-dashed border-slate-300">
+                          •••••••••••••••••••••••••••••••••
+                          <div className="text-[9.5px] text-slate-400 mt-0.5">
+                            Click "Reveal" to view document image
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : isImage && d.dataUrl ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                        <img src={d.dataUrl} alt={d.title} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 truncate">
+                        <div className="font-semibold text-slate-700 truncate">{d.fileName}</div>
+                        <div className="text-[10px] text-slate-400">
+                          {d.mimeType} • {d.fileSizeKb} KB {d.width ? `• ${d.width}×${d.height}px` : ''}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Document metadata & actions */}
+                  <div className="flex items-center justify-between pt-1">
+                    {!isImage || isNid ? (
+                      <div className="truncate pr-2">
+                        <div className="font-semibold text-slate-700 truncate">{d.fileName}</div>
+                        <div className="text-[10px] text-slate-400">
+                          {d.mimeType} • {d.fileSizeKb} KB {d.width ? `• ${d.width}×${d.height}px` : ''}
+                        </div>
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => downloadDataUrl(d.dataUrl, d.fileName)}
+                        className="p-1 text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
+                        title="Download"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDoc(d.id)}
+                        className="p-1 text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 cursor-pointer"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {canSetValidity ? (
+                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+                      <label className="text-[10px] text-slate-500 font-semibold">
+                        Optional Expiry (License/Training):
+                      </label>
+                      <input
+                        type="date"
+                        value={d.expiresAt || ''}
+                        onChange={async (e) => {
+                          const nextExpiry = e.target.value;
+                          try {
+                            await DocumentRepository.updateDocumentValidity(d.id, nextExpiry, d.validityNotes);
+                            setSavedDocs((prev) =>
+                              prev.map((item) =>
+                                item.id === d.id ? { ...item, expiresAt: nextExpiry || undefined } : item
+                              )
+                            );
+                            showToast(nextExpiry ? `✅ Expiry set to ${nextExpiry}` : '✅ Expiry cleared');
+                          } catch (err: any) {
+                            showToast(`⚠️ ${err?.message || 'Could not update validity'}`);
+                          }
+                        }}
+                        className="text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50"
+                      />
+                      {daysLeft !== null && (
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            daysLeft < 0
+                              ? 'bg-rose-100 text-rose-700'
+                              : daysLeft <= 30
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {daysLeft < 0 ? 'Expired' : daysLeft === 0 ? 'Expires Today' : `${daysLeft}d left`}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[9.5px] text-slate-400">
+                      Permanent record — academic &amp; identity documents do not expire automatically.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const activePhotoDoc = photoProcessed || photoOriginal;
   const photoValidation = activePhotoDoc
     ? DocumentValidator.validatePhoto(
@@ -409,7 +691,7 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeP
             <span>Documents &amp; Images (ছবি, স্বাক্ষর ও সনদ)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            বাংলাদেশ সরকারি নিয়োগ পোর্টালের (টেলিটক, পেট্রোবাংলা ও বিপিএসসি) জন্য ছবি, স্বাক্ষর, NID, জন্ম নিবন্ধন ও সনদ সংরক্ষণ করুন।
+            বাংলাদেশ সরকারি ও বেসরকারি নিয়োগ পোর্টালের জন্য ছবি, স্বাক্ষর, NID, জন্ম নিবন্ধন ও শিক্ষাগত সনদ ব্যবস্থাপনা করুন।
           </p>
         </div>
         <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-xs font-semibold shrink-0">
@@ -642,77 +924,64 @@ export const DocumentsPage: React.FC<DocumentsPageProps> = ({ profile, onChangeP
         </div>
       </div>
 
-      {/* NID, Birth Certificate, Educational Certificates & Other Documents */}
+      {/* SECTION 1: National Identity & Civil Documents */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-        <div className="border-b border-slate-100 pb-2">
-          <h3 className="text-sm font-bold text-slate-800">
-            Identity &amp; Academic Certificates (জাতীয় পরিচয়পত্র, জন্ম নিবন্ধন ও শিক্ষাগত সনদ)
-          </h3>
+        <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-sky-600" />
+              <span>National Identity &amp; Civil Documents (জাতীয় পরিচয়পত্র ও নাগরিক সনদ)</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              NID Front &amp; Back সংরক্ষিত এনক্রিপ্ট থাকে এবং ব্যক্তিগত সুরক্ষার জন্য ডিফল্টভাবে মাস্ক করা থাকে।
+            </p>
+          </div>
+          <span className="text-[10px] font-mono text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
+            Local Only • Encrypted
+          </span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {OTHER_DOC_CATEGORIES.map((cat) => {
-            const catDocs = savedDocs.filter((d) => (d.documentType || d.type) === cat.type);
-            return (
-              <div key={cat.type} className="border border-slate-200 rounded-lg p-3.5 bg-slate-50/70 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                    {cat.icon}
-                    <span>{cat.title}</span>
-                    <span className="text-[10px] font-normal text-slate-500">({cat.titleBn})</span>
-                  </div>
-                  <label className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-semibold px-2.5 py-1 rounded-md cursor-pointer">
-                    <Upload className="w-3 h-3" />
-                    Add
-                    <input
-                      type="file"
-                      accept={cat.accept}
-                      onChange={(e) => handleOtherDocUpload(cat.type, cat.title, e)}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+          {IDENTITY_DOC_CATEGORIES.map(renderCategoryCard)}
+        </div>
+      </div>
 
-                {catDocs.length === 0 ? (
-                  <div className="text-[11px] text-slate-400 italic">No saved {cat.title.toLowerCase()} yet.</div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {catDocs.map((d) => (
-                      <div
-                        key={d.id}
-                        className="flex items-center justify-between bg-white border border-slate-200 px-2.5 py-1.5 rounded text-[11px]"
-                      >
-                        <div className="truncate pr-2">
-                          <div className="font-semibold text-slate-700 truncate">{d.fileName}</div>
-                          <div className="text-[10px] text-slate-400">
-                            {d.mimeType} • {d.fileSizeKb} KB {d.width ? `• ${d.width}×${d.height}px` : ''}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => downloadDataUrl(d.dataUrl, d.fileName)}
-                            className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
-                            title="Download"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDoc(d.id)}
-                            className="p-1 text-rose-500 hover:text-rose-700 cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* SECTION 2: Academic Credentials & Transcripts */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-violet-600" />
+              <span>Academic Credentials &amp; Transcripts (শিক্ষাগত সনদ ও নম্বরপত্র)</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              এসএসসি, এইচএসসি, স্নাতক ও অন্যান্য শিক্ষাগত সনদপত্র ও অফিসিয়াল মার্কশিট সংরক্ষণ করুন।
+            </p>
+          </div>
+          <span className="text-[10px] font-mono text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded">
+            Non-Expiring Permanent Records
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {ACADEMIC_DOC_CATEGORIES.map(renderCategoryCard)}
+        </div>
+      </div>
+
+      {/* SECTION 3: CV, Professional Certifications & Other Documents */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-2">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <FolderPlus className="w-4 h-4 text-slate-600" />
+            <span>CV, Professional Certifications &amp; Other Documents (জীবনবৃত্তান্ত ও অন্যান্য সনদ)</span>
+          </h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            জীবনবৃত্তান্ত (CV) এবং প্রশিক্ষণ/লাইসেন্সের মেয়াদ ট্র্যাকিং সুবিধাসহ অন্যান্য সংযুক্তি।
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {GENERAL_DOC_CATEGORIES.map(renderCategoryCard)}
         </div>
       </div>
 

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <title>JobFill BD — Universal Multi-Portal Form Fixture Library</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 20px; }
+    .fixture-section { background: #fff; padding: 18px; margin-bottom: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+    .form-group { margin-bottom: 12px; }
+    label { display: block; font-weight: 600; margin-bottom: 4px; color: #334155; }
+    input[type="text"], input[type="tel"], input[type="email"], input[type="date"], input[type="number"], select, textarea {
+      width: 100%; max-width: 380px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;
+    }
+    .flex-row { display: flex; gap: 12px; align-items: center; }
+    .radio-group, .checkbox-group { display: flex; gap: 16px; align-items: center; margin-top: 4px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>JobFill BD Universal Multi-Portal Form Fixtures (Forms A through W)</h1>
+
+  <!-- FORM A: Single DOB Input -->
+  <div class="fixture-section" id="fixture_form_a">
+    <h2>FORM A — Single DOB Input (DD/MM/YYYY Format)</h2>
+    <form id="form_a">
+      <div class="form-group">
+        <label for="form_a_dob">Date of Birth (জন্ম তারিখ)</label>
+        <input type="text" id="form_a_dob" name="applicant_dob" placeholder="DD/MM/YYYY" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM B: DOB Day/Month/Year Dropdowns -->
+  <div class="fixture-section" id="fixture_form_b">
+    <h2>FORM B — DOB Day / Month / Year Dropdowns</h2>
+    <form id="form_b">
+      <div class="form-group">
+        <label>Date of Birth (Day / Month / Year)</label>
+        <div class="flex-row">
+          <select id="form_b_day" name="dob_day">
+            <option value="">Day</option>
+            <option value="1">1</option>
+            <option value="15">15</option>
+            <option value="31">31</option>
+          </select>
+          <select id="form_b_month" name="dob_month">
+            <option value="">Month</option>
+            <option value="1">Jan (জানুয়ারি)</option>
+            <option value="10">Oct (অক্টোবর)</option>
+            <option value="12">Dec (ডিসেম্বর)</option>
+          </select>
+          <select id="form_b_year" name="dob_year">
+            <option value="">Year</option>
+            <option value="1990">1990</option>
+            <option value="1995">1995</option>
+            <option value="2000">2000</option>
+          </select>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM C: DOB Text Fields with Masks -->
+  <div class="fixture-section" id="fixture_form_c">
+    <h2>FORM C — DOB 3 Separate Masked Text Inputs</h2>
+    <form id="form_c">
+      <div class="form-group">
+        <label>Birth Date</label>
+        <div class="flex-row">
+          <input type="text" id="form_c_day" name="b_day" placeholder="DD" style="max-width: 80px;" />
+          <input type="text" id="form_c_month" name="b_month" placeholder="MM" style="max-width: 80px;" />
+          <input type="text" id="form_c_year" name="b_year" placeholder="YYYY" style="max-width: 120px;" />
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM D: Freedom Fighter Dropdown -->
+  <div class="fixture-section" id="fixture_form_d">
+    <h2>FORM D — Freedom Fighter Dropdown</h2>
+    <form id="form_d">
+      <div class="form-group">
+        <label for="form_d_ff">Freedom Fighter Quota (মুক্তিযোদ্ধা কোটা)</label>
+        <select id="form_d_ff" name="ff_quota">
+          <option value="">-- Select Status --</option>
+          <option value="non_ff">Non-Freedom Fighter (প্রযোজ্য নয়)</option>
+          <option value="ff">Freedom Fighter (মুক্তিযোদ্ধা)</option>
+          <option value="child_ff">Child of Freedom Fighter (মুক্তিযোদ্ধার সন্তান)</option>
+          <option value="grandchild_ff">Grandchild of Freedom Fighter (মুক্তিযোদ্ধার নাতি/নাতনি)</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM E: Freedom Fighter Radio Group -->
+  <div class="fixture-section" id="fixture_form_e">
+    <h2>FORM E — Freedom Fighter Radio Group</h2>
+    <form id="form_e">
+      <fieldset>
+        <legend>Freedom Fighter Status (মুক্তিযোদ্ধা কোটা)</legend>
+        <div class="radio-group">
+          <label><input type="radio" name="ff_status_radio" value="non_ff" id="rdo_ff_no" /> Non-Freedom Fighter (প্রযোজ্য নয়)</label>
+          <label><input type="radio" name="ff_status_radio" value="child_ff" id="rdo_ff_child" /> Child of Freedom Fighter (মুক্তিযোদ্ধার সন্তান)</label>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+
+  <!-- FORM F: NID Number Input (Type A) -->
+  <div class="fixture-section" id="fixture_form_f">
+    <h2>FORM F — NID Number Input (Type A)</h2>
+    <form id="form_f">
+      <div class="form-group">
+        <label for="form_f_nid">National ID Number (জাতীয় পরিচয়পত্র নম্বর)</label>
+        <input type="text" id="form_f_nid" name="nid_number" placeholder="Enter 10/13/17 digit NID" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM G: NID Yes/No Radio Group (Type B) -->
+  <div class="fixture-section" id="fixture_form_g">
+    <h2>FORM G — NID Yes / No Question (Type B)</h2>
+    <form id="form_g">
+      <fieldset>
+        <legend>Do you have a National ID Card? (জাতীয় পরিচয়পত্র আছে?)</legend>
+        <div class="radio-group">
+          <label><input type="radio" name="has_nid_radio" value="Yes" id="rdo_nid_yes" /> Yes (হ্যাঁ)</label>
+          <label><input type="radio" name="has_nid_radio" value="No" id="rdo_nid_no" /> No (না)</label>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+
+  <!-- FORM H: Present & Permanent Address in Separate Panels -->
+  <div class="fixture-section" id="fixture_form_h">
+    <h2>FORM H — Present & Permanent Address in Separate Panels</h2>
+    <form id="form_h">
+      <fieldset id="panel_present">
+        <legend>Present Address (বর্তমান ঠিকানা)</legend>
+        <div class="form-group">
+          <label for="p_care">Care Of</label>
+          <input type="text" id="p_care" name="care_of" />
+        </div>
+        <div class="form-group">
+          <label for="p_district">District</label>
+          <select id="p_district" name="district">
+            <option value="">Select District</option>
+            <option value="dhaka">Dhaka</option>
+            <option value="rajshahi">Rajshahi</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="p_upazila">Upazila</label>
+          <select id="p_upazila" name="upazila">
+            <option value="">Select Upazila</option>
+            <option value="dhanmondi">Dhanmondi</option>
+            <option value="motihar">Motihar</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <fieldset id="panel_permanent" style="margin-top: 16px;">
+        <legend>Permanent Address (স্থায়ী ঠিকানা)</legend>
+        <div class="form-group">
+          <label for="perm_care">Care Of</label>
+          <input type="text" id="perm_care" name="care_of" />
+        </div>
+        <div class="form-group">
+          <label for="perm_district">District</label>
+          <select id="perm_district" name="district">
+            <option value="">Select District</option>
+            <option value="dhaka">Dhaka</option>
+            <option value="rajshahi">Rajshahi</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="perm_upazila">Upazila</label>
+          <select id="perm_upazila" name="upazila">
+            <option value="">Select Upazila</option>
+            <option value="dhanmondi">Dhanmondi</option>
+            <option value="motihar">Motihar</option>
+          </select>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+
+  <!-- FORM I: Same as Present Address Checkbox -->
+  <div class="fixture-section" id="fixture_form_i">
+    <h2>FORM I — Same as Present Address Checkbox</h2>
+    <form id="form_i">
+      <div class="checkbox-group">
+        <input type="checkbox" id="form_i_same_as_present" name="same_as_present" />
+        <label for="form_i_same_as_present">Permanent Address is Same as Present Address (বর্তমান ও স্থায়ী ঠিকানা একই)</label>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM J: Cascading District to Upazila -->
+  <div class="fixture-section" id="fixture_form_j">
+    <h2>FORM J — Cascading District to Upazila</h2>
+    <form id="form_j">
+      <div class="form-group">
+        <label for="cascading_dist">District (জেলা)</label>
+        <select id="cascading_dist" name="district">
+          <option value="">-- Select District --</option>
+          <option value="dhaka">Dhaka</option>
+          <option value="rajshahi">Rajshahi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="cascading_upz">Upazila (উপজেলা)</label>
+        <select id="cascading_upz" name="upazila">
+          <option value="">-- Select Upazila --</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM K: SSC & HSC Repeated Fields -->
+  <div class="fixture-section" id="fixture_form_k">
+    <h2>FORM K — SSC and HSC Repeated Fields</h2>
+    <form id="form_k">
+      <fieldset id="sec_ssc">
+        <legend>Secondary School Certificate (SSC or Equivalent)</legend>
+        <div class="form-group">
+          <label for="k_ssc_roll">Roll No</label>
+          <input type="text" id="k_ssc_roll" name="roll" />
+        </div>
+        <div class="form-group">
+          <label for="k_ssc_reg">Registration No</label>
+          <input type="text" id="k_ssc_reg" name="reg_no" />
+        </div>
+        <div class="form-group">
+          <label for="k_ssc_year">Passing Year</label>
+          <select id="k_ssc_year" name="passing_year">
+            <option value="">Select Year</option>
+            <option value="2012">2012</option>
+            <option value="2014">2014</option>
+          </select>
+        </div>
+      </fieldset>
+
+      <fieldset id="sec_hsc" style="margin-top: 16px;">
+        <legend>Higher Secondary Certificate (HSC or Equivalent)</legend>
+        <div class="form-group">
+          <label for="k_hsc_roll">Roll No</label>
+          <input type="text" id="k_hsc_roll" name="roll" />
+        </div>
+        <div class="form-group">
+          <label for="k_hsc_reg">Registration No</label>
+          <input type="text" id="k_hsc_reg" name="reg_no" />
+        </div>
+        <div class="form-group">
+          <label for="k_hsc_year">Passing Year</label>
+          <select id="k_hsc_year" name="passing_year">
+            <option value="">Select Year</option>
+            <option value="2012">2012</option>
+            <option value="2014">2014</option>
+          </select>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+
+  <!-- FORM L: Dakhil & Alim Madrasah Examination Fields -->
+  <div class="fixture-section" id="fixture_form_l">
+    <h2>FORM L — Dakhil and Alim Qualifications</h2>
+    <form id="form_l">
+      <div class="form-group">
+        <label for="l_exam">Examination</label>
+        <select id="l_exam" name="exam">
+          <option value="">Select Exam</option>
+          <option value="dakhil">Dakhil (দাখিল)</option>
+          <option value="alim">Alim (আলিম)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="l_board">Board</label>
+        <select id="l_board" name="board">
+          <option value="">Select Board</option>
+          <option value="madrasah">Madrasah (মাদ্রাসা)</option>
+          <option value="dhaka">Dhaka</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM M: SSC & HSC Board Dropdowns -->
+  <div class="fixture-section" id="fixture_form_m">
+    <h2>FORM M — Board Selection Dropdowns</h2>
+    <form id="form_m">
+      <div class="form-group">
+        <label for="m_ssc_board">SSC Board</label>
+        <select id="m_ssc_board" name="ssc_board">
+          <option value="">Select Board</option>
+          <option value="rajshahi">Rajshahi (রাজশাহী)</option>
+          <option value="dhaka">Dhaka (ঢাকা)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="m_hsc_board">HSC Board</label>
+        <select id="m_hsc_board" name="hsc_board">
+          <option value="">Select Board</option>
+          <option value="dhaka">Dhaka (ঢাকা)</option>
+          <option value="rajshahi">Rajshahi (রাজশাহী)</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM N: Graduation Degree & Subject Dropdowns -->
+  <div class="fixture-section" id="fixture_form_n">
+    <h2>FORM N — Graduation Degree & Subject Cascading Dropdowns</h2>
+    <form id="form_n">
+      <fieldset id="sec_graduation">
+        <legend>Graduation / Bachelor's Degree Level</legend>
+        <div class="form-group">
+          <label for="n_grad_degree">Examination / Degree</label>
+          <select id="n_grad_degree" name="grad_degree">
+            <option value="">-- Select Degree --</option>
+            <option value="bsc_eng">B.Sc Engineering (বি.এসসি ইঞ্জিনিয়ারিং)</option>
+            <option value="bba">B.B.A (বিবিএ)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="n_grad_subject">Subject / Discipline</label>
+          <select id="n_grad_subject" name="grad_subject">
+            <option value="">-- Select Subject --</option>
+          </select>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+
+  <!-- FORM O: Optional Masters Block -->
+  <div class="fixture-section" id="fixture_form_o">
+    <h2>FORM O — Optional Masters Qualification Block</h2>
+    <form id="form_o">
+      <div class="checkbox-group">
+        <input type="checkbox" id="chk_has_masters" name="has_masters" />
+        <label for="chk_has_masters">Masters Degree — if applicable (স্নাতকোত্তর - যদি থাকে)</label>
+      </div>
+      <div id="masters_details" class="hidden" style="margin-top: 12px; padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1;">
+        <div class="form-group">
+          <label for="o_masters_degree">Degree</label>
+          <select id="o_masters_degree" name="masters_degree">
+            <option value="">Select Degree</option>
+            <option value="msc">M.Sc</option>
+            <option value="mba">M.B.A</option>
+          </select>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM P: Applicant Name English + Additional Name Bengali -->
+  <div class="fixture-section" id="fixture_form_p">
+    <h2>FORM P — English Name & Bengali Name Inputs</h2>
+    <form id="form_p">
+      <div class="form-group">
+        <label for="p_name_en">Applicant's Name (English)</label>
+        <input type="text" id="p_name_en" name="name_en" placeholder="Applicant Name in English" />
+      </div>
+      <div class="form-group">
+        <label for="p_name_bn">আবেদনকারীর নাম (বাংলায়)</label>
+        <input type="text" id="p_name_bn" name="name_bn" placeholder="বাংলায় পূর্ণ নাম লিখুন" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM Q: Marital Status with Conditional Spouse Name -->
+  <div class="fixture-section" id="fixture_form_q">
+    <h2>FORM Q — Marital Status & Conditional Spouse Name</h2>
+    <form id="form_q">
+      <div class="form-group">
+        <label for="q_marital">Marital Status (বৈবাহিক অবস্থা)</label>
+        <select id="q_marital" name="marital_status">
+          <option value="">Select Status</option>
+          <option value="Single">Single (অবিবাহিত)</option>
+          <option value="Married">Married (বিবাহিত)</option>
+        </select>
+      </div>
+      <div class="form-group hidden" id="q_spouse_group">
+        <label for="q_spouse">Spouse Name (স্বামী/স্ত্রীর নাম)</label>
+        <input type="text" id="q_spouse" name="spouse_name" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM R: Exam Centre Select -->
+  <div class="fixture-section" id="fixture_form_r">
+    <h2>FORM R — Preferred Exam Centre</h2>
+    <form id="form_r">
+      <div class="form-group">
+        <label for="r_exam_centre">Preferred Examination Centre (পরীক্ষা কেন্দ্র পছন্দ)</label>
+        <select id="r_exam_centre" name="exam_centre">
+          <option value="">-- Select Exam Centre --</option>
+          <option value="dhaka">Dhaka (ঢাকা)</option>
+          <option value="rajshahi">Rajshahi (রাজশাহী)</option>
+          <option value="chattogram">Chattogram (চট্টগ্রাম)</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM S: Native HTML Select -->
+  <div class="fixture-section" id="fixture_form_s">
+    <h2>FORM S — Native HTML Select (Gender & Religion)</h2>
+    <form id="form_s">
+      <div class="form-group">
+        <label for="s_gender">Gender</label>
+        <select id="s_gender" name="gender">
+          <option value="">Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="s_religion">Religion</label>
+        <select id="s_religion" name="religion">
+          <option value="">Select Religion</option>
+          <option value="Islam">Islam</option>
+          <option value="Hinduism">Hinduism</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM T: Custom ARIA Dropdown -->
+  <div class="fixture-section" id="fixture_form_t">
+    <h2>FORM T — Custom ARIA Dropdown (Combobox & Listbox)</h2>
+    <div class="form-group">
+      <label id="lbl_t_degree">Degree</label>
+      <div role="combobox" aria-labelledby="lbl_t_degree" aria-expanded="false" id="aria_degree_combobox" tabindex="0" style="padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;">
+        <span id="aria_degree_value">Select Degree</span>
+      </div>
+      <input type="hidden" id="hidden_degree_input" name="degree" value="" />
+      <ul role="listbox" id="aria_degree_listbox" class="hidden" style="list-style: none; padding: 0; margin-top: 4px; border: 1px solid #cbd5e1; border-radius: 6px; background: white;">
+        <li role="option" data-value="bsc_eng" style="padding: 8px; cursor: pointer;">B.Sc Engineering</li>
+        <li role="option" data-value="bba" style="padding: 8px; cursor: pointer;">BBA</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FORM U: React Controlled Form -->
+  <div class="fixture-section" id="fixture_form_u">
+    <h2>FORM U — React Controlled Form Simulation</h2>
+    <form id="form_u">
+      <div class="form-group">
+        <label for="u_mobile">Mobile Number</label>
+        <input type="tel" id="u_mobile" name="mobile" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM V: Delayed Dynamic Dropdown -->
+  <div class="fixture-section" id="fixture_form_v">
+    <h2>FORM V — Delayed Dynamic Dropdown (Simulating AJAX)</h2>
+    <form id="form_v">
+      <div class="form-group">
+        <label for="v_category">Job Category</label>
+        <select id="v_category" name="job_category">
+          <option value="">Select Category</option>
+          <option value="engineering">Engineering</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="v_subcat">Subcategory</label>
+        <select id="v_subcat" name="job_subcategory">
+          <option value="">Waiting for Category...</option>
+        </select>
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM W: Unknown Unmapped Field -->
+  <div class="fixture-section" id="fixture_form_w">
+    <h2>FORM W — Unknown Unmapped Field (Manual Review Required)</h2>
+    <form id="form_w">
+      <div class="form-group">
+        <label for="w_novel_field">Rotary Club International Membership ID</label>
+        <input type="text" id="w_novel_field" name="rotary_club_id" />
+      </div>
+    </form>
+  </div>
+
+  <!-- FORM X: Security Controls, CAPTCHA, Declaration & Submit Protection -->
+  <div class="fixture-section" id="fixture_form_x">
+    <h2>FORM X — Security Controls (CAPTCHA, Declaration & Submit Exclusion)</h2>
+    <form id="form_x">
+      <div class="form-group">
+        <label for="x_captcha">Verification Code (CAPTCHA)</label>
+        <input type="text" id="x_captcha" name="captcha_text" placeholder="Enter security code" />
+      </div>
+      <div class="checkbox-group">
+        <input type="checkbox" id="x_legal_declaration" name="legal_consent" />
+        <label for="x_legal_declaration">I confirm that all information provided is accurate and true.</label>
+      </div>
+      <div style="margin-top: 12px;">
+        <button type="submit" id="x_submit_btn" disabled>Final Submit</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // JavaScript bindings for cascading and conditional visibility
+    document.getElementById('cascading_dist').addEventListener('change', function(e) {
+      const upz = document.getElementById('cascading_upz');
+      upz.innerHTML = '<option value="">-- Select Upazila --</option>';
+      if (e.target.value === 'dhaka') {
+        upz.innerHTML += '<option value="dhanmondi">Dhanmondi</option><option value="gulshan">Gulshan</option><option value="mirpur">Mirpur</option>';
+      } else if (e.target.value === 'rajshahi') {
+        upz.innerHTML += '<option value="boalia">Boalia</option><option value="motihar">Motihar</option><option value="rajpara">Rajpara</option>';
+      }
+    });
+
+    document.getElementById('n_grad_degree').addEventListener('change', function(e) {
+      const subj = document.getElementById('n_grad_subject');
+      subj.innerHTML = '<option value="">-- Select Subject --</option>';
+      if (e.target.value === 'bsc_eng') {
+        subj.innerHTML += '<option value="cse">Computer Science & Engineering</option><option value="eee">Electrical & Electronic Engineering</option>';
+      } else if (e.target.value === 'bba') {
+        subj.innerHTML += '<option value="accounting">Accounting</option><option value="finance">Finance</option>';
+      }
+    });
+
+    document.getElementById('q_marital').addEventListener('change', function(e) {
+      const spouseGroup = document.getElementById('q_spouse_group');
+      if (e.target.value === 'Married') {
+        spouseGroup.classList.remove('hidden');
+      } else {
+        spouseGroup.classList.add('hidden');
+        document.getElementById('q_spouse').value = '';
+      }
+    });
+
+    document.getElementById('chk_has_masters').addEventListener('change', function(e) {
+      const details = document.getElementById('masters_details');
+      if (e.target.checked) {
+        details.classList.remove('hidden');
+      } else {
+        details.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('v_category').addEventListener('change', function(e) {
+      const subcat = document.getElementById('v_subcat');
+      subcat.innerHTML = '<option value="">Loading options...</option>';
+      setTimeout(function() {
+        if (e.target.value === 'engineering') {
+          subcat.innerHTML = '<option value="">-- Select Subcategory --</option><option value="civil">Civil Engineering</option><option value="software">Software Engineering</option>';
+        }
+      }, 150);
+    });
+
+    // Custom ARIA Dropdown toggle and selection
+    const combobox = document.getElementById('aria_degree_combobox');
+    const listbox = document.getElementById('aria_degree_listbox');
+    const valDisplay = document.getElementById('aria_degree_value');
+    const hiddenInput = document.getElementById('hidden_degree_input');
+
+    combobox.addEventListener('click', function() {
+      listbox.classList.toggle('hidden');
+    });
+
+    listbox.addEventListener('click', function(e) {
+      if (e.target && e.target.dataset.value) {
+        const selectedVal = e.target.dataset.value;
+        valDisplay.textContent = e.target.textContent;
+        hiddenInput.value = selectedVal;
+        listbox.classList.add('hidden');
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  </script>
+</body>
+</html>

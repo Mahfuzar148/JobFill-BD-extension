@@ -178,16 +178,59 @@ export class FieldMatcher {
       penalties.push({ reason: 'No Bangla indicator present for Bangla name variant', deduction: 35 });
     }
 
-    // Disambiguate primary Mobile Number vs Confirm Mobile Number (-35)
-    const mobileSignalText = `${normLabel} ${tokenizedName} ${tokenizedId}`;
-    const isConfirmSignal = /\b(confirm|retype|re type|reenter|re enter|verify|again|পুনরায়|নিশ্চিতকরণ)\b/.test(
+    // Disambiguate primary Mobile Number vs Confirm Mobile Number (-50)
+    const mobileSignalText = `${evidence.name || ''} ${evidence.id || ''} ${normLabel} ${tokenizedName} ${tokenizedId} ${normPlaceholder} ${normAria}`.toLowerCase();
+    const isConfirmSignal = /(?:confirm|retype|re_type|re-type|reenter|re_enter|re-enter|verify|again|c_mobile|c mobile|\bc_mob\b|\bcmob\b|\bcmobile\b|mobile_confirm|re_mobile|re mobile|পুনরায়|নিশ্চিতকরণ|নিশ্চিত|কনফার্ম)/i.test(
       mobileSignalText
     );
     if (def.canonicalId === 'contact.mobile' && isConfirmSignal) {
-      penalties.push({ reason: 'Confirm Mobile indicator disqualifies primary contact.mobile', deduction: 35 });
+      penalties.push({ reason: 'Confirm Mobile indicator disqualifies primary contact.mobile', deduction: 50 });
     }
-    if (def.canonicalId === 'contact.confirmMobile' && !isConfirmSignal) {
-      penalties.push({ reason: 'No confirmation indicator for contact.confirmMobile', deduction: 35 });
+    if (
+      (def.canonicalId === 'contact.confirmMobile' || def.canonicalId === 'contact.alternateMobile') &&
+      !isConfirmSignal
+    ) {
+      penalties.push({ reason: 'No confirmation indicator for contact.confirmMobile', deduction: 50 });
+    }
+
+    // Disambiguate NID number text input vs NID Yes/No radio/select (-60)
+    const isNidSignal = /(?:nid|national_id|national id|জাতীয় পরিচয়পত্র)/i.test(`${normLabel} ${tokenizedName} ${tokenizedId}`);
+    if (isNidSignal) {
+      const isRadioOrSelect = evidence.inputType === 'radio' || evidence.inputType === 'select';
+      if (def.canonicalId === 'identity.nationalId' && isRadioOrSelect) {
+        penalties.push({ reason: 'Radio or select indicates NID availability question rather than number', deduction: 60 });
+      }
+      if (def.canonicalId === 'candidate.nationalId.hasNid' && evidence.inputType === 'text') {
+        penalties.push({ reason: 'Text input indicates NID number entry rather than Yes/No availability', deduction: 60 });
+      }
+    }
+
+    // Disambiguate general Quota vs specific Freedom Fighter Status/Quota (-35)
+    const ffSignalText = `${normLabel} ${tokenizedName} ${tokenizedId}`;
+    const isFfSignal = /\b(freedom fighter|freedomfighter|muktijoddha|\bff\b|মুক্তিযোদ্ধা)\b/i.test(ffSignalText);
+    if (def.canonicalId === 'applicant.quota' && isFfSignal) {
+      penalties.push({ reason: 'Freedom Fighter indicator disqualifies general applicant.quota', deduction: 35 });
+    }
+    if (def.canonicalId.startsWith('special.freedomFighter') && !isFfSignal) {
+      penalties.push({ reason: 'No Freedom Fighter indicator for special.freedomFighter', deduction: 35 });
+    }
+
+    // Disambiguate Academic Examination vs Exam Centre (-60)
+    const isCentreSignal = /\b(centre|center|কেন্দ্র)\b/i.test(`${normLabel} ${tokenizedName} ${tokenizedId}`);
+    if (def.canonicalId.includes('examination') && isCentreSignal) {
+      penalties.push({ reason: 'Centre indicator disqualifies academic examination definition', deduction: 60 });
+    }
+    if ((def.canonicalId.includes('examCentre') || def.canonicalId.includes('exam_centre')) && !isCentreSignal) {
+      penalties.push({ reason: 'No Centre indicator for exam centre definition', deduction: 60 });
+    }
+
+    // Disambiguate NID Number (Type A) vs Have NID (Type B) (-50)
+    const isHaveNidSignal = /\b(have|has|আছে|available)\b/i.test(`${normLabel} ${tokenizedName} ${tokenizedId}`) || evidence.inputType === 'radio';
+    if (def.canonicalId === 'identity.nationalId' && isHaveNidSignal) {
+      penalties.push({ reason: 'Have NID indicator disqualifies NID number definition', deduction: 50 });
+    }
+    if (def.canonicalId.includes('hasNid') && !isHaveNidSignal) {
+      penalties.push({ reason: 'No Have NID indicator for hasNid definition', deduction: 50 });
     }
 
     // Incompatible data type penalty (-60 if text input tested against strictly non-text definitions like select/checkbox)

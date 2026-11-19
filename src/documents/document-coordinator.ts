@@ -26,6 +26,15 @@ export interface DecryptedDocumentSource {
   dataUrl: string;
 }
 
+export interface AutoAttachDocumentsResult {
+  attempted: number;
+  attachedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  results: DocumentUploadExecutionResult[];
+  pendingManualReview: DocumentApprovalItem[];
+}
+
 export interface DocumentApprovalItem {
   id: string;
   field: DetectedDocumentField;
@@ -297,5 +306,74 @@ export class DocumentUploadCoordinator {
     }
 
     return results;
+  }
+
+  /**
+   * Scans document upload fields (photo, signature, etc.) and automatically attaches
+   * valid, conforming profile documents to empty file inputs without requiring manual clicks.
+   * Only attaches if the input is currently empty and the document passes site requirements.
+   */
+  public static async autoAttachEligibleDocuments(
+    doc: Document,
+    fetchDocumentFn: (type: DocumentCategory) => Promise<DecryptedDocumentSource | null>
+  ): Promise<AutoAttachDocumentsResult> {
+    const plan = await this.buildApprovalPlan(doc, fetchDocumentFn);
+    if (plan.length === 0) {
+      return {
+        attempted: 0,
+        attachedCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        results: [],
+        pendingManualReview: [],
+      };
+    }
+
+    const eligibleToAttach: DocumentApprovalItem[] = [];
+    const pendingManualReview: DocumentApprovalItem[] = [];
+
+    for (const item of plan) {
+      // Only auto-attach if the input is currently empty (never overwrite an already chosen file without asking)
+      const hasExistingFile = item.field.element.files && item.field.element.files.length > 0;
+      if (hasExistingFile) {
+        continue;
+      }
+
+      // Check if document exists and is valid (either directly or via processed copy)
+      const activeValidation = item.useProcessedCopy ? item.processedValidation : item.validation;
+      const isValid = Boolean(activeValidation && activeValidation.isValid);
+
+      if (
+        item.savedOriginal &&
+        isValid &&
+        !item.field.isAmbiguous &&
+        !item.field.isDuplicate &&
+        item.documentType !== 'unknown'
+      ) {
+        item.isApproved = true;
+        eligibleToAttach.push(item);
+      } else {
+        item.isApproved = false;
+        pendingManualReview.push(item);
+      }
+    }
+
+    let results: DocumentUploadExecutionResult[] = [];
+    if (eligibleToAttach.length > 0) {
+      results = await this.executeApprovedUploads(eligibleToAttach);
+    }
+
+    const attachedCount = results.filter((r) => r.status === 'Uploaded').length;
+    const failedCount = results.filter((r) => r.status === 'Upload Failed' || r.status === 'Validation Failed').length;
+    const skippedCount = results.filter((r) => r.status === 'Skipped').length;
+
+    return {
+      attempted: plan.length,
+      attachedCount,
+      failedCount,
+      skippedCount,
+      results,
+      pendingManualReview,
+    };
   }
 }

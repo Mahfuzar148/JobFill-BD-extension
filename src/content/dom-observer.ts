@@ -16,6 +16,23 @@ export class DynamicDomObserver {
   private static navCleanup: (() => void) | null = null;
   private static seenElements = new WeakSet<HTMLElement>();
 
+  private static isElementOrAncestorHidden(el: HTMLElement): boolean {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return true;
+    if (
+      el.hasAttribute('hidden') ||
+      el.getAttribute('aria-hidden') === 'true' ||
+      el.style.display === 'none' ||
+      el.style.visibility === 'hidden' ||
+      el.classList.contains('hidden') ||
+      el.classList.contains('d-none') ||
+      el.classList.contains('hide')
+    ) {
+      return true;
+    }
+    const hiddenAncestor = el.closest?.('[hidden], [aria-hidden="true"], .hidden, .d-none, .hide');
+    return Boolean(hiddenAncestor);
+  }
+
   public static isObserving(): boolean {
     return this.observer !== null;
   }
@@ -56,14 +73,36 @@ export class DynamicDomObserver {
             }
 
             if (tagName === 'input' || tagName === 'select' || tagName === 'textarea') {
-              if (!this.seenElements.has(el)) {
+              if (!this.isElementOrAncestorHidden(el) && !this.seenElements.has(el)) {
                 this.seenElements.add(el);
                 addedInputs.push(el);
               }
             } else if (el.firstElementChild) {
               const nested = el.querySelectorAll<HTMLElement>('input, select, textarea');
               nested.forEach((n) => {
-                if (!this.seenElements.has(n)) {
+                if (!this.isElementOrAncestorHidden(n) && !this.seenElements.has(n)) {
+                  this.seenElements.add(n);
+                  addedInputs.push(n);
+                }
+              });
+            }
+          }
+        } else if (m.type === 'attributes') {
+          const targetEl = m.target as HTMLElement | null;
+          if (!targetEl || targetEl.nodeType !== Node.ELEMENT_NODE) continue;
+          if (targetEl.closest?.(IGNORED_OBSERVER_CONTAINERS)) continue;
+
+          if (!this.isElementOrAncestorHidden(targetEl)) {
+            const tagName = targetEl.tagName.toLowerCase();
+            if (tagName === 'input' || tagName === 'select' || tagName === 'textarea') {
+              if (!this.seenElements.has(targetEl)) {
+                this.seenElements.add(targetEl);
+                addedInputs.push(targetEl);
+              }
+            } else if (targetEl.firstElementChild) {
+              const nested = targetEl.querySelectorAll<HTMLElement>('input, select, textarea');
+              nested.forEach((n) => {
+                if (!this.isElementOrAncestorHidden(n) && !this.seenElements.has(n)) {
                   this.seenElements.add(n);
                   addedInputs.push(n);
                 }
@@ -84,6 +123,8 @@ export class DynamicDomObserver {
     this.observer.observe(root, {
       childList: true,
       subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'hidden'],
     });
     recordExtensionDiagnostic('observer_started', {
       url: typeof window !== 'undefined' ? window.location?.href : null,
@@ -108,6 +149,7 @@ export class DynamicDomObserver {
       this.navCleanup();
       this.navCleanup = null;
     }
+    this.seenElements = new WeakSet<HTMLElement>();
   }
 
   // Detects multi-step SPA transitions using passive browser history events (zero polling timers)

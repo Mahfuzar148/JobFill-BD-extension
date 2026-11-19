@@ -22,6 +22,12 @@ import {
   Search,
   Building2,
   Globe,
+  KeyRound,
+  CheckSquare,
+  Calendar,
+  Scale,
+  Compass,
+  BookOpen,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -29,10 +35,18 @@ export type DashboardTab =
   | 'overview'
   | 'search'
   | 'circulars'
+  | 'eligibility'
+  | 'readiness'
+  | 'calendar'
+  | 'compare'
+  | 'opportunities'
+  | 'career_planner'
+  | 'exam_center'
   | 'govt_orgs'
   | 'portals'
   | 'notifications'
   | 'tracker'
+  | 'cv_builder'
   | 'personal'
   | 'family'
   | 'address'
@@ -40,6 +54,7 @@ export type DashboardTab =
   | 'additional'
   | 'experience'
   | 'documents'
+  | 'credentials'
   | 'autofill'
   | 'mappings'
   | 'history'
@@ -77,7 +92,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   unreadNotificationsCount = 0,
   closingSoonCount = 0,
 }) => {
-  const { language } = useApp();
+  const { language, userMode, setUserMode } = useApp();
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Record<number, boolean>>({});
+  const toggleGroup = (idx: number) =>
+    setCollapsedGroups((prev) => ({ ...prev, [idx]: !prev[idx] }));
 
   const navGroups: NavGroup[] = [
     {
@@ -103,6 +121,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
           labelBn: 'জব সার্কুলার',
           icon: Megaphone,
           badge: closingSoonCount > 0 ? `${closingSoonCount} Soon` : 'New',
+        },
+        {
+          id: 'eligibility',
+          labelEn: 'Eligibility Checker',
+          labelBn: 'যোগ্যতা যাচাই',
+          icon: CheckSquare,
+        },
+        {
+          id: 'readiness',
+          labelEn: 'Readiness Checker',
+          labelBn: 'আবেদন প্রস্তুতি',
+          icon: CheckCircle,
+        },
+        {
+          id: 'calendar',
+          labelEn: 'Career Calendar',
+          labelBn: 'ক্যারিয়ার ক্যালেন্ডার',
+          icon: Calendar,
+        },
+        {
+          id: 'compare',
+          labelEn: 'Job Comparison',
+          labelBn: 'চাকরি তুলনা',
+          icon: Scale,
+        },
+        {
+          id: 'opportunities',
+          labelEn: 'Scholarships & Internships',
+          labelBn: 'বৃত্তি ও ইন্টার্নশিপ',
+          icon: GraduationCap,
+        },
+        {
+          id: 'career_planner',
+          labelEn: 'Career Planner',
+          labelBn: 'ক্যারিয়ার প্ল্যানার',
+          icon: Compass,
+        },
+        {
+          id: 'exam_center',
+          labelEn: 'Exam & Study Center',
+          labelBn: 'পরীক্ষা ও প্রস্তুতি',
+          icon: BookOpen,
         },
         {
           id: 'govt_orgs',
@@ -142,6 +202,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'additional', labelEn: 'Skills & Training', labelBn: 'দক্ষতা ও প্রশিক্ষণ', icon: Award },
         { id: 'experience', labelEn: 'Job Experience', labelBn: 'চাকরির অভিজ্ঞতা', icon: Briefcase },
         { id: 'documents', labelEn: 'Documents & Photos', labelBn: 'ছবি ও সনদপত্র', icon: FileText },
+        { id: 'cv_builder', labelEn: 'CV Builder', labelBn: 'সিভি বিল্ডার', icon: FileText, badge: 'A4' },
+        { id: 'credentials', labelEn: 'Password Manager & Vault', labelBn: 'পাসওয়ার্ড ম্যানেজার (ভল্ট)', icon: KeyRound, badge: 'Safe' },
       ],
     },
     {
@@ -180,9 +242,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </h1>
           <p className="text-[10px] text-slate-400 leading-tight truncate">
-            Smart Bangladesh Job Assistant
+            Your Smart Career &amp; Job Application Assistant
           </p>
         </div>
+      </div>
+
+      {/* Student / Job Seeker Mode Switcher */}
+      <div className="mx-3 mt-2.5 p-1 bg-slate-900 rounded-xl border border-slate-800 grid grid-cols-2 gap-1 text-[10.5px] font-bold">
+        <button
+          type="button"
+          onClick={() => setUserMode('student')}
+          className={`py-1.5 px-2 rounded-lg transition cursor-pointer ${
+            userMode === 'student'
+              ? 'bg-petro-600 text-white shadow'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          🎓 {language === 'bn' ? 'স্টুডেন্ট' : 'Student'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setUserMode('job_seeker')}
+          className={`py-1.5 px-2 rounded-lg transition cursor-pointer ${
+            userMode === 'job_seeker'
+              ? 'bg-petro-600 text-white shadow'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          💼 {language === 'bn' ? 'চাকরিপ্রার্থী' : 'Job Seeker'}
+        </button>
       </div>
 
       {/* Profile Completion Meter */}
@@ -214,14 +302,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation List */}
-      <nav className="flex-1 px-3 py-1 space-y-4 overflow-y-auto custom-scrollbar">
-        {navGroups.map((group, gIdx) => (
+      <nav className="flex-1 px-3 py-1 space-y-3 overflow-y-auto custom-scrollbar">
+        {navGroups.map((group, gIdx) => {
+          const isCollapsed = Boolean(collapsedGroups[gIdx]);
+          return (
           <div key={gIdx} className="space-y-1">
-            <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              {language === 'bn' ? group.groupBn : group.groupEn}
-            </div>
+            <button
+              type="button"
+              onClick={() => toggleGroup(gIdx)}
+              className="w-full flex items-center justify-between px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              <span>{language === 'bn' ? group.groupBn : group.groupEn}</span>
+              <span>{isCollapsed ? '▸' : '▾'}</span>
+            </button>
 
-            {group.items.map((item) => {
+            {!isCollapsed && group.items.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
@@ -259,7 +354,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer Local-First Notice */}

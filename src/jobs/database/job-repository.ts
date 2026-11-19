@@ -18,6 +18,10 @@ import { refreshJobStatus } from '../services/job-validator';
 import { buildSearchIndexEntries, SEARCH_INDEX_SCHEMA_VERSION } from '../services/search-engine';
 import { migrateLegacyCircularRecord } from '../services/application-link-detector';
 import { computeJobFieldVerification } from '../services/job-normalizer';
+import { JobGradeExtractor } from '../services/grade-extractor';
+import { JobTaxonomyClassifier } from '../services/taxonomy-classifier';
+import { JobTaxonomyRegistry } from '../taxonomy/job-taxonomy';
+import { getSeedCirculars } from '../data/seed-circulars';
 
 const FALLBACK_PREFIX = 'jobfill_idb_fallback_';
 const KEY_JOB_PREFERENCES = 'jobfill_job_preferences_v1';
@@ -294,14 +298,66 @@ function ensureJobFieldProvenance(job: NormalizedJobCircular): NormalizedJobCirc
   const needsUpgrade =
     !job.fieldVerification ||
     !job.timezone ||
-    typeof job.sourceLastVerifiedAt !== 'number';
+    typeof job.sourceLastVerifiedAt !== 'number' ||
+    job.gradeVerificationStatus === undefined ||
+    job.taxonomyCategoryId === undefined;
   if (!needsUpgrade) return job;
-  return {
+
+  let gradeInfo = {
+    gradeNumber: job.gradeNumber ?? null,
+    gradeLabel: job.gradeLabel ?? '',
+    gradeOriginalText: job.gradeOriginalText,
+    gradeVerificationStatus: job.gradeVerificationStatus ?? 'NOT_SPECIFIED',
+  };
+
+  if (job.gradeVerificationStatus === undefined) {
+    const extracted = JobGradeExtractor.extractJobGrade({
+      jobTitle: job.jobTitle,
+      position: job.position,
+      description: job.description,
+      salaryText: job.salary,
+      category: job.category,
+      sourceVerification: job.sourceVerification,
+    });
+    gradeInfo = {
+      gradeNumber: extracted.gradeNumber,
+      gradeLabel: extracted.gradeLabel,
+      gradeOriginalText: extracted.gradeOriginalText,
+      gradeVerificationStatus: extracted.gradeVerificationStatus,
+    };
+  }
+
+  const upgraded: NormalizedJobCircular = {
     ...job,
     timezone: job.timezone || job.deadlineTimezone || 'Asia/Dhaka',
     sourceLastVerifiedAt: job.sourceLastVerifiedAt ?? job.sourceLastCheckedAt,
     fieldVerification: job.fieldVerification || computeJobFieldVerification(job),
+    gradeNumber: gradeInfo.gradeNumber,
+    gradeLabel: gradeInfo.gradeLabel,
+    gradeOriginalText: gradeInfo.gradeOriginalText,
+    gradeVerificationStatus: gradeInfo.gradeVerificationStatus,
   };
+
+  if (
+    upgraded.taxonomyCategoryId === undefined ||
+    !upgraded.taxonomyCategoryIds ||
+    upgraded.taxonomyCategoryIds.length === 0
+  ) {
+    JobTaxonomyClassifier.enrichJobWithTaxonomy(upgraded);
+  } else {
+    // Ensure canonical ID resolution for legacy categories
+    upgraded.taxonomyCategoryId = JobTaxonomyRegistry.resolveCategoryId(upgraded.taxonomyCategoryId);
+    if (!upgraded.primaryCategoryId) {
+      upgraded.primaryCategoryId = upgraded.taxonomyCategoryId;
+    }
+    if (upgraded.taxonomyCategoryIds) {
+      upgraded.taxonomyCategoryIds = upgraded.taxonomyCategoryIds.map((id) =>
+        JobTaxonomyRegistry.resolveCategoryId(id)
+      );
+    }
+  }
+
+  return upgraded;
 }
 
 export class JobRepository {
@@ -352,7 +408,7 @@ export class JobRepository {
     return jobsCrud.getAll();
   }
 
-  public static async getAllJobs(now: number = Date.now()): Promise<NormalizedJobCircular[]> {
+  public static async getAllJobs(now: number = Date.now(), opts?: { seedIfEmpty?: boolean }): Promise<NormalizedJobCircular[]> {
     if (this.inFlightGetAllJobsPromise) {
       const shared = await this.inFlightGetAllJobsPromise;
       return shared.map((j) => refreshJobStatus(j, now));
@@ -360,7 +416,18 @@ export class JobRepository {
 
     const loadTask = (async () => {
       await this.migrateLegacyUrlsIfNeeded(false);
-      const items = await jobsCrud.getAll();
+      let items = await jobsCrud.getAll();
+      if (items.length === 0 && opts?.seedIfEmpty) {
+        const seedItems = getSeedCirculars();
+        if (seedItems.length > 0) {
+          try {
+            await jobsCrud.putMany(seedItems);
+          } catch {
+            // storage fallback safe
+          }
+          items = seedItems;
+        }
+      }
       return items.map((j) => {
         const migrated = migrateLegacyCircularRecord(j);
         const enriched = ensureJobFieldProvenance(migrated.job);
@@ -376,6 +443,18 @@ export class JobRepository {
         this.inFlightGetAllJobsPromise = null;
       }
     }
+  }
+
+  public static async seedBpscCirculars(): Promise<number> {
+    const bpscList = getSeedCirculars();
+    const existing = await jobsCrud.getAll();
+    const existingIds = new Set(existing.map((j) => j.id));
+    const toAdd = bpscList.filter((j) => !existingIds.has(j.id));
+    if (toAdd.length > 0) {
+      await jobsCrud.putMany(toAdd);
+      this.inFlightGetAllJobsPromise = null;
+    }
+    return toAdd.length;
   }
 
   public static async getJobById(id: string, now: number = Date.now()): Promise<NormalizedJobCircular | null> {

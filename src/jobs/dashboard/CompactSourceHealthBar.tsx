@@ -116,6 +116,11 @@ export const CompactSourceHealthBar: React.FC<CompactSourceHealthBarProps> = ({
             <span className="text-slate-900 dark:text-white font-bold">
               {formatSourceHealthHeadline(summary, bn)}
             </span>
+            {summary.totalSources > summary.attemptedSources && (
+              <span className="text-[11px] text-slate-500 font-medium">
+                ({bn ? `মোট ${toBanglaDigits(summary.totalSources)}টি` : `of ${summary.totalSources} total`})
+              </span>
+            )}
           </span>
 
           {summary.successfulSources > 0 && (

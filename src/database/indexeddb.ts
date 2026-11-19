@@ -4,25 +4,38 @@
 // Fully local, persistent, and sandboxed inside Chrome.
 
 export const DB_NAME = 'JobFillBD_SecureStorage';
-export const DB_VERSION = 8;
+export const DB_VERSION = 12;
 
 export const STORES = {
   PROFILES: 'profiles',
   EDUCATION_RECORDS: 'education_records',
   EXPERIENCE_RECORDS: 'experience_records',
   VAULT_STORE: 'encrypted_vault',
+  CREDENTIALS: 'credential_vault',
+  CV_DOCUMENTS: 'cv_documents',
+  CALENDAR_EVENTS: 'calendar_events',
+  EXAM_ATTEMPTS: 'exam_attempts',
+  VOCABULARY_ITEMS: 'vocabulary_items',
+  STUDY_NOTES: 'study_notes',
   DOCUMENTS: 'documents',
   MAPPINGS: 'mappings',
   HISTORY: 'history',
   JOBS: 'jobs',
   BOOKMARKS: 'bookmarks',
   APPLICATIONS: 'applications',
+  JOB_VISITS: 'job_visits',
   NOTIFICATIONS: 'notifications',
   SEARCH_INDEX: 'search_index',
   SYNC_HISTORY: 'sync_history',
   GOVT_ORGS: 'govt_orgs',
   SOURCE_HEALTH: 'source_health',
   MIGRATION_LOGS: 'migration_logs',
+  EXAM_SCHEDULES: 'exam_schedules',
+  ADMIT_CARD_NOTICES: 'admit_card_notices',
+  SEAT_PLAN_NOTICES: 'seat_plan_notices',
+  JOB_RESULTS: 'job_results',
+  LIFECYCLE_EVENTS: 'lifecycle_events',
+  NOTICE_HISTORY: 'notice_history',
 } as const;
 
 const OPEN_TIMEOUT_MS = 4000;
@@ -200,6 +213,107 @@ export class IndexedDBManager {
         if (!db.objectStoreNames.contains(STORES.MIGRATION_LOGS)) {
           const migStore = db.createObjectStore(STORES.MIGRATION_LOGS, { keyPath: 'id' });
           migStore.createIndex('completedAt', 'completedAt', { unique: false });
+        }
+
+        // 17. Local-Only Credential Vault Store (v9 additive store — encrypted envelopes only)
+        if (!db.objectStoreNames.contains(STORES.CREDENTIALS)) {
+          const credStore = db.createObjectStore(STORES.CREDENTIALS, { keyPath: 'id' });
+          credStore.createIndex('origin', 'origin', { unique: false });
+          credStore.createIndex('portalName', 'portalName', { unique: false });
+          credStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 18. Local CV Builder Store (v9 additive store)
+        if (!db.objectStoreNames.contains(STORES.CV_DOCUMENTS)) {
+          const cvStore = db.createObjectStore(STORES.CV_DOCUMENTS, { keyPath: 'id' });
+          cvStore.createIndex('profileId', 'profileId', { unique: false });
+          cvStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 19. Unified Career Calendar Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.CALENDAR_EVENTS)) {
+          const calStore = db.createObjectStore(STORES.CALENDAR_EVENTS, { keyPath: 'id' });
+          calStore.createIndex('date', 'date', { unique: false });
+          calStore.createIndex('kind', 'kind', { unique: false });
+          calStore.createIndex('sourceRefId', 'sourceRefId', { unique: false });
+        }
+
+        // 20. Exam Practice Attempts & Analytics Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.EXAM_ATTEMPTS)) {
+          const examStore = db.createObjectStore(STORES.EXAM_ATTEMPTS, { keyPath: 'id' });
+          examStore.createIndex('subject', 'subject', { unique: false });
+          examStore.createIndex('completedAt', 'completedAt', { unique: false });
+        }
+
+        // 21. Vocabulary Builder & Spaced Repetition Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.VOCABULARY_ITEMS)) {
+          const vocabStore = db.createObjectStore(STORES.VOCABULARY_ITEMS, { keyPath: 'id' });
+          vocabStore.createIndex('word', 'word', { unique: false });
+          vocabStore.createIndex('nextReviewAt', 'nextReviewAt', { unique: false });
+          vocabStore.createIndex('saved', 'saved', { unique: false });
+        }
+
+        // 22. Study Notes, Career Goals & Interview Prep Store (v10 additive store)
+        if (!db.objectStoreNames.contains(STORES.STUDY_NOTES)) {
+          const noteStore = db.createObjectStore(STORES.STUDY_NOTES, { keyPath: 'id' });
+          noteStore.createIndex('kind', 'kind', { unique: false });
+          noteStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+
+        // 23. Job Circular Visits Store (v11 additive store)
+        if (!db.objectStoreNames.contains(STORES.JOB_VISITS)) {
+          const visitStore = db.createObjectStore(STORES.JOB_VISITS, { keyPath: 'visitId' });
+          visitStore.createIndex('jobId', 'jobId', { unique: false });
+          visitStore.createIndex('canonicalUrl', 'canonicalUrl', { unique: false });
+          visitStore.createIndex('lastVisitedAt', 'lastVisitedAt', { unique: false });
+          visitStore.createIndex('sourceId', 'sourceId', { unique: false });
+        }
+
+        // 24. Exam Schedules Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.EXAM_SCHEDULES)) {
+          const examStore = db.createObjectStore(STORES.EXAM_SCHEDULES, { keyPath: 'id' });
+          examStore.createIndex('circularId', 'circularId', { unique: false });
+          examStore.createIndex('stage', 'stage', { unique: false });
+          examStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 25. Admit Card Notices Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.ADMIT_CARD_NOTICES)) {
+          const admitStore = db.createObjectStore(STORES.ADMIT_CARD_NOTICES, { keyPath: 'id' });
+          admitStore.createIndex('circularId', 'circularId', { unique: false });
+          admitStore.createIndex('stage', 'stage', { unique: false });
+          admitStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 26. Seat Plan Notices Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.SEAT_PLAN_NOTICES)) {
+          const seatStore = db.createObjectStore(STORES.SEAT_PLAN_NOTICES, { keyPath: 'id' });
+          seatStore.createIndex('circularId', 'circularId', { unique: false });
+          seatStore.createIndex('stage', 'stage', { unique: false });
+          seatStore.createIndex('status', 'status', { unique: false });
+        }
+
+        // 27. Job Results Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.JOB_RESULTS)) {
+          const resultStore = db.createObjectStore(STORES.JOB_RESULTS, { keyPath: 'id' });
+          resultStore.createIndex('circularId', 'circularId', { unique: false });
+          resultStore.createIndex('stage', 'stage', { unique: false });
+          resultStore.createIndex('publicationStatus', 'publicationStatus', { unique: false });
+        }
+
+        // 28. Lifecycle Events Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.LIFECYCLE_EVENTS)) {
+          const lifecycleStore = db.createObjectStore(STORES.LIFECYCLE_EVENTS, { keyPath: 'id' });
+          lifecycleStore.createIndex('circularId', 'circularId', { unique: false });
+          lifecycleStore.createIndex('eventType', 'eventType', { unique: false });
+          lifecycleStore.createIndex('eventDate', 'eventDate', { unique: false });
+        }
+
+        // 29. Notice History Store (v12 additive store)
+        if (!db.objectStoreNames.contains(STORES.NOTICE_HISTORY)) {
+          const noticeStore = db.createObjectStore(STORES.NOTICE_HISTORY, { keyPath: 'id' });
+          noticeStore.createIndex('circularId', 'circularId', { unique: false });
+          noticeStore.createIndex('noticeType', 'noticeType', { unique: false });
         }
       };
 

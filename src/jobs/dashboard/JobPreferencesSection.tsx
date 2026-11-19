@@ -153,6 +153,97 @@ export const JobPreferencesSection: React.FC<JobPreferencesSectionProps> = ({ sh
             className="w-4 h-4 rounded text-petro-600"
           />
         </label>
+
+        <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+          <div>
+            <div className="text-xs font-bold text-slate-800 dark:text-white">
+              {bn ? 'পরীক্ষার তারিখ ও রিমাইন্ডার' : 'Upcoming Exam Reminders (7d Window)'}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {bn ? 'ট্র্যাকারের পরীক্ষার ৭ দিন আগে থেকে রিমাইন্ডার' : 'Alerts when tracked exam dates fall within 7 days'}
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={prefs.examRemindersEnabled !== false}
+            onChange={(e) => persist({ ...prefs, examRemindersEnabled: e.target.checked })}
+            className="w-4 h-4 rounded text-petro-600"
+          />
+        </label>
+
+        <label className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 cursor-pointer">
+          <div>
+            <div className="text-xs font-bold text-slate-800 dark:text-white">
+              {bn ? 'প্রবেশপত্র ও ফলাফল অ্যালার্ট' : 'Admit Card & Result Alerts'}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {bn ? 'ট্র্যাকারে Admit Available বা Result যোগ হলে নোটিফিকেশন' : 'Notifies on Admit Card availability and result status updates'}
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={prefs.admitResultAlertsEnabled !== false}
+            onChange={(e) => persist({ ...prefs, admitResultAlertsEnabled: e.target.checked })}
+            className="w-4 h-4 rounded text-petro-600"
+          />
+        </label>
+      </div>
+
+      {/* Default Lead Reminder Offsets + Reliability Note */}
+      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-bold text-slate-700 dark:text-slate-200">
+            {bn ? 'রিমাইন্ডার সময়সূচি নির্বাচন:' : 'Reminder Lead Windows:'}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { hrs: 168, label: '7 Days' },
+              { hrs: 48, label: '48 Hours' },
+              { hrs: 24, label: '24 Hours' },
+            ].map((opt) => {
+              const currentLeads = prefs.reminderLeadHours ?? [168, 48, 24];
+              const active = currentLeads.includes(opt.hrs);
+              return (
+                <button
+                  key={opt.hrs}
+                  type="button"
+                  onClick={() => {
+                    const next = active
+                      ? currentLeads.filter((h) => h !== opt.hrs)
+                      : [...currentLeads, opt.hrs].sort((a, b) => b - a);
+                    persist({ ...prefs, reminderLeadHours: next });
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold border cursor-pointer ${
+                    active
+                      ? 'bg-petro-600 text-white border-petro-700'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+            <input
+              type="number"
+              min={1}
+              max={720}
+              placeholder={bn ? 'কাস্টম (ঘণ্টা)' : 'Custom hrs'}
+              value={prefs.customReminderHours ?? ''}
+              onChange={(e) =>
+                persist({
+                  ...prefs,
+                  customReminderHours: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              className="w-24 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 bg-white dark:bg-slate-900 text-slate-800 dark:text-white"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5">
+          {bn
+            ? '⏰ নোট: ব্রাউজার বন্ধ থাকলে, কম্পিউটার Sleep মোডে থাকলে অথবা OS ব্যাকগ্রাউন্ড টাস্ক সীমিত করলে নোটিফিকেশন দেরিতে আসতে পারে। অ-যাচাইকৃত ডেডলাইন কখনো নিশ্চিত ডেডলাইন হিসেবে অ্যালার্ট দেওয়া হয় না।'
+            : '⏰ Note: Notifications depend on Chrome/Edge background alarms (Asia/Dhaka) and may be delayed while the browser is closed or device is asleep. Unverified deadlines are never treated as confirmed.'}
+        </p>
       </div>
 
       {/* Preferred Categories */}

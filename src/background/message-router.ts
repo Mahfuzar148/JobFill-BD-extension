@@ -8,9 +8,15 @@ import { isTabToolbarDismissed, setTabToolbarDismissed } from './toolbar-state';
 import { isExcludedSiteUrl } from '../security/site-policy';
 import { getExtensionDiagnostics, recordExtensionDiagnostic } from '../security/diagnostics';
 import { DocumentRepository } from '../database/document-repository';
-import { DocumentCategory } from '../types/profile';
+import { HistoryRepository } from '../database/history-repository';
+import { DocumentCategory, AutofillHistoryRecord } from '../types/profile';
 import { JobCheckService } from '../jobs/background/job-check-service';
 import { JobAlarmManager } from '../jobs/background/alarm-manager';
+import { CredentialVaultRepository } from '../credentials/credential-repository';
+import { isStrictOriginMatch } from '../credentials/origin-matcher';
+import { JobVisitRepository } from '../jobs/database/job-visit-repository';
+import { ApplicationRepository } from '../jobs/database/application-repository';
+import { ProfileDiffEngine, DetectedProfileDiffItem } from '../services/profile-diff-engine';
 import {
   getActiveProfile,
   getAllProfiles,
@@ -44,7 +50,40 @@ export interface ExtensionMessage {
     | 'SYNC_VAULT_LOCK'
     | 'GET_EXTENSION_DIAGNOSTICS'
     | 'GET_TAB_TOOLBAR_STATE'
-    | 'SET_TAB_TOOLBAR_DISMISSED';
+    | 'SET_TAB_TOOLBAR_DISMISSED'
+    | 'CRED_VAULT_GET_STATUS'
+    | 'CRED_VAULT_FIND_FOR_TAB'
+    | 'CRED_VAULT_FILL_TAB'
+    | 'CRED_VAULT_SAVE_MANUAL'
+    | 'CRED_VAULT_UNLOCK'
+    | 'CRED_VAULT_LOCK'
+    | 'OPEN_APPLICATION_PORTAL_TAB'
+    | 'RECORD_JOB_CIRCULAR_VISIT'
+    | 'GET_JOB_VISITS'
+    | 'CLEAR_JOB_VISITS'
+    | 'REMOVE_JOB_VISIT'
+    | 'GET_VISIT_TRACKING_ENABLED'
+    | 'SET_VISIT_TRACKING_ENABLED'
+    | 'RECORD_APPLICATION_SUBMIT_ATTEMPT'
+    | 'CONFIRM_APPLICATION_SUBMISSION'
+    | 'MOVE_JOB_TO_APPLIED'
+    | 'GET_VISITED_AND_APPLIED_LISTS'
+    | 'REMOVE_FROM_VISITED'
+    | 'FLAG_APPLICATION_NEEDS_CONFIRMATION'
+    | 'REPAIR_MISCLASSIFIED_APPLICATIONS'
+    | 'GET_TRUSTED_AUTOFILL_ORIGINS'
+    | 'SET_TRUSTED_AUTOFILL_ORIGIN'
+    | 'PROFILE_UPDATE_APPROVE'
+    | 'PROFILE_UPDATE_UNDO'
+    | 'GET_PROFILE_CHANGE_HISTORY'
+    | 'CLEAR_PROFILE_CHANGE_HISTORY'
+    | 'RECORD_AUTOFILL_SESSION_START'
+    | 'RECORD_AUTOFILL_SESSION_COMPLETE'
+    | 'RECORD_AUTOFILL_SESSION_UPDATE'
+    | 'GET_AUTOFILL_HISTORY'
+    | 'GET_AUTOFILL_STATISTICS'
+    | 'DELETE_AUTOFILL_HISTORY_ITEM'
+    | 'CLEAR_ALL_AUTOFILL_HISTORY';
   payload?: any;
 }
 
@@ -237,7 +276,7 @@ export class MessageRouter {
           try {
             const documents: Record<string, any> = {};
             for (const docType of requestedTypes) {
-              const found = await DocumentRepository.getByCategory(profileId, docType, false);
+              const found = await DocumentRepository.getByCategory(profileId, docType, true);
               if (found) {
                 documents[docType] = {
                   metadata: found.metadata,
@@ -435,6 +474,778 @@ export class MessageRouter {
           const dismissed = Boolean(message.payload?.dismissed);
           await setTabToolbarDismissed(rawTabId, dismissed);
           sendResponse({ status: 'ok', tabId: rawTabId, dismissed });
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_GET_STATUS': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault status restricted to extension UI.' });
+            return;
+          }
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', vaultStatus });
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_FIND_FOR_TAB': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          const targetUrl = String(message.payload?.url || sender.tab?.url || '');
+          if (sender.tab && sender.tab.url && !isStrictOriginMatch(targetUrl, sender.tab.url).matched) {
+            sendResponse({ status: 'denied', matches: [] });
+            return;
+          }
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          if (!vaultStatus.initialized) {
+            sendResponse({ status: 'uninitialized', vaultStatus, matches: [] });
+            return;
+          }
+          if (!vaultStatus.unlocked) {
+            // When locked, return ONLY non-secret origin-matched portal summary names (zero passwords/usernames)
+            const summaries = await CredentialVaultRepository.listPortalSummaries();
+            const originMatched = summaries.filter((s) => isStrictOriginMatch(s.origin, targetUrl).matched);
+            sendResponse({
+              status: 'locked',
+              vaultStatus,
+              matches: originMatched.map((s) => ({
+                id: s.id,
+                portalName: s.portalName,
+                origin: s.origin,
+                organization: s.organization,
+                jobTitle: s.jobTitle,
+                accountType: s.accountType,
+              })),
+            });
+            return;
+          }
+          const matches = await CredentialVaultRepository.findMatchingForPageUrl(targetUrl);
+          sendResponse({
+            status: 'ok',
+            vaultStatus,
+            matches: matches.map((m) => ({
+              id: m.id,
+              portalName: m.portalName,
+              origin: m.origin,
+              organization: m.organization,
+              jobTitle: m.jobTitle,
+              accountType: m.accountType,
+              username: m.username,
+              userId: m.userId,
+              applicantId: m.applicantId,
+            })),
+          });
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_FILL_TAB': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          const isExtensionUI = originUrl.startsWith('chrome-extension://');
+          const isAuthorizedPortalTab = Boolean(sender.tab && sender.tab.id && originUrl.startsWith('https://'));
+
+          if (!isExtensionUI && !isAuthorizedPortalTab) {
+            sendResponse({ status: 'denied', error: 'Credential fill trigger restricted to extension UI or authorized portal tab.' });
+            return;
+          }
+          if (!message.payload?.explicitUserInitiated) {
+            sendResponse({ status: 'denied', error: 'Explicit user confirmation required.' });
+            return;
+          }
+          if (!CredentialVaultRepository.isUnlocked()) {
+            sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
+            return;
+          }
+          const targetTabId = Number(message.payload?.tabId) || sender.tab?.id;
+          const targetUrl = String(message.payload?.tabUrl || sender.tab?.url || '');
+          const credentialId = String(message.payload?.credentialId || '');
+          const fillMode = message.payload?.fillMode || 'both';
+
+          if (!targetTabId) {
+            sendResponse({ status: 'error', error: 'Target tab ID missing.' });
+            return;
+          }
+
+          const allCreds = await CredentialVaultRepository.listDecryptedCredentials();
+          const entry = allCreds.find((c) => c.id === credentialId);
+          if (!entry) {
+            sendResponse({ status: 'error', error: 'Credential not found.' });
+            return;
+          }
+          const originCheck = isStrictOriginMatch(entry.origin, targetUrl);
+          if (!originCheck.matched) {
+            sendResponse({ status: 'denied', error: originCheck.reason });
+            return;
+          }
+          if (sender.tab?.url && !isStrictOriginMatch(entry.origin, sender.tab.url).matched) {
+            sendResponse({ status: 'denied', error: 'Sender tab origin does not match credential origin.' });
+            return;
+          }
+          const fillResponse = await chrome.tabs.sendMessage(targetTabId, {
+            action: 'FILL_CREDENTIAL_LOGIN',
+            explicitUserInitiated: true,
+            payload: {
+              expectedOrigin: entry.origin,
+              username: entry.username,
+              userId: entry.userId,
+              applicantId: entry.applicantId,
+              password: fillMode === 'username_only' ? undefined : entry.password,
+              fillMode,
+            },
+          });
+          void CredentialVaultRepository.updateLastUsed(entry.id);
+          sendResponse({ status: 'ok', result: fillResponse });
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message || 'Credential fill failed.' });
+        });
+        return true;
+      }
+
+      case 'OPEN_APPLICATION_PORTAL_TAB': {
+        (async () => {
+          const rawUrl = String(message.payload?.url || '').trim();
+          const check = ApplicationRepository.sanitizeAndValidateUrl(rawUrl);
+          if (!check.isValid || check.isPdfCircular) {
+            sendResponse({ status: 'error', error: check.reason || 'Invalid portal URL' });
+            return;
+          }
+
+          // Save active portal context
+          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+            await chrome.storage.local.set({
+              jobfill_active_portal_login_context: {
+                jobId: message.payload?.jobId || '',
+                jobTitle: message.payload?.jobTitle || '',
+                organization: message.payload?.organization || '',
+                loginUrl: check.normalizedUrl,
+                credentialId: message.payload?.credentialId || null,
+                openedAt: Date.now(),
+              },
+            });
+          }
+
+          if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+            const tab = await chrome.tabs.create({ url: check.normalizedUrl, active: true });
+            sendResponse({ status: 'ok', tabId: tab.id });
+          } else {
+            sendResponse({ status: 'ok', tabId: null });
+          }
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message });
+        });
+        return true;
+      }
+
+      case 'CRED_VAULT_SAVE_MANUAL': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && sender.tab.url) {
+            const check = isStrictOriginMatch(message.payload?.origin || message.payload?.portalUrl, sender.tab.url);
+            if (!check.matched) {
+              sendResponse({ status: 'denied', error: `Origin mismatch: ${check.reason}` });
+              return;
+            }
+          }
+          if (!CredentialVaultRepository.isUnlocked()) {
+            sendResponse({ status: 'locked', error: 'Unlock Credential Vault first.' });
+            return;
+          }
+          const saved = await CredentialVaultRepository.saveCredential(message.payload);
+          sendResponse({ status: 'ok', id: saved.id, origin: saved.origin });
+        })().catch((err) => {
+          sendResponse({ status: 'error', error: err?.message || 'Could not save credential.' });
+        });
+        return true;
+      }
+
+      case 'PROFILE_UPDATE_APPROVE': {
+        (async () => {
+          try {
+            const approvedItems: DetectedProfileDiffItem[] = message.payload?.approvedItems || [];
+            const sourceOrigin = String(message.payload?.sourceOrigin || sender.tab?.url || '');
+            const profile = await getActiveProfile();
+            const result = await ProfileDiffEngine.applyApprovedDiffs(profile, approvedItems, sourceOrigin);
+            sendResponse({
+              status: 'ok',
+              appliedCount: result.appliedCount,
+              updatedProfile: result.updatedProfile,
+            });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message || 'Profile update failed.' });
+          }
+        })();
+        return true;
+      }
+
+      case 'PROFILE_UPDATE_UNDO': {
+        (async () => {
+          try {
+            const recordId = String(message.payload?.historyRecordId || '');
+            const result = await ProfileDiffEngine.undoChange(recordId);
+            sendResponse({
+              status: 'ok',
+              reverted: result.reverted,
+              fieldKey: result.fieldKey,
+              updatedProfile: result.updatedProfile,
+            });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message || 'Undo failed.' });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_PROFILE_CHANGE_HISTORY': {
+        (async () => {
+          try {
+            const history = await ProfileDiffEngine.getChangeHistory();
+            sendResponse({ status: 'ok', history });
+          } catch (err: any) {
+            sendResponse({ status: 'error', history: [] });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_PROFILE_CHANGE_HISTORY': {
+        (async () => {
+          try {
+            await ProfileDiffEngine.clearChangeHistory();
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error' });
+          }
+        })();
+        return true;
+      }
+
+      case 'CRED_VAULT_UNLOCK': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault unlock restricted to extension UI.' });
+            return;
+          }
+          const masterPassword = String(message.payload?.masterPassword || '');
+          const unlocked = await CredentialVaultRepository.unlockVault(masterPassword);
+          if (!unlocked) {
+            sendResponse({ status: 'invalid', ok: false, error: 'Incorrect master password.' });
+            return;
+          }
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', ok: true, vaultStatus });
+        })().catch((err) => {
+          sendResponse({ status: 'error', ok: false, error: err?.message || 'Unlock failed.' });
+        });
+        return true;
+      }
+
+      case 'CRED_VAULT_LOCK': {
+        (async () => {
+          const originUrl = sender.tab?.url || sender.url || '';
+          if (sender.tab && !originUrl.startsWith('chrome-extension://')) {
+            sendResponse({ status: 'denied', error: 'Credential vault lock restricted to extension UI.' });
+            return;
+          }
+          CredentialVaultRepository.lockVault();
+          const vaultStatus = await CredentialVaultRepository.getStatus();
+          sendResponse({ status: 'ok', vaultStatus });
+        })();
+        return true;
+      }
+
+      case 'RECORD_JOB_CIRCULAR_VISIT': {
+        (async () => {
+          try {
+            const visit = await JobVisitRepository.recordVisit(message.payload || {});
+            sendResponse({ status: 'ok', visit });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_JOB_VISITS': {
+        (async () => {
+          try {
+            const visits = await JobVisitRepository.getAllVisits();
+            sendResponse({ status: 'ok', visits });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message, visits: [] });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_JOB_VISITS': {
+        (async () => {
+          try {
+            await JobVisitRepository.clearAllVisits();
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REMOVE_JOB_VISIT': {
+        (async () => {
+          try {
+            if (message.payload?.visitId) {
+              await JobVisitRepository.removeVisit(message.payload.visitId);
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_VISIT_TRACKING_ENABLED': {
+        (async () => {
+          try {
+            const enabled = await JobVisitRepository.isVisitTrackingEnabled();
+            sendResponse({ status: 'ok', enabled });
+          } catch {
+            sendResponse({ status: 'ok', enabled: true });
+          }
+        })();
+        return true;
+      }
+
+      case 'SET_VISIT_TRACKING_ENABLED': {
+        (async () => {
+          try {
+            await JobVisitRepository.setVisitTrackingEnabled(Boolean(message.payload?.enabled));
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_APPLICATION_SUBMIT_ATTEMPT': {
+        (async () => {
+          try {
+            const { jobId, jobTitle, organization, applicationUrl, circularUrl } = message.payload || {};
+            const finalJobId = jobId || `app_sub_${Date.now()}`;
+            const rec = await ApplicationRepository.setStatus(
+              {
+                id: finalJobId,
+                jobTitle: jobTitle || 'Online Application',
+                organization: organization || 'Recruitment Portal',
+                applicationUrl: applicationUrl || sender.tab?.url || '',
+                circularUrl: circularUrl || '',
+                deadlineAt: null,
+              },
+              'Submission Pending Verification',
+              {
+                applicationDate: new Date().toISOString().slice(0, 10),
+              }
+            );
+            rec.submissionAttemptedAt = Date.now();
+            await ApplicationRepository.upsert(rec);
+            sendResponse({ status: 'ok', application: rec });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'CONFIRM_APPLICATION_SUBMISSION': {
+        (async () => {
+          try {
+            const { jobId, teletalkUserId, applicantId, confirmedAt, circularUrl, applicationUrl } = message.payload || {};
+            let targetKey = jobId;
+            if (!targetKey) {
+              const all = await ApplicationRepository.getAll();
+              const pending = all.find((a) => a.status === 'Submission Pending Verification');
+              if (pending) targetKey = pending.jobId;
+            }
+            if (!targetKey && (circularUrl || applicationUrl)) {
+              targetKey = circularUrl || applicationUrl;
+            }
+            if (targetKey) {
+              const target = await ApplicationRepository.moveJobToApplied(targetKey, {
+                teletalkUserId,
+                applicantId,
+                confirmedAt: confirmedAt || Date.now(),
+                circularUrl,
+                applicationUrl,
+              });
+              sendResponse({ status: 'ok', application: target });
+            } else {
+              sendResponse({ status: 'no_pending_application' });
+            }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'MOVE_JOB_TO_APPLIED': {
+        (async () => {
+          try {
+            const { jobId, evidence } = message.payload || {};
+            const application = await ApplicationRepository.moveJobToApplied(jobId, evidence);
+            sendResponse({ status: 'ok', application });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_VISITED_AND_APPLIED_LISTS': {
+        (async () => {
+          try {
+            const result = await ApplicationRepository.getVisitedAndAppliedLists();
+            sendResponse({ status: 'ok', data: result });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REMOVE_FROM_VISITED': {
+        (async () => {
+          try {
+            const { id } = message.payload || {};
+            if (id) {
+              await ApplicationRepository.removeFromVisited(id);
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'FLAG_APPLICATION_NEEDS_CONFIRMATION': {
+        (async () => {
+          try {
+            const { jobId, teletalkUserId, applicantId } = message.payload || {};
+            let target = jobId ? await ApplicationRepository.getByJobId(jobId) : null;
+            if (!target) {
+              const all = await ApplicationRepository.getAll();
+              target =
+                all.find((a) => a.status === 'Submission Pending Verification' || a.status === 'Application Started') ||
+                null;
+            }
+            if (target) {
+              target.status = 'Needs Manual Confirmation';
+              target.needsReview = true;
+              target.reviewReason = 'Ambiguous submission detected on portal';
+              if (teletalkUserId) target.teletalkUserId = teletalkUserId;
+              if (applicantId) target.applicantId = applicantId;
+              await ApplicationRepository.upsert(target);
+              sendResponse({ status: 'ok', application: target });
+            } else {
+              sendResponse({ status: 'no_pending_application' });
+            }
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'REPAIR_MISCLASSIFIED_APPLICATIONS': {
+        (async () => {
+          try {
+            const result = await ApplicationRepository.repairMisclassifiedRecords();
+            sendResponse({ status: 'ok', result });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_TRUSTED_AUTOFILL_ORIGINS': {
+        (async () => {
+          try {
+            const origins = await CredentialVaultRepository.getTrustedAutofillOrigins();
+            sendResponse({ status: 'ok', origins: Array.from(origins) });
+          } catch (err: any) {
+            sendResponse({ status: 'error', origins: [], error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'SET_TRUSTED_AUTOFILL_ORIGIN': {
+        (async () => {
+          try {
+            if (message.payload?.origin) {
+              await CredentialVaultRepository.setTrustedAutofillOrigin(
+                message.payload.origin,
+                Boolean(message.payload.trusted)
+              );
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_START': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            const originUrl = sender.tab?.url || sender.url || payload.url || '';
+            const domain = (() => {
+              try {
+                return new URL(originUrl).hostname;
+              } catch {
+                return payload.domain || 'Local Form';
+              }
+            })();
+
+            const sessionRecord: AutofillHistoryRecord = {
+              id: payload.id || `session_${Date.now()}`,
+              sessionId: payload.id || `session_${Date.now()}`,
+              timestamp: Date.now(),
+              startedAt: Date.now(),
+              url: originUrl,
+              domain,
+              pageTitle: payload.pageTitle || sender.tab?.title || 'Job Application Form',
+              profileId: payload.profileId || 'default',
+              profileName: payload.profileName || 'Applicant Profile',
+              totalDetected: Number(payload.totalDetected) || 0,
+              totalFilled: 0,
+              totalFailed: 0,
+              totalAmbiguous: Number(payload.totalAmbiguous) || 0,
+              status: 'in_progress',
+              jobId: payload.jobId,
+              organization: payload.organization,
+              jobTitle: payload.jobTitle,
+              fieldResults: [],
+              filledFields: [],
+            };
+
+            await HistoryRepository.upsertRecord(sessionRecord);
+
+            // Broadcast real-time update to dashboard/views
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { sessionId: sessionRecord.id, status: 'in_progress' },
+              });
+            } catch {
+              // no active views listening
+            }
+
+            sendResponse({ status: 'ok', sessionId: sessionRecord.id });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_COMPLETE': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            const existing = payload.id ? await HistoryRepository.getById(payload.id) : null;
+            const originUrl = sender.tab?.url || sender.url || payload.url || existing?.url || '';
+            const domain = (() => {
+              try {
+                return new URL(originUrl).hostname;
+              } catch {
+                return payload.domain || existing?.domain || 'Local Form';
+              }
+            })();
+
+            const totalFilled = Number(payload.totalFilled ?? existing?.totalFilled ?? 0);
+            const totalFailed = Number(payload.totalFailed ?? existing?.totalFailed ?? 0);
+            const totalDetected = Number(payload.totalDetected ?? existing?.totalDetected ?? 0);
+            const attemptedFields = Number(payload.attemptedFields ?? (totalFilled + totalFailed));
+
+            let sessionStatus: 'completed' | 'partial' | 'failed' = 'completed';
+            if (totalFilled === 0 && totalFailed > 0) {
+              sessionStatus = 'failed';
+            } else if (totalFailed > 0) {
+              sessionStatus = 'partial';
+            }
+
+            const completeRecord: AutofillHistoryRecord = {
+              ...(existing || {}),
+              id: payload.id || existing?.id || `session_${Date.now()}`,
+              sessionId: payload.id || existing?.id || `session_${Date.now()}`,
+              timestamp: Date.now(),
+              startedAt: existing?.startedAt || payload.startedAt || Date.now(),
+              completedAt: Date.now(),
+              url: originUrl,
+              domain,
+              pageTitle: payload.pageTitle || existing?.pageTitle || sender.tab?.title || 'Job Application Form',
+              profileId: payload.profileId || existing?.profileId || 'default',
+              profileName: payload.profileName || existing?.profileName || 'Applicant Profile',
+              totalDetected,
+              totalFilled,
+              totalFailed,
+              totalAmbiguous: Number(payload.totalAmbiguous ?? existing?.totalAmbiguous ?? 0),
+              attemptedFields,
+              skippedFields: Number(payload.skippedFields || 0),
+              alreadyCorrectFields: Number(payload.alreadyCorrectFields || 0),
+              status: payload.status || sessionStatus,
+              jobId: payload.jobId || existing?.jobId,
+              organization: payload.organization || existing?.organization,
+              jobTitle: payload.jobTitle || existing?.jobTitle,
+              fieldResults: payload.fieldResults || existing?.fieldResults || [],
+              filledFields: payload.filledFields || existing?.filledFields || [],
+            };
+
+            await HistoryRepository.upsertRecord(completeRecord);
+
+            // If job ID exists and user completed autofill, ensure a draft exists in Application Tracker
+            if (completeRecord.jobId) {
+              try {
+                const existingApp = await ApplicationRepository.getByJobId(completeRecord.jobId);
+                if (!existingApp) {
+                  await ApplicationRepository.setStatus(
+                    {
+                      id: completeRecord.jobId,
+                      jobTitle: completeRecord.jobTitle || 'Job Application',
+                      organization: completeRecord.organization || domain,
+                      applicationUrl: originUrl,
+                      circularUrl: '',
+                      deadlineAt: null,
+                    },
+                    'Application Started'
+                  );
+                }
+              } catch {
+                // Tracker is separate, safe ignore
+              }
+            }
+
+            // Broadcast real-time update to dashboard/views
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { sessionId: completeRecord.id, record: completeRecord },
+              });
+            } catch {
+              // no views listening
+            }
+
+            sendResponse({ status: 'ok', record: completeRecord });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'RECORD_AUTOFILL_SESSION_UPDATE': {
+        (async () => {
+          try {
+            const payload = message.payload || {};
+            if (payload.id) {
+              const existing = await HistoryRepository.getById(payload.id);
+              if (existing) {
+                const updated: AutofillHistoryRecord = {
+                  ...existing,
+                  ...payload,
+                  id: existing.id,
+                };
+                await HistoryRepository.upsertRecord(updated);
+                try {
+                  chrome.runtime?.sendMessage?.({
+                    action: 'AUTOFILL_HISTORY_UPDATED',
+                    payload: { sessionId: existing.id, record: updated },
+                  });
+                } catch {
+                  // ignore
+                }
+              }
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_AUTOFILL_HISTORY': {
+        (async () => {
+          try {
+            const history = await HistoryRepository.getHistory();
+            sendResponse({ status: 'ok', history });
+          } catch (err: any) {
+            sendResponse({ status: 'error', history: [], error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'GET_AUTOFILL_STATISTICS': {
+        (async () => {
+          try {
+            const statistics = await HistoryRepository.getStatistics();
+            sendResponse({ status: 'ok', statistics });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'DELETE_AUTOFILL_HISTORY_ITEM': {
+        (async () => {
+          try {
+            if (message.payload?.id) {
+              await HistoryRepository.deleteRecord(message.payload.id);
+              try {
+                chrome.runtime?.sendMessage?.({
+                  action: 'AUTOFILL_HISTORY_UPDATED',
+                  payload: { deletedId: message.payload.id },
+                });
+              } catch {
+                // ignore
+              }
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
+        })();
+        return true;
+      }
+
+      case 'CLEAR_ALL_AUTOFILL_HISTORY': {
+        (async () => {
+          try {
+            await HistoryRepository.clearHistory();
+            try {
+              chrome.runtime?.sendMessage?.({
+                action: 'AUTOFILL_HISTORY_UPDATED',
+                payload: { cleared: true },
+              });
+            } catch {
+              // ignore
+            }
+            sendResponse({ status: 'ok' });
+          } catch (err: any) {
+            sendResponse({ status: 'error', error: err?.message });
+          }
         })();
         return true;
       }

@@ -2,7 +2,7 @@
 // Never fabricates missing information; shows editable review when importing a URL.
 
 import React, { useState } from 'react';
-import { X, Link as LinkIcon, Loader2, AlertTriangle, Plus } from 'lucide-react';
+import { X, Link as LinkIcon, Loader2, AlertTriangle, Plus, Upload } from 'lucide-react';
 import {
   JobCategory,
   JobEmploymentType,
@@ -14,6 +14,7 @@ import { normalizeJobRecord } from '../services/job-normalizer';
 import { validateJobCircular } from '../services/job-validator';
 import { verifyJobUrl } from '../services/source-verifier';
 import { SourceHealthItem } from '../services/source-health-state';
+import { parseJobCircularsJson, parseJobCircularsCsv } from '../services/job-file-importer';
 import { JOB_CATEGORIES, EMPLOYMENT_TYPES, JOB_LOCATIONS } from './JobFilters';
 
 export interface ManualJobCircularPrefill {
@@ -115,6 +116,48 @@ export const AddJobCircularModal: React.FC<AddJobCircularModalProps> = ({
       setImportMessage(res.message);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportMessage('');
+    setError('');
+    try {
+      const text = await file.text();
+      const isCsv = file.name.endsWith('.csv');
+      const outcome = isCsv ? parseJobCircularsCsv(text) : parseJobCircularsJson(text);
+      if (!outcome.success || outcome.importedJobs.length === 0) {
+        setError(outcome.errors.join('; ') || (bn ? 'ফাইল থেকে সার্কুলার পড়া যায়নি।' : 'Failed to parse circulars from file.'));
+        return;
+      }
+      if (outcome.importedJobs.length === 1) {
+        const j = outcome.importedJobs[0];
+        setOrganization(j.organization);
+        setPosition(j.position);
+        if (j.circularUrl) setCircularUrl(j.circularUrl);
+        if (j.applicationUrl) setApplicationUrl(j.applicationUrl);
+        if (j.category) setCategory(j.category);
+        if (j.location) setLocation(j.location as JobLocation);
+        if (j.deadlineText) setDeadlineDate(j.deadlineText);
+        setImportMessage(bn ? '✅ ফাইল থেকে তথ্য প্রাক-পূরণ করা হয়েছে।' : '✅ Fields prefilled from file.');
+      } else {
+        setSaving(true);
+        for (const j of outcome.importedJobs) {
+          await onSave(j);
+        }
+        setImportMessage(
+          bn
+            ? `✅ ফাইল থেকে ${outcome.importedJobs.length}টি বিজ্ঞপ্তি সফলভাবে ইমপোর্ট হয়েছে!`
+            : `✅ Successfully imported ${outcome.importedJobs.length} job circular(s) from file!`
+        );
+        setTimeout(() => onClose(), 1200);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Error processing file');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -257,6 +300,19 @@ export const AddJobCircularModal: React.FC<AddJobCircularModalProps> = ({
                 <span>{importMessage}</span>
               </p>
             )}
+          </div>
+
+          {/* Local File Importer (CSV / JSON) */}
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+            <label className="block font-bold text-slate-700 dark:text-slate-200">
+              {bn ? 'অথবা লোকাল ফাইল থেকে ইমপোর্ট করুন (CSV বা JSON):' : 'Or Import from Local File (CSV / JSON):'}
+            </label>
+            <input
+              type="file"
+              accept=".csv,.json,text/csv,application/json"
+              onChange={handleFileChange}
+              className="w-full text-xs text-slate-600 dark:text-slate-400 file:mr-2.5 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-petro-50 file:text-petro-700 hover:file:bg-petro-100 dark:file:bg-petro-950/40 dark:file:text-petro-300 cursor-pointer"
+            />
           </div>
 
           {error && (

@@ -1,6 +1,9 @@
 // JobFill BD - Normalized Job Circular & Notification System Types
 // Local-first, Asia/Dhaka timezone aware, zero fabricated deadlines.
 
+import type { EmployerType, WorkMode, ExperienceLevel } from '../taxonomy/job-taxonomy';
+export type { EmployerType, WorkMode, ExperienceLevel } from '../taxonomy/job-taxonomy';
+
 export type JobCategory =
   | 'Government'
   | 'Private'
@@ -54,6 +57,34 @@ export type SourceVerificationStatus =
   | 'user_submitted'
   | 'unverified';
 
+export type OfficialSourceVerificationStatus =
+  | 'OFFICIAL_VERIFIED'
+  | 'SECONDARY_SOURCE_ONLY'
+  | 'PARTIALLY_VERIFIED'
+  | 'CONFLICT_DETECTED'
+  | 'UNVERIFIED';
+
+export type GovernmentJobGrade =
+  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+  | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
+
+export type GradeVerificationStatus =
+  | 'OFFICIAL_MATCH'
+  | 'TEXT_EXTRACTED_UNVERIFIED'
+  | 'AMBIGUOUS'
+  | 'NOT_SPECIFIED'
+  | 'NOT_APPLICABLE';
+
+export type JobGradeCategory =
+  | 'All'
+  | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10'
+  | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20'
+  | 'Non-Grade'
+  | 'Contractual'
+  | 'Not Specified'
+  | 'Needs Verification'
+  | 'Private Salary-Based';
+
 export type JobCircularStatus = 'active' | 'closing_soon' | 'expired';
 
 export type FieldVerificationState = 'verified' | 'partial' | 'unverified';
@@ -105,10 +136,38 @@ export interface NormalizedJobCircular {
   position: string;
   circularNumber?: string;
   category: JobCategory;
+  taxonomyCategoryId?: string;
+  taxonomyCategoryNameEn?: string;
+  taxonomyCategoryNameBn?: string;
+  taxonomyCategoryIds?: string[];
+  primaryCategoryId?: string;
+  secondaryCategoryIds?: string[];
+  taxonomySubcategoryId?: string;
+  taxonomySubcategoryNameEn?: string;
+  taxonomySubcategoryNameBn?: string;
+  industry?: string;
+  employerType?: EmployerType;
+  workMode?: WorkMode;
+  experienceLevel?: ExperienceLevel;
+  classificationConfidence?: number;
+  classificationMethod?: 'RULE_BASED' | 'ORGANIZATION_MAPPING' | 'SOURCE_DEFAULT' | 'UNCLASSIFIED' | 'MULTI_LABEL';
+  classificationEvidence?: string[];
+  verificationState?: 'VERIFIED' | 'HIGH_CONFIDENCE_UNVERIFIED' | 'AMBIGUOUS' | 'UNCLASSIFIED' | 'NOT_APPLICABLE';
+  isUnclassified?: boolean;
   employmentType: JobEmploymentType;
   vacancies?: number | null;
   salary?: string;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  gradeNumber?: GovernmentJobGrade | null;
+  gradeLabel?: string;
+  gradeOriginalText?: string;
+  gradeVerificationStatus?: GradeVerificationStatus;
+  cadreStatus?: 'Cadre' | 'Non-Cadre' | 'Unspecified';
+  gazettedStatus?: 'Gazetted' | 'Non-Gazetted' | 'Unspecified';
   qualification: EducationRequirement | string;
+  minGpa?: number | null;
+  minCgpa?: number | null;
   experience?: string;
   ageRequirement?: string;
   location: JobLocation | string;
@@ -124,6 +183,7 @@ export interface NormalizedJobCircular {
   deadlineNeedsRevalidation?: boolean;
   circularUrl?: string;
   applicationUrl: string | null;
+  loginUrl?: string | null;
   organizationUrl?: string;
   sourceUrl?: string | null;
   description: string;
@@ -143,8 +203,25 @@ export interface NormalizedJobCircular {
   originalValues?: JobOriginalValues;
   possibleDuplicateOfId?: string | null;
   duplicateConfidence?: number | null;
+  governmentGroup?: string;
+  isGovernmentJob?: boolean;
+  noticeClassification?: string;
+  subType?: string;
+  relatedCanonicalJobId?: string;
   isManual?: boolean;
   notes?: string;
+  secondarySourceUrl?: string | null;
+  officialSourceUrl?: string | null;
+  circularDocumentUrl?: string | null;
+  circularImages?: string[];
+  verificationStatus?: OfficialSourceVerificationStatus;
+  lastVerifiedAt?: number | null;
+  hasConflict?: boolean;
+  conflictNotes?: string[];
+  recruitmentType?: string;
+  memorandumNumber?: string;
+  applicationStartTime?: string;
+  applicationDeadlineTime?: string;
   verificationHistory?: Array<{
     timestamp: number;
     status: SourceVerificationStatus;
@@ -178,6 +255,17 @@ export type JobSortOption =
   | 'organization_name'
   | 'recently_updated';
 
+export type JobSourceFilterGroup =
+  | 'All'
+  | 'government_portals'
+  | 'teletalk'
+  | 'bdjobs'
+  | 'private_company'
+  | 'bank_recruitment'
+  | 'ngo_ingo'
+  | 'international_jobs'
+  | 'bdgovtjob';
+
 export interface JobSearchFilters {
   query: string;
   category: JobCategory | 'All';
@@ -188,6 +276,26 @@ export interface JobSearchFilters {
   sortBy: JobSortOption;
   bookmarkedOnly?: boolean;
   statFilter?: DashboardStatFilter;
+  selectedGrades?: string[]; // e.g. ['9', '10', '11'] or ['Not Specified']
+  minGpa?: number | null;
+  minSalary?: number | null;
+  maxSalary?: number | null;
+  statusTab?: 'all' | 'active' | 'newly_discovered' | 'closing_soon' | 'expired' | 'visited' | 'bookmarked' | 'applied';
+  taxonomyCategory?: string | 'All';
+  taxonomySubcategory?: string | 'All';
+  industry?: string | 'All';
+  employerType?: EmployerType | 'All';
+  workMode?: WorkMode | 'All';
+  experienceLevel?: ExperienceLevel | 'All';
+  searchMode?: 'all_categories' | 'smart_filter' | 'saved_jobs' | 'online_federated' | 'local_saved';
+  includeUnclassified?: boolean;
+  sourceGroup?: JobSourceFilterGroup;
+  governmentGroup?: string;
+  academicDiscipline?: string | 'All';
+  academicSubject?: string | 'All';
+  eligibilityStatus?: 'All' | 'Eligible' | 'Review' | 'Not Eligible';
+  maxAgeLimit?: number | null;
+  sourceVerificationLevel?: 'All' | 'Official' | 'Secondary';
 }
 
 export interface BookmarkRecord {
@@ -201,7 +309,16 @@ export type ApplicationStatus =
   | 'Bookmarked'
   | 'Saved'
   | 'Ready to Apply'
+  | 'Visited'
+  | 'Application Started'
+  | 'Submission Pending Verification'
   | 'Applied'
+  | 'Submission Failed'
+  | 'Needs Manual Confirmation'
+  | 'Cancelled'
+  | 'Payment Pending'
+  | 'Payment Completed'
+  | 'Admit Card Available'
   | 'Exam Scheduled'
   | 'Result Published'
   | 'Selected'
@@ -209,28 +326,90 @@ export type ApplicationStatus =
   | 'Expired';
 
 export type FeePaymentStatus = 'unpaid' | 'paid' | 'exempt' | 'expired';
+export type AdmitCardStatus = 'Not Published' | 'Available' | 'Downloaded';
 
 export interface ApplicationTrackerRecord {
   jobId: string;
+  applicationId?: string;
   jobTitle: string;
   organization: string;
+  circularId?: string;
   applicationUrl?: string | null;
   circularUrl?: string;
+  loginUrl?: string | null;
+  organizationUrl?: string | null;
+  loginUrlVerified?: boolean;
+  loginUrlProvenance?: 'manual' | 'detected' | 'system';
+  previousLoginUrl?: string | null;
+  credentialId?: string | null;
+  credentialLinkedAt?: number;
   deadlineAt: number | null;
   status: ApplicationStatus;
   applicationDate?: string;
+  submissionAttemptedAt?: number;
+  submissionConfirmedAt?: number;
   teletalkUserId?: string;
   applicationRefId?: string;
+  applicantId?: string;
+  userId?: string;
+  transactionId?: string;
+  applicationFeeAmount?: string;
+  paymentDate?: string;
+  paymentMethodNote?: string;
   feePaymentStatus?: FeePaymentStatus;
   feeDeadlineAt?: number | null;
+  admitCardStatus?: AdmitCardStatus;
   examRoll?: string;
   examVenue?: string;
   notes?: string;
   examDate?: string;
   admitCardUrl?: string;
+  resultSummary?: string;
   resultUrl?: string;
   createdAt: number;
   updatedAt: number;
+  needsReview?: boolean;
+  reviewReason?: string;
+}
+
+export interface JobVisitRecord {
+  visitId: string;
+  jobId?: string | null;
+  sourceId: string;
+  organization: string;
+  jobTitle: string;
+  circularUrl: string;
+  canonicalUrl: string;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  verificationStatus: 'verified' | 'unverified' | 'internal';
+  deadlineAt?: number | null;
+  circularId?: string;
+  applicationUrl?: string | null;
+  subStatus?: string;
+}
+
+export interface VisitedTrackerItem {
+  id: string; // jobId or visitId
+  jobId?: string | null;
+  visitId?: string | null;
+  jobTitle: string;
+  organization: string;
+  circularId?: string;
+  circularUrl?: string;
+  applicationUrl?: string | null;
+  loginUrl?: string | null;
+  deadlineAt: number | null;
+  firstVisitedAt: number;
+  lastVisitedAt: number;
+  visitCount: number;
+  subStatus: ApplicationStatus | 'Visited' | 'Viewed';
+  needsReview?: boolean;
+  reviewReason?: string;
+  verificationStatus: 'verified' | 'unverified' | 'internal';
+  applicationRecord?: ApplicationTrackerRecord | null;
+  visitRecord?: JobVisitRecord | null;
 }
 
 export type ReminderStatus =
@@ -255,6 +434,7 @@ export interface ReminderScheduleRecord {
   dismissed: boolean;
   markedAsApplied: boolean;
   deadlineUpdatedAt?: number | null;
+  sentMilestones?: number;
 }
 
 export type NotificationCategoryType =
@@ -264,7 +444,11 @@ export type NotificationCategoryType =
   | 'deadline_reminder'
   | 'deadline_changed'
   | 'urgent_deadline'
-  | 'expired_job';
+  | 'expired_job'
+  | 'exam_reminder'
+  | 'admit_card_alert'
+  | 'result_alert'
+  | 'saved_job_update';
 
 export interface JobNotificationRecord {
   id: string;
@@ -290,6 +474,10 @@ export type WorkModePreference = 'Any' | 'Remote' | 'On-Site';
 export interface JobPreferences {
   dailyDigestEnabled: boolean;
   deadlineRemindersEnabled: boolean;
+  examRemindersEnabled?: boolean;
+  admitResultAlertsEnabled?: boolean;
+  reminderLeadHours?: number[];
+  customReminderHours?: number | null;
   notificationHour: number; // 0-23 Asia/Dhaka, default 9
   notificationMinute: number; // 0-59 Asia/Dhaka, default 0
   stopRemindersWhenApplied: boolean;
@@ -313,6 +501,10 @@ export interface JobPreferences {
 export const DEFAULT_JOB_PREFERENCES: JobPreferences = {
   dailyDigestEnabled: true,
   deadlineRemindersEnabled: true,
+  examRemindersEnabled: true,
+  admitResultAlertsEnabled: true,
+  reminderLeadHours: [168, 48, 24],
+  customReminderHours: null,
   notificationHour: 9,
   notificationMinute: 0,
   stopRemindersWhenApplied: true,

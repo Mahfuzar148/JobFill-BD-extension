@@ -54,10 +54,15 @@ export class JobAlarmManager {
     }
 
     const state = await JobRepository.getSchedulerState();
-    if (state.nextScheduledAlarmAt && state.nextScheduledAlarmAt > Date.now()) {
-      const deadlineAlarm = await chrome.alarms.get(ALARM_DEADLINE_SCHEDULER);
-      if (!deadlineAlarm) {
-        await this.scheduleNextDeadlineAlarm(state.nextScheduledAlarmAt);
+    if (state.nextScheduledAlarmAt) {
+      if (state.nextScheduledAlarmAt <= Date.now()) {
+        // Sleep recovery: missed deadline alarm while device was asleep or inactive
+        await this.scheduleNextDeadlineAlarm(Date.now() + 5_000);
+      } else {
+        const deadlineAlarm = await chrome.alarms.get(ALARM_DEADLINE_SCHEDULER);
+        if (!deadlineAlarm) {
+          await this.scheduleNextDeadlineAlarm(state.nextScheduledAlarmAt);
+        }
       }
     }
 

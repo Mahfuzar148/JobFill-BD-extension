@@ -34,8 +34,11 @@ export class ContextAnalyzer {
     const rawContext = `${evidence.parentContextText} ${evidence.legend} ${evidence.tableHeader}`.toLowerCase();
     const nameId = `${evidence.name} ${evidence.id}`.toLowerCase();
 
-    // 0. Explicit HTML Name / ID Prefix Signals (e.g. ssc_roll, hsc_roll, grad_exam)
-    if (nameId.includes('ssc_') || nameId.startsWith('ssc') || nameId.includes('_ssc')) {
+    // 0. Explicit HTML Name / ID Prefix Signals (e.g. ssc_roll, hsc_roll, grad_exam, board1, board2)
+    const isSscIndexed = /\b(exam1|board1|ins1|roll1|group1|subject1|result1|year1|pass1)\b|^(exam1|board1|ins1|roll1|group1|year1)$/i.test(evidence.name) ||
+      /\b(exam1|board1|ins1|roll1|group1|subject1|result1|year1|pass1)\b|^(exam1|board1|ins1|roll1|group1|year1)$/i.test(evidence.id);
+
+    if (nameId.includes('ssc_') || nameId.startsWith('ssc') || nameId.includes('_ssc') || isSscIndexed) {
       return {
         sectionCategory: 'ssc',
         academicLevel: 'ssc',
@@ -43,7 +46,11 @@ export class ContextAnalyzer {
         hierarchyPath: 'Education > SSC (Field Signal)',
       };
     }
-    if (nameId.includes('hsc_') || nameId.startsWith('hsc') || nameId.includes('_hsc')) {
+
+    const isHscIndexed = /\b(exam2|board2|ins2|roll2|group2|subject2|result2|year2|pass2)\b|^(exam2|board2|ins2|roll2|group2|year2)$/i.test(evidence.name) ||
+      /\b(exam2|board2|ins2|roll2|group2|subject2|result2|year2|pass2)\b|^(exam2|board2|ins2|roll2|group2|year2)$/i.test(evidence.id);
+
+    if (nameId.includes('hsc_') || nameId.startsWith('hsc') || nameId.includes('_hsc') || isHscIndexed) {
       return {
         sectionCategory: 'hsc',
         academicLevel: 'hsc',

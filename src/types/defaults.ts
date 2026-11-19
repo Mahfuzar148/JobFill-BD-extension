@@ -163,6 +163,23 @@ export const createEmptyProfile = (name = 'Default Profile'): UserProfile => ({
     },
   ],
   documents: [],
+  careerProfile: {
+    educationLevel: '',
+    departmentOrSubject: '',
+    passingYear: '',
+    gpaOrCgpa: '',
+    skills: [],
+    languages: [],
+    projects: [],
+    achievements: [],
+    careerInterests: [],
+    preferredJobCategories: [],
+    preferredLocations: [],
+    internshipPreference: false,
+    expectedSalaryNote: '',
+    careerGoals: [],
+  },
+  customFields: [],
 });
 
 export const sampleDemoProfile: UserProfile =
@@ -212,10 +229,10 @@ export const sampleDemoProfile: UserProfile =
     },
     permanent: {
       careOf: 'Md. Abdur Rahim',
-      village: 'Rampur',
-      road: 'Main Road',
-      house: 'Rahim Villa',
-      flat: '',
+      village: 'Kaderabad Housing',
+      road: 'Road No. 04',
+      house: 'House No. 12/A',
+      flat: 'Flat 4B',
       division: 'Dhaka',
       district: 'Dhaka',
       upazila: 'Mohammadpur',

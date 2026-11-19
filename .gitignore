@@ -3,6 +3,7 @@ node_modules/
 
 # Build & Store Package Outputs
 dist/
+dev-builds/
 release/
 
 # Local Environment & Secrets
@@ -24,3 +25,5 @@ coverage/
 .DS_Store
 Thumbs.db
 *.tmp
+.tmp*
+.tmp_*

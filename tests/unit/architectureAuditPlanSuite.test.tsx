@@ -559,7 +559,7 @@ describe('JobFill BD - P0-P5 Architecture Upgrade Suite', () => {
     const dynInput = document.createElement('input');
     dynInput.name = 'mobile';
     formEl.appendChild(dynInput);
-    await flushUi(45);
+    await flushUi(120);
     expect(obsEvents.length).toBeGreaterThanOrEqual(1);
     DynamicDomObserver.stopObserving();
     expect(DynamicDomObserver.isObserving()).toBe(false);

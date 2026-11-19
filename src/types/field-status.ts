@@ -1,5 +1,21 @@
 // JobFill BD - Universal Field Status Definitions
-// Simple, transparent 8-state model replacing confidence scores.
+// 13-state Universal Status model for granular field-level diagnostics.
+
+export type UniversalFieldStatus =
+  | 'FILLED_VERIFIED'
+  | 'ALREADY_CORRECT'
+  | 'PARTIALLY_FILLED'
+  | 'PROFILE_DATA_MISSING'
+  | 'FIELD_NOT_FOUND'
+  | 'AMBIGUOUS_MAPPING'
+  | 'OPTION_NOT_FOUND'
+  | 'OPTIONS_NOT_LOADED'
+  | 'DEPENDENCY_TIMEOUT'
+  | 'VALIDATION_REJECTED'
+  | 'FRAMEWORK_UPDATE_FAILED'
+  | 'MANUAL_SELECTION_REQUIRED'
+  | 'SKIPPED_BY_USER'
+  | 'UNSUPPORTED_CONTROL';
 
 export type FieldStatus =
   | 'Matched'

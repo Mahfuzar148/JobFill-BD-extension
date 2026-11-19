@@ -192,8 +192,15 @@ export type DocumentCategory =
   | 'photo'
   | 'signature'
   | 'nid'
+  | 'nid_front'
+  | 'nid_back'
   | 'birth_certificate'
   | 'educational_certificate'
+  | 'ssc_marksheet'
+  | 'hsc_marksheet'
+  | 'diploma_cert'
+  | 'transcript'
+  | 'training_cert'
   | 'cv'
   | 'other'
   // Legacy aliases retained for backward compatibility
@@ -216,6 +223,8 @@ export interface DocumentMetadata {
   createdAt: string;
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
+  expiresAt?: string; // Optional YYYY-MM-DD ONLY for applicable credentials (licenses/training)
+  validityNotes?: string;
 }
 
 export interface DocumentItem {
@@ -231,6 +240,73 @@ export interface DocumentItem {
   isProcessedVariant?: boolean;
   parentDocumentId?: string;
   dataUrl?: string; // stored encrypted in IndexedDB, never persisted plaintext if encrypted
+  expiresAt?: string;
+  validityNotes?: string;
+}
+
+export interface StudentProjectItem {
+  id: string;
+  title: string;
+  role: string;
+  techOrFocus: string;
+  summary: string;
+}
+
+export interface StudentLanguageItem {
+  language: string;
+  proficiency: string;
+}
+
+export interface CareerGoalItem {
+  id: string;
+  title: string;
+  targetArea: string;
+  targetDate?: string;
+  progressPercent: number;
+  completed: boolean;
+  notes?: string;
+}
+
+export interface StudentCareerProfile {
+  educationLevel?: string;
+  departmentOrSubject?: string;
+  passingYear?: string;
+  gpaOrCgpa?: string;
+  skills: string[];
+  languages: StudentLanguageItem[];
+  projects: StudentProjectItem[];
+  achievements: string[];
+  careerInterests: string[];
+  preferredJobCategories: string[];
+  preferredLocations: string[];
+  internshipPreference: boolean;
+  expectedSalaryNote?: string;
+  careerGoals: CareerGoalItem[];
+}
+
+export type CustomFieldCategory =
+  | 'personal'
+  | 'family'
+  | 'address'
+  | 'education'
+  | 'experience'
+  | 'skills'
+  | 'other';
+
+export type CustomFieldDataType = 'text' | 'number' | 'date' | 'select' | 'boolean';
+
+export interface CustomProfileField {
+  id: string;
+  fieldKey: string;
+  labelEn: string;
+  labelBn: string;
+  value: string;
+  category: CustomFieldCategory;
+  dataType: CustomFieldDataType;
+  description?: string;
+  reuseInAutofill: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
 // --- Complete Profile Database Schema ---
@@ -253,6 +329,23 @@ export interface UserProfile {
   special: SpecialInfo;
   references: ReferencePerson[];
   documents: DocumentItem[];
+  careerProfile?: StudentCareerProfile;
+  customFields?: CustomProfileField[];
+  educationDegrees?: CandidateDegreeItem[];
+}
+
+export interface CandidateDegreeItem {
+  id: string;
+  level: 'SSC' | 'HSC' | 'Diploma' | 'Bachelor' | 'Honours' | 'Masters' | 'PhD';
+  degreeTitle: string;
+  subjectOrGroup: string;
+  subjectId?: string;
+  institution?: string;
+  passingYear?: string | number;
+  resultType?: string;
+  gpa?: string | number;
+  gpaScale?: string | number;
+  courseDurationYears?: number;
 }
 
 // --- Security & Settings Schema ---
@@ -299,8 +392,30 @@ export interface FormScanReport {
 }
 
 // --- Application Autofill History Schema ---
+export type AutofillFieldFillStatus =
+  | 'FILLED'
+  | 'ALREADY_CORRECT'
+  | 'FAILED'
+  | 'SKIPPED'
+  | 'NOT_FOUND'
+  | 'AMBIGUOUS'
+  | 'NEEDS_MANUAL_INPUT'
+  | 'UNSUPPORTED';
+
+export interface AutofillFieldAuditItem {
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType?: string;
+  mappingStatus?: 'matched' | 'ambiguous' | 'unmapped';
+  fillStatus: AutofillFieldFillStatus;
+  failureReason?: string;
+  confidence?: string;
+  value?: string; // Safely masked representation only
+}
+
 export interface AutofillHistoryRecord {
   id: string;
+  sessionId?: string;
   timestamp: number;
   url: string;
   domain: string;
@@ -311,12 +426,28 @@ export interface AutofillHistoryRecord {
   totalFilled: number;
   totalFailed: number;
   totalAmbiguous: number;
-  status: 'completed' | 'partial' | 'reverted';
+  status: 'completed' | 'partial' | 'failed' | 'in_progress' | 'reverted';
+  // Extended audit and application metadata
+  jobId?: string;
+  organization?: string;
+  jobTitle?: string;
+  sourceUrl?: string;
+  formIdentifier?: string;
+  startedAt?: number;
+  completedAt?: number;
+  attemptedFields?: number;
+  skippedFields?: number;
+  alreadyCorrectFields?: number;
+  verificationStatus?: string;
+  fieldResults?: AutofillFieldAuditItem[];
+  // Backward-compatible filled fields list
   filledFields?: Array<{
     fieldLabel: string;
     canonicalKey: string;
     value: string;
     confidence: string;
+    fillStatus?: string;
+    failureReason?: string;
   }>;
 }
 
@@ -331,5 +462,6 @@ export interface AppGeneralSettings {
   enableBengaliConversion: boolean;
   enableSoundEffects: boolean;
   highlightFilledFields: boolean;
+  autoSaveSafeProfileChanges?: boolean; // Default false. Safe non-PII only; Sensitive PII always requires user review.
 }
 

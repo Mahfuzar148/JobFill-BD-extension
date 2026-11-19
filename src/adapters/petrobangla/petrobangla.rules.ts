@@ -91,12 +91,14 @@ export class PetroBanglaRules {
    */
   public static applyPostFillRules(doc: Document, profile: UserProfile): void {
     // 1. Same as Present Address sync
-    if (profile.address.sameAsPresent) {
-      const sameChk = doc.querySelector<HTMLInputElement>(
-        'input[type="checkbox"][id*="same" i], input[type="checkbox"][name*="same" i]'
-      );
-      if (sameChk && !sameChk.checked) {
-        sameChk.click();
+    const sameChk = doc.querySelector<HTMLInputElement>(
+      'input[type="checkbox"][id*="same" i], input[type="checkbox"][name*="same" i], input[type="checkbox"]#copy, input[type="checkbox"][name="copy"]'
+    );
+    if (sameChk) {
+      const shouldCheck = !!profile.address.sameAsPresent;
+      if (sameChk.checked !== shouldCheck) {
+        sameChk.checked = shouldCheck;
+        sameChk.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
 

@@ -117,6 +117,35 @@ export const OFFICIAL_JOB_PORTALS: OfficialJobPortalEntry[] = [
     isBangladeshOfficial: true,
   },
   {
+    id: 'directorate-of-registration',
+    name: 'Directorate of Registration (Sub-Registrar)',
+    nameBn: 'নিবন্ধন অধিদপ্তর (সাব-রেজিস্ট্রার)',
+    shortName: 'DOR / Sub-Registrar',
+    category: 'Government',
+    categoryBn: 'সরকারি চাকরি',
+    url: 'https://dor.gov.bd/site/view/notices',
+    domain: 'dor.gov.bd',
+    description:
+      'Official portal of the Directorate of Registration under Law & Justice Division for Sub-Registrar and departmental recruitment notices.',
+    descriptionBn:
+      'আইন ও বিচার বিভাগের অধীন নিবন্ধন অধিদপ্তরের অফিশিয়াল নোটিশ বোর্ড—সাব-রেজিস্ট্রার ও প্রশাসনিক নিয়োগ বিজ্ঞপ্তি।',
+    monogram: 'DR',
+    badgeColorClass:
+      'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+    accentGradientClass: 'from-emerald-600 to-teal-800',
+    searchTags: [
+      'sub-registrar',
+      'sub registrar',
+      'সাব-রেজিস্ট্রার',
+      'নিবন্ধন',
+      'dor',
+      'minlaw',
+      'আইন মন্ত্রণালয়',
+      'non-cadre',
+    ],
+    isBangladeshOfficial: true,
+  },
+  {
     id: 'bangladesh-national-portal',
     name: 'Bangladesh National Portal',
     nameBn: 'বাংলাদেশ জাতীয় তথ্য বাতায়ন',

@@ -1,4 +1,4 @@
-import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings } from '../types/profile';
+import { UserProfile, SecuritySettings, AutofillHistoryRecord, AppGeneralSettings, CustomProfileField, JobExperience } from '../types/profile';
 import { createEmptyProfile, sampleDemoProfile } from '../types/defaults';
 import {
   EncryptedPayload,
@@ -16,6 +16,7 @@ import {
 import { KeyManager } from '../security/key-manager';
 import { DocumentRepository } from '../database/document-repository';
 import { ProfileRepository } from '../database/profile-repository';
+import { HistoryRepository } from '../database/history-repository';
 import { IndexedDBManager, STORES } from '../database/indexeddb';
 import { JobRepository } from '../jobs/database/job-repository';
 import { BookmarkRepository } from '../jobs/database/bookmark-repository';
@@ -231,6 +232,52 @@ export async function saveSecuritySettings(settings: SecuritySettings): Promise<
 }
 
 // Profiles CRUD
+export function normalizeLoadedProfile(raw: any): UserProfile {
+  const base = createEmptyProfile(raw?.profileName || 'My Job Profile');
+  const rawAddr = raw?.address || {};
+  return {
+    ...base,
+    ...(raw || {}),
+    id: raw?.id || base.id,
+    profileName: raw?.profileName || base.profileName,
+    createdAt: raw?.createdAt || base.createdAt,
+    updatedAt: raw?.updatedAt || base.updatedAt,
+    personal: { ...base.personal, ...(raw?.personal || {}) },
+    address: {
+      ...base.address,
+      ...rawAddr,
+      present: { ...base.address.present, ...(rawAddr.present || {}) },
+      permanent: { ...base.address.permanent, ...(rawAddr.permanent || {}) },
+    },
+    ssc: { ...base.ssc, ...(raw?.ssc || {}) },
+    hsc: { ...base.hsc, ...(raw?.hsc || {}) },
+    graduation: { ...base.graduation, ...(raw?.graduation || {}) },
+    masters: { ...base.masters, ...(raw?.masters || {}) },
+    additionalQualifications: Array.isArray(raw?.additionalQualifications) ? raw.additionalQualifications : [],
+    jobExperiences: Array.isArray(raw?.jobExperiences) ? raw.jobExperiences : [],
+    special: { ...base.special, ...(raw?.special || {}) },
+    references: Array.isArray(raw?.references) ? raw.references : base.references,
+    documents: Array.isArray(raw?.documents) ? raw.documents : [],
+    careerProfile: {
+      ...(base.careerProfile || {}),
+      ...(raw?.careerProfile || {}),
+      skills: Array.isArray(raw?.careerProfile?.skills) ? raw.careerProfile.skills : [],
+      languages: Array.isArray(raw?.careerProfile?.languages) ? raw.careerProfile.languages : [],
+      projects: Array.isArray(raw?.careerProfile?.projects) ? raw.careerProfile.projects : [],
+      achievements: Array.isArray(raw?.careerProfile?.achievements) ? raw.careerProfile.achievements : [],
+      careerInterests: Array.isArray(raw?.careerProfile?.careerInterests) ? raw.careerProfile.careerInterests : [],
+      preferredJobCategories: Array.isArray(raw?.careerProfile?.preferredJobCategories)
+        ? raw.careerProfile.preferredJobCategories
+        : [],
+      preferredLocations: Array.isArray(raw?.careerProfile?.preferredLocations)
+        ? raw.careerProfile.preferredLocations
+        : [],
+      internshipPreference: Boolean(raw?.careerProfile?.internshipPreference),
+      careerGoals: Array.isArray(raw?.careerProfile?.careerGoals) ? raw.careerProfile.careerGoals : [],
+    },
+  };
+}
+
 export async function getAllProfiles(): Promise<UserProfile[]> {
   const security = await getSecuritySettings();
 
@@ -303,10 +350,13 @@ export async function getAllProfiles(): Promise<UserProfile[]> {
     profiles = defaultProfiles;
     await saveAllProfiles(profiles);
     await setActiveProfileId(defaultProfiles[0].id);
-  } else if (needsIdbMigration) {
-    await saveAllProfiles(profiles);
+  } else {
+    profiles = profiles.map(normalizeLoadedProfile);
+    if (needsIdbMigration) {
+      await saveAllProfiles(profiles);
+    }
   }
-  return profiles;
+  return profiles.map(normalizeLoadedProfile);
 }
 
 export async function saveAllProfiles(profiles: UserProfile[]): Promise<void> {
@@ -560,42 +610,44 @@ export function lockVault(skipSwBroadcast = false): void {
 }
 
 // Calculate Profile Completion Score (0 to 100%)
-export function calculateProfileScore(p: UserProfile): {
+export function calculateProfileScore(rawProfile: UserProfile): {
   percentage: number;
   totalFields: number;
   filledFields: number;
   missingKeyFields: string[];
 } {
+  const p = normalizeLoadedProfile(rawProfile);
+  const s = (v?: string | null) => String(v || '').trim();
   const checks: Array<{ name: string; filled: boolean; weight: number }> = [
-    { name: "Applicant's Name (English)", filled: !!p.personal.applicantNameEn.trim(), weight: 3 },
-    { name: "Applicant's Name (Bangla)", filled: !!p.personal.applicantNameBn.trim(), weight: 2 },
-    { name: "Father's Name (English)", filled: !!p.personal.fatherNameEn.trim(), weight: 2 },
-    { name: "Mother's Name (English)", filled: !!p.personal.motherNameEn.trim(), weight: 2 },
-    { name: 'Date of Birth', filled: !!p.personal.dob, weight: 3 },
-    { name: 'Gender', filled: !!p.personal.gender, weight: 2 },
-    { name: 'National ID / Smart Card', filled: !!p.personal.nid.trim() || !!p.personal.birthReg.trim(), weight: 3 },
-    { name: 'Birth Registration No.', filled: !!p.personal.birthReg.trim(), weight: 1 },
-    { name: 'Quota Category (কোটা)', filled: !!p.personal.quota.trim(), weight: 1 },
-    { name: 'Mobile Number', filled: !!p.personal.mobile.trim(), weight: 3 },
-    { name: 'Email Address', filled: !!p.personal.email.trim(), weight: 2 },
-    { name: 'Religion', filled: !!p.personal.religion, weight: 1 },
-    { name: 'Marital Status', filled: !!p.personal.maritalStatus, weight: 1 },
-    { name: 'Present Address: District', filled: !!p.address.present.district.trim(), weight: 2 },
-    { name: 'Present Address: Upazila/Thana', filled: !!p.address.present.upazila.trim(), weight: 2 },
-    { name: 'Present Address: Post Code', filled: !!p.address.present.postCode.trim(), weight: 1 },
-    { name: 'Present Address: Village/House', filled: !!p.address.present.village.trim(), weight: 2 },
-    { name: 'Permanent Address: District', filled: !!p.address.permanent.district.trim(), weight: 2 },
-    { name: 'SSC: Examination & Board', filled: !!p.ssc.examination && !!p.ssc.board, weight: 2 },
-    { name: 'SSC: Roll Number', filled: !!p.ssc.rollNumber.trim(), weight: 2 },
-    { name: 'SSC: Result (GPA)', filled: !!p.ssc.gpa.trim(), weight: 2 },
-    { name: 'SSC: Passing Year', filled: !!p.ssc.passingYear.trim(), weight: 1 },
-    { name: 'HSC: Examination & Board', filled: !!p.hsc.examination && !!p.hsc.board, weight: 2 },
-    { name: 'HSC: Roll Number', filled: !!p.hsc.rollNumber.trim(), weight: 2 },
-    { name: 'HSC: Result (GPA)', filled: !!p.hsc.gpa.trim(), weight: 2 },
-    { name: 'HSC: Passing Year', filled: !!p.hsc.passingYear.trim(), weight: 1 },
-    { name: 'Graduation: Degree & University', filled: !!p.graduation.subjectDegree.trim() && !!p.graduation.universityInstitute.trim(), weight: 3 },
-    { name: 'Graduation: Result (CGPA)', filled: !!p.graduation.gpa.trim() || p.graduation.appearedStatus, weight: 2 },
-    { name: 'Graduation: Passing Year', filled: !!p.graduation.passingYear.trim(), weight: 1 },
+    { name: "Applicant's Name (English)", filled: !!s(p.personal.applicantNameEn), weight: 3 },
+    { name: "Applicant's Name (Bangla)", filled: !!s(p.personal.applicantNameBn), weight: 2 },
+    { name: "Father's Name (English)", filled: !!s(p.personal.fatherNameEn), weight: 2 },
+    { name: "Mother's Name (English)", filled: !!s(p.personal.motherNameEn), weight: 2 },
+    { name: 'Date of Birth', filled: !!s(p.personal.dob), weight: 3 },
+    { name: 'Gender', filled: !!s(p.personal.gender), weight: 2 },
+    { name: 'National ID / Smart Card', filled: !!s(p.personal.nid) || !!s(p.personal.birthReg), weight: 3 },
+    { name: 'Birth Registration No.', filled: !!s(p.personal.birthReg), weight: 1 },
+    { name: 'Quota Category (কোটা)', filled: !!s(p.personal.quota), weight: 1 },
+    { name: 'Mobile Number', filled: !!s(p.personal.mobile), weight: 3 },
+    { name: 'Email Address', filled: !!s(p.personal.email), weight: 2 },
+    { name: 'Religion', filled: !!s(p.personal.religion), weight: 1 },
+    { name: 'Marital Status', filled: !!s(p.personal.maritalStatus), weight: 1 },
+    { name: 'Present Address: District', filled: !!s(p.address.present.district), weight: 2 },
+    { name: 'Present Address: Upazila/Thana', filled: !!s(p.address.present.upazila), weight: 2 },
+    { name: 'Present Address: Post Code', filled: !!s(p.address.present.postCode), weight: 1 },
+    { name: 'Present Address: Village/House', filled: !!s(p.address.present.village), weight: 2 },
+    { name: 'Permanent Address: District', filled: !!s(p.address.permanent.district), weight: 2 },
+    { name: 'SSC: Examination & Board', filled: !!s(p.ssc.examination) && !!s(p.ssc.board), weight: 2 },
+    { name: 'SSC: Roll Number', filled: !!s(p.ssc.rollNumber), weight: 2 },
+    { name: 'SSC: Result (GPA)', filled: !!s(p.ssc.gpa), weight: 2 },
+    { name: 'SSC: Passing Year', filled: !!s(p.ssc.passingYear), weight: 1 },
+    { name: 'HSC: Examination & Board', filled: !!s(p.hsc.examination) && !!s(p.hsc.board), weight: 2 },
+    { name: 'HSC: Roll Number', filled: !!s(p.hsc.rollNumber), weight: 2 },
+    { name: 'HSC: Result (GPA)', filled: !!s(p.hsc.gpa), weight: 2 },
+    { name: 'HSC: Passing Year', filled: !!s(p.hsc.passingYear), weight: 1 },
+    { name: 'Graduation: Degree & University', filled: !!s(p.graduation.subjectDegree) && !!s(p.graduation.universityInstitute), weight: 3 },
+    { name: 'Graduation: Result (CGPA)', filled: !!s(p.graduation.gpa) || !!p.graduation.appearedStatus, weight: 2 },
+    { name: 'Graduation: Passing Year', filled: !!s(p.graduation.passingYear), weight: 1 },
   ];
 
   let totalWeight = 0;
@@ -784,85 +836,24 @@ export const DEFAULT_GENERAL_SETTINGS: AppGeneralSettings = {
   enableBengaliConversion: true,
   enableSoundEffects: false,
   highlightFilledFields: true,
+  autoSaveSafeProfileChanges: false,
 };
 
 // Application History Storage Methods (IndexedDB primary when available, storage fallback)
 export async function getAutofillHistory(): Promise<AutofillHistoryRecord[]> {
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      const idbList = await IndexedDBManager.executeTransaction<AutofillHistoryRecord[]>(
-        STORES.HISTORY,
-        'readonly',
-        (store) =>
-          new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-          })
-      );
-      if (idbList.length > 0) {
-        return [...idbList].sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
-      }
-    } catch {
-      // Safe fallback below
-    }
-  }
-  const res = await storageAdapter.get<AutofillHistoryRecord[]>([STORAGE_KEY_HISTORY]);
-  return res[STORAGE_KEY_HISTORY] || [];
+  return HistoryRepository.getHistory();
 }
 
 export async function addAutofillHistory(record: AutofillHistoryRecord): Promise<void> {
-  const sanitizedUrl = (() => {
-    try {
-      const u = new URL(record.url);
-      return `${u.origin}${u.pathname}`;
-    } catch {
-      return String(record.url || '').split('?')[0].split('#')[0];
-    }
-  })();
-  const sanitizedRecord: AutofillHistoryRecord = {
-    ...record,
-    url: sanitizedUrl,
-    profileName: 'Applicant Profile',
-  };
+  return HistoryRepository.upsertRecord(record);
+}
 
-  let savedToIdb = false;
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      await IndexedDBManager.executeTransaction(STORES.HISTORY, 'readwrite', (store) =>
-        new Promise<void>((resolve, reject) => {
-          const req = store.put(sanitizedRecord);
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        })
-      );
-      savedToIdb = true;
-    } catch {
-      savedToIdb = false;
-    }
-  }
-  if (!savedToIdb) {
-    const history = await getAutofillHistory();
-    const updated = [sanitizedRecord, ...history].slice(0, 100); // Keep last 100 sessions
-    await storageAdapter.set({ [STORAGE_KEY_HISTORY]: updated });
-  }
+export async function deleteAutofillHistoryItem(id: string): Promise<void> {
+  return HistoryRepository.deleteRecord(id);
 }
 
 export async function clearAutofillHistory(): Promise<void> {
-  if (typeof indexedDB !== 'undefined') {
-    try {
-      await IndexedDBManager.executeTransaction(STORES.HISTORY, 'readwrite', (store) =>
-        new Promise<void>((resolve, reject) => {
-          const req = store.clear();
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        })
-      );
-    } catch {
-      // Ignore
-    }
-  }
-  await storageAdapter.remove([STORAGE_KEY_HISTORY]);
+  return HistoryRepository.clearHistory();
 }
 
 // General Settings Methods
@@ -875,6 +866,84 @@ export async function saveGeneralSettings(settings: Partial<AppGeneralSettings>)
   const current = await getGeneralSettings();
   const updated = { ...current, ...settings };
   await storageAdapter.set({ [STORAGE_KEY_GENERAL_SETTINGS]: updated });
+}
+
+export async function getAutoSaveSafeFieldsSetting(): Promise<boolean> {
+  const settings = await getGeneralSettings();
+  return Boolean(settings.autoSaveSafeProfileChanges);
+}
+
+export async function setAutoSaveSafeFieldsSetting(enabled: boolean): Promise<void> {
+  await saveGeneralSettings({ autoSaveSafeProfileChanges: enabled });
+}
+
+function ensureMasters(t: UserProfile): void {
+  if (!t.masters) {
+    t.masters = {
+      examination: 'M.Sc',
+      subjectDegree: '',
+      universityInstitute: '',
+      college: '',
+      studentId: '',
+      registrationNumber: '',
+      rollNumber: '',
+      session: '',
+      resultType: 'CGPA (out of 4)',
+      gpa: '',
+      gpaScale: '4.00',
+      passingYear: '',
+      courseDuration: '1.5 Years',
+      appearedStatus: false,
+      examStartDate: '',
+      examEndDate: '',
+    };
+  }
+}
+
+function ensureGraduation(t: UserProfile): void {
+  t.hasGraduation = true;
+  if (!t.graduation) {
+    t.graduation = {
+      examination: 'B.Sc Engineering',
+      subjectDegree: '',
+      universityInstitute: '',
+      college: '',
+      studentId: '',
+      registrationNumber: '',
+      rollNumber: '',
+      session: '',
+      resultType: 'CGPA (out of 4)',
+      gpa: '',
+      gpaScale: '4.00',
+      passingYear: '',
+      courseDuration: '4 Years',
+      appearedStatus: false,
+      examStartDate: '',
+      examEndDate: '',
+    };
+  }
+}
+
+function ensureExperienceRecord(t: UserProfile, index: number = 0): JobExperience {
+  t.hasJobExperience = true;
+  if (!t.jobExperiences) {
+    t.jobExperiences = [];
+  }
+  while (t.jobExperiences.length <= index) {
+    t.jobExperiences.push({
+      id: `exp_${Date.now()}_${t.jobExperiences.length}`,
+      employedOn: 'Government',
+      organization: '',
+      designation: '',
+      address: '',
+      startDate: '',
+      endDate: '',
+      currentlyWorking: false,
+      salary: '',
+      jobDescription: '',
+    });
+  }
+  return t.jobExperiences[index];
 }
 
 const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string) => void> = {
@@ -904,12 +973,14 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'contact.email': (t, v) => { t.personal.email = v; },
   'address.present.careOf': (t, v) => { t.address.present.careOf = v; },
   'address.present.village': (t, v) => { t.address.present.village = v; },
+  'address.present.division': (t, v) => { t.address.present.division = v; },
   'address.present.district': (t, v) => { t.address.present.district = v; },
   'address.present.upazila': (t, v) => { t.address.present.upazila = v; },
   'address.present.postOffice': (t, v) => { t.address.present.postOffice = v; },
   'address.present.postCode': (t, v) => { t.address.present.postCode = v; },
   'address.permanent.careOf': (t, v) => { t.address.permanent.careOf = v; },
   'address.permanent.village': (t, v) => { t.address.permanent.village = v; },
+  'address.permanent.division': (t, v) => { t.address.permanent.division = v; },
   'address.permanent.district': (t, v) => { t.address.permanent.district = v; },
   'address.permanent.upazila': (t, v) => { t.address.permanent.upazila = v; },
   'address.permanent.postOffice': (t, v) => { t.address.permanent.postOffice = v; },
@@ -917,6 +988,7 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.ssc.examination': (t, v) => { t.ssc.examination = v; },
   'education.ssc.board': (t, v) => { t.ssc.board = v; },
   'education.ssc.roll': (t, v) => { t.ssc.rollNumber = v; },
+  'education.ssc.registration': (t, v) => { t.ssc.registrationNumber = v; },
   'education.ssc.group': (t, v) => { t.ssc.groupSubject = v; },
   'education.ssc.result': (t, v) => { t.ssc.resultType = v as any; },
   'education.ssc.gpa': (t, v) => { t.ssc.gpa = v; },
@@ -924,30 +996,143 @@ const CANONICAL_FIELD_UPDATER: Record<string, (target: UserProfile, val: string)
   'education.hsc.examination': (t, v) => { t.hsc.examination = v; },
   'education.hsc.board': (t, v) => { t.hsc.board = v; },
   'education.hsc.roll': (t, v) => { t.hsc.rollNumber = v; },
+  'education.hsc.registration': (t, v) => { t.hsc.registrationNumber = v; },
   'education.hsc.group': (t, v) => { t.hsc.groupSubject = v; },
   'education.hsc.result': (t, v) => { t.hsc.resultType = v as any; },
   'education.hsc.gpa': (t, v) => { t.hsc.gpa = v; },
   'education.hsc.passingYear': (t, v) => { t.hsc.passingYear = v; },
-  'education.graduation.degree': (t, v) => { t.graduation.examination = v; },
-  'education.graduation.examination': (t, v) => { t.graduation.examination = v; },
-  'education.graduation.subject': (t, v) => { t.graduation.subjectDegree = v; },
-  'education.graduation.institution': (t, v) => { t.graduation.universityInstitute = v; },
-  'education.graduation.result': (t, v) => { t.graduation.resultType = v as any; },
-  'education.graduation.gpa': (t, v) => { t.graduation.gpa = v; },
-  'education.graduation.cgpa': (t, v) => { t.graduation.gpa = v; },
-  'education.graduation.passingYear': (t, v) => { t.graduation.passingYear = v; },
+  'education.graduation.degree': (t, v) => { ensureGraduation(t); t.graduation.examination = v; },
+  'education.graduation.examination': (t, v) => { ensureGraduation(t); t.graduation.examination = v; },
+  'education.graduation.subject': (t, v) => { ensureGraduation(t); t.graduation.subjectDegree = v; },
+  'education.graduation.institution': (t, v) => { ensureGraduation(t); t.graduation.universityInstitute = v; },
+  'education.graduation.result': (t, v) => { ensureGraduation(t); t.graduation.resultType = v as any; },
+  'education.graduation.gpa': (t, v) => { ensureGraduation(t); t.graduation.gpa = v; },
+  'education.graduation.cgpa': (t, v) => { ensureGraduation(t); t.graduation.gpa = v; },
+  'education.graduation.passingYear': (t, v) => { ensureGraduation(t); t.graduation.passingYear = v; },
+  'education.masters.degree': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
+  'education.masters.examination': (t, v) => { ensureMasters(t); t.masters.examination = v; t.hasMasters = true; },
+  'education.masters.subject': (t, v) => { ensureMasters(t); t.masters.subjectDegree = v; t.hasMasters = true; },
+  'education.masters.institution': (t, v) => { ensureMasters(t); t.masters.universityInstitute = v; t.hasMasters = true; },
+  'education.masters.result': (t, v) => { ensureMasters(t); t.masters.resultType = v as any; t.hasMasters = true; },
+  'education.masters.gpa': (t, v) => { ensureMasters(t); t.masters.gpa = v; t.hasMasters = true; },
+  'education.masters.cgpa': (t, v) => { ensureMasters(t); t.masters.gpa = v; t.hasMasters = true; },
+  'education.masters.passingYear': (t, v) => { ensureMasters(t); t.masters.passingYear = v; t.hasMasters = true; },
+  'experience.organization': (t, v) => {
+    t.hasJobExperience = true;
+    if (!t.jobExperiences || t.jobExperiences.length === 0) {
+      ensureExperienceRecord(t, 0).organization = v;
+      return;
+    }
+    const existing = t.jobExperiences.find((e) => e.organization.toLowerCase() === v.toLowerCase());
+    if (existing) {
+      existing.organization = v;
+    } else if (t.jobExperiences[0].organization && t.jobExperiences[0].organization.trim() !== '') {
+      const newExp = ensureExperienceRecord(t, t.jobExperiences.length);
+      newExp.organization = v;
+    } else {
+      t.jobExperiences[0].organization = v;
+    }
+  },
+  'experience.designation': (t, v) => {
+    t.hasJobExperience = true;
+    if (!t.jobExperiences || t.jobExperiences.length === 0) {
+      ensureExperienceRecord(t, 0).designation = v;
+    } else {
+      t.jobExperiences[t.jobExperiences.length - 1].designation = v;
+    }
+  },
+  'experience.startDate': (t, v) => {
+    if (t.jobExperiences && t.jobExperiences.length > 0) {
+      t.jobExperiences[t.jobExperiences.length - 1].startDate = v;
+    }
+  },
+  'experience.endDate': (t, v) => {
+    if (t.jobExperiences && t.jobExperiences.length > 0) {
+      t.jobExperiences[t.jobExperiences.length - 1].endDate = v;
+    }
+  },
   'circular.orgChoice1': (t, v) => { t.special.orgChoice1 = v; },
   'circular.orgChoice2': (t, v) => { t.special.orgChoice2 = v; },
+  'special.bloodGroup': (t, v) => { t.special.bloodGroup = v; },
+  'special.heightCm': (t, v) => { t.special.heightCm = v; },
+  'special.weightKg': (t, v) => { t.special.weightKg = v; },
+  'special.chestCm': (t, v) => { t.special.chestCm = v; },
+  'special.examCentre': (t, v) => { t.special.examCentre = v; },
+  'special.questionVersion': (t, v) => { t.special.questionVersion = v as any; },
+  'special.cadrePreference': (t, v) => { t.special.cadrePreference = v; },
+  'special.nonCadrePreference': (t, v) => { t.special.nonCadrePreference = v; },
+  'special.freedomFighterCertNo': (t, v) => { t.special.freedomFighterCertNo = v; },
 };
 
 export function applyCanonicalProfileFieldUpdate(
   target: UserProfile,
   canonicalKey: string,
-  newValue: string
+  newValue: string,
+  customFieldMeta?: Partial<CustomProfileField>
 ): boolean {
   const updater = CANONICAL_FIELD_UPDATER[canonicalKey];
-  if (!updater) return false;
-  updater(target, newValue);
-  return true;
+  if (updater) {
+    updater(target, newValue);
+    return true;
+  }
+
+  // Support indexed experience keys like experience.0.organization, experience.1.designation, etc.
+  const expMatch = canonicalKey.match(/^experience\.(\d+)\.(organization|designation|startDate|endDate|address|employedOn|currentlyWorking)$/);
+  if (expMatch) {
+    const idx = parseInt(expMatch[1], 10);
+    const field = expMatch[2];
+    const rec = ensureExperienceRecord(target, idx);
+    if (field === 'currentlyWorking') {
+      rec.currentlyWorking = newValue === 'true' || newValue === '1' || newValue.toLowerCase() === 'yes';
+    } else {
+      (rec as any)[field] = newValue;
+    }
+    return true;
+  }
+
+  // Handle custom dynamic fields: custom_* or custom.* or any dynamic user-learned field
+  if (canonicalKey.startsWith('custom_') || canonicalKey.startsWith('custom.')) {
+    if (!target.customFields) {
+      target.customFields = [];
+    }
+    const cleanKey = canonicalKey.replace(/^custom\./, 'custom_');
+    const existingIndex = target.customFields.findIndex(
+      (f) => f.fieldKey === canonicalKey || f.fieldKey === cleanKey
+    );
+
+    const now = Date.now();
+    if (existingIndex >= 0) {
+      target.customFields[existingIndex].value = newValue;
+      target.customFields[existingIndex].updatedAt = now;
+      if (customFieldMeta?.labelEn) target.customFields[existingIndex].labelEn = customFieldMeta.labelEn;
+      if (customFieldMeta?.labelBn) target.customFields[existingIndex].labelBn = customFieldMeta.labelBn;
+      if (customFieldMeta?.category) target.customFields[existingIndex].category = customFieldMeta.category;
+      if (customFieldMeta?.dataType) target.customFields[existingIndex].dataType = customFieldMeta.dataType;
+      if (customFieldMeta?.reuseInAutofill !== undefined) {
+        target.customFields[existingIndex].reuseInAutofill = customFieldMeta.reuseInAutofill;
+      }
+    } else {
+      const rawName = cleanKey.replace(/^custom_/, '').replace(/_/g, ' ');
+      const labelEn = customFieldMeta?.labelEn || rawName.charAt(0).toUpperCase() + rawName.slice(1);
+      const labelBn = customFieldMeta?.labelBn || labelEn;
+      const newCustomField: CustomProfileField = {
+        id: customFieldMeta?.id || `cf_${now}_${Math.random().toString(36).substring(2, 7)}`,
+        fieldKey: cleanKey,
+        labelEn,
+        labelBn,
+        value: newValue,
+        category: customFieldMeta?.category || 'other',
+        dataType: customFieldMeta?.dataType || 'text',
+        description: customFieldMeta?.description,
+        reuseInAutofill: customFieldMeta?.reuseInAutofill !== false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      target.customFields.push(newCustomField);
+    }
+    return true;
+  }
+
+  return false;
 }
 

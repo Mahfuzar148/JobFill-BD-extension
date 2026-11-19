@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobFill BD - Universal Form Control Test Library (All 26 Controls)</title>
+  <style>
+    :root {
+      --primary: #006a4e;
+      --primary-light: #e8f5e9;
+      --border: #d1d5db;
+      --bg: #f9fafb;
+      --card-bg: #ffffff;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --danger: #dc2626;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 30px 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      padding: 35px;
+    }
+    h1 {
+      color: var(--primary);
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 12px;
+      margin-top: 0;
+      font-size: 24px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      background: var(--primary-light);
+      color: var(--primary);
+      margin-left: 8px;
+    }
+    .section-card {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-top: 0;
+      margin-bottom: 16px;
+      border-bottom: 1px dashed var(--border);
+      padding-bottom: 8px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .help-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="date"],
+    input[type="search"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(0, 106, 78, 0.2);
+    }
+    .radio-group, .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .radio-group label, .checkbox-group label {
+      font-weight: normal;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 0;
+    }
+    /* Toggle switch CSS */
+    .switch-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .switch-ui {
+      position: relative;
+      width: 48px;
+      height: 24px;
+      background: #ccc;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .switch-ui[aria-checked="true"], .switch-ui.checked {
+      background: var(--primary);
+    }
+    .switch-ui .slider {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .switch-ui[aria-checked="true"] .slider, .switch-ui.checked .slider {
+      transform: translateX(24px);
+    }
+    /* Custom combobox dropdown */
+    .combobox-container {
+      position: relative;
+    }
+    .combobox-trigger {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .combobox-listbox {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 4px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      z-index: 100;
+      max-height: 180px;
+      overflow-y: auto;
+      list-style: none;
+      padding: 0;
+    }
+    .combobox-listbox.open {
+      display: block;
+    }
+    .combobox-option {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .combobox-option:hover, .combobox-option[aria-selected="true"] {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JobFill BD — Universal Form Control Acceptance Form <span class="badge">Universal Suite</span></h1>
+    <p style="color: var(--text-muted); font-size: 14px;">
+      Master Verification Harness encompassing all 26 native HTML, accessible custom, cascading, delayed, and masked controls per Parts 1 to 18.
+    </p>
+
+    <form id="universal_acceptance_form" autocomplete="off">
+
+      <!-- SECTION 1: NATIVE TEXT, NUMBER, EMAIL, TEL, MASKED -->
+      <div class="section-card">
+        <div class="section-title">1-6. Text, Number, Email, Telephone, Date & Masked Inputs</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="applicant_name">1. Text Input (English Name)</label>
+            <input type="text" id="applicant_name" name="applicant_name" placeholder="Full name in English">
+          </div>
+          <div class="form-group">
+            <label for="applicant_name_bn">Text Input (Bangla Name)</label>
+            <input type="text" id="applicant_name_bn" name="applicant_name_bn" placeholder="আবেদনকারীর নাম বাংলায়">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 12px;">
+          <div class="form-group">
+            <label for="nid_number">2. Number Input (NID Number)</label>
+            <input type="number" id="nid_number" name="nid_number" placeholder="10 or 17 digit NID">
+          </div>
+          <div class="form-group">
+            <label for="contact_email">3. Email Input</label>
+            <input type="email" id="contact_email" name="contact_email" placeholder="candidate@example.com">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 12px;">
+          <div class="form-group">
+            <label for="contact_mobile">4. Telephone / Mobile Input (Strict String Invariant)</label>
+            <input type="tel" id="contact_mobile" name="contact_mobile" maxlength="11" placeholder="01XXXXXXXXX">
+          </div>
+          <div class="form-group">
+            <label for="confirm_mobile">4b. Confirm Mobile Input (Re-type Mobile)</label>
+            <input type="tel" id="confirm_mobile" name="confirm_mobile" maxlength="11" placeholder="Confirm mobile">
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 12px;">
+          <div class="form-group">
+            <label for="native_date">5. Native Date Input (HTML5 date)</label>
+            <input type="date" id="native_date" name="dob">
+          </div>
+          <div class="form-group">
+            <label for="masked_date">6. Masked Date Input (DD/MM/YYYY text)</label>
+            <input type="text" id="masked_date" name="masked_date" placeholder="DD/MM/YYYY" maxlength="10">
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: TEXTAREA -->
+      <div class="section-card">
+        <div class="section-title">7. Textareas</div>
+        <div class="form-group">
+          <label for="job_description">Job Experience Description (Textarea)</label>
+          <textarea id="job_description" name="job_description" rows="3" maxlength="300" placeholder="Summary of duties (max 300 characters)"></textarea>
+        </div>
+      </div>
+
+      <!-- SECTION 3: RADIO BUTTON GROUPS -->
+      <div class="section-card">
+        <div class="section-title">8. Dedicated Radio Button Groups (Bilingual Labels & Identifiers)</div>
+        <div class="form-group">
+          <label>Gender (পুরুষ / মহিলা / অন্যান্য)</label>
+          <div class="radio-group" role="radiogroup" aria-label="Gender">
+            <label><input type="radio" name="gender" value="Male" id="gender_m"> Male (পুরুষ)</label>
+            <label><input type="radio" name="gender" value="Female" id="gender_f"> Female (মহিলা)</label>
+            <label><input type="radio" name="gender" value="Other" id="gender_o"> Other (অন্যান্য)</label>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label>Freedom Fighter Quota (মুক্তিযোদ্ধা কোটা)</label>
+          <div class="radio-group" role="radiogroup" aria-label="Freedom Fighter Status">
+            <label><input type="radio" name="freedom_fighter" value="Non-Freedom Fighter" id="ff_no"> Non-Freedom Fighter (অমুক্তিযোদ্ধা)</label>
+            <label><input type="radio" name="freedom_fighter" value="Freedom Fighter" id="ff_yes"> Freedom Fighter (মুক্তিযোদ্ধা)</label>
+            <label><input type="radio" name="freedom_fighter" value="Child of Freedom Fighter" id="ff_child"> Child/Grandchild (মুক্তিযোদ্ধার সন্তান/নাতি-নাতনি)</label>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label>Do you have a National ID? (Yes / No Radio)</label>
+          <div class="radio-group" role="radiogroup" aria-label="NID Available">
+            <label><input type="radio" name="has_nid" value="Yes" id="nid_yes"> Yes (হ্যাঁ)</label>
+            <label><input type="radio" name="has_nid" value="No" id="nid_no"> No (না)</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 4: CHECKBOX GROUPS -->
+      <div class="section-card">
+        <div class="section-title">9. Checkbox Groups & Conditional Checkboxes</div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <label>
+              <input type="checkbox" id="same_as_present" name="same_as_present" value="1">
+              Same as Present Address (বর্তমান ঠিকানার অনুরূপ)
+            </label>
+          </div>
+          <div class="help-text">Only checked if profile explicit present and permanent addresses are identical.</div>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <div class="checkbox-group">
+            <label>
+              <input type="checkbox" id="currently_employed" name="currently_employed" value="1">
+              Currently Employed (বর্তমানে চাকুরীরত)
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 5: NATIVE SINGLE & MULTI-SELECT DROPDOWNS -->
+      <div class="section-card">
+        <div class="section-title">10-11. Native Single Select & Multi-Select Dropdowns</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="religion_select">10. Native Single Select (Religion)</label>
+            <select id="religion_select" name="religion">
+              <option value="">Select Religion</option>
+              <option value="Islam">Islam</option>
+              <option value="Hinduism">Hinduism</option>
+              <option value="Christianity">Christianity</option>
+              <option value="Buddhism">Buddhism</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="skills_multi_select">11. Native Multi-Select (Key Qualifications / Skills)</label>
+            <select id="skills_multi_select" name="skills" multiple size="4">
+              <option value="javascript">JavaScript / TypeScript</option>
+              <option value="python">Python</option>
+              <option value="sql">SQL / Database</option>
+              <option value="management">Project Management</option>
+              <option value="bangla_typing">Bangla Typing</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 6: CUSTOM & ARIA DROPDOWNS -->
+      <div class="section-card">
+        <div class="section-title">12-15. Custom Dropdown, Searchable Dropdown, ARIA Combobox & Listbox</div>
+        <div class="grid-2">
+          <!-- 12. Custom Dropdown -->
+          <div class="form-group">
+            <label id="lbl_custom_dropdown">12. Custom Dropdown (Exam Centre)</label>
+            <div class="combobox-container">
+              <div class="combobox-trigger" id="custom_centre_trigger" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="lbl_custom_dropdown" tabindex="0">
+                <span id="custom_centre_text">Select Exam Centre</span>
+                <span>▼</span>
+              </div>
+              <ul class="combobox-listbox" id="custom_centre_listbox" role="listbox" aria-labelledby="lbl_custom_dropdown">
+                <li class="combobox-option" role="option" data-value="Dhaka">Dhaka (ঢাকা)</li>
+                <li class="combobox-option" role="option" data-value="Chittagong">Chittagong (চট্টগ্রাম)</li>
+                <li class="combobox-option" role="option" data-value="Rajshahi">Rajshahi (রাজশাহী)</li>
+                <li class="combobox-option" role="option" data-value="Khulna">Khulna (খুলনা)</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 13. Searchable Dropdown -->
+          <div class="form-group">
+            <label for="searchable_quota_input">13. Searchable Dropdown (Quota Preference)</label>
+            <div class="combobox-container">
+              <input type="text" id="searchable_quota_input" role="combobox" aria-autocomplete="list" aria-controls="quota_listbox" placeholder="Type or select quota..." autocomplete="off">
+              <ul class="combobox-listbox" id="quota_listbox" role="listbox">
+                <li class="combobox-option" role="option" data-value="General">General (সাধারণ)</li>
+                <li class="combobox-option" role="option" data-value="Freedom Fighter">Freedom Fighter (মুক্তিযোদ্ধা)</li>
+                <li class="combobox-option" role="option" data-value="Orphan">Orphan & Physical Handicapped (এতিম ও শারীরিক প্রতিবন্ধী)</li>
+                <li class="combobox-option" role="option" data-value="Female">Female Quota (মহিলা কোটা)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 16px;">
+          <!-- 14. ARIA Combobox with Popup -->
+          <div class="form-group">
+            <label id="lbl_nationality_combobox">14. ARIA Combobox (Nationality)</label>
+            <div role="combobox" id="nationality_combobox" aria-expanded="false" aria-haspopup="listbox" aria-controls="nationality_listbox" aria-labelledby="lbl_nationality_combobox" tabindex="0" class="combobox-trigger">
+              <span id="nationality_combobox_val">Select Nationality</span>
+              <span>▼</span>
+            </div>
+            <ul id="nationality_listbox" role="listbox" class="combobox-listbox">
+              <li role="option" data-value="Bangladeshi" class="combobox-option">Bangladeshi (বাংলাদেশী)</li>
+              <li role="option" data-value="Others" class="combobox-option">Others (অন্যান্য)</li>
+            </ul>
+          </div>
+
+          <!-- 15. ARIA Listbox Standalone -->
+          <div class="form-group">
+            <label id="lbl_marital_listbox">15. ARIA Listbox (Marital Status)</label>
+            <ul id="marital_listbox" role="listbox" tabindex="0" aria-labelledby="lbl_marital_listbox" style="border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin: 0; list-style: none;">
+              <li role="option" data-value="Single" class="combobox-option">Single (অবিবাহিত)</li>
+              <li role="option" data-value="Married" class="combobox-option">Married ( his/her spouse)</li>
+              <li role="option" data-value="Divorced" class="combobox-option">Divorced (বিচ্ছেদপ্রাপ্ত)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 7: TOGGLE SWITCH -->
+      <div class="section-card">
+        <div class="section-title">16. Accessible Toggle Switch</div>
+        <div class="form-group">
+          <label>Departmental Candidate Status (বিভাগীয় প্রার্থী)</label>
+          <div class="switch-wrapper">
+            <div role="switch" id="departmental_switch" aria-checked="false" tabindex="0" class="switch-ui" aria-label="Departmental Candidate">
+              <div class="slider"></div>
+            </div>
+            <span id="departmental_status_text" style="font-size: 14px; font-weight: 500;">No / সাধারণ প্রার্থী</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 8: DEPENDENT & DELAYED DROPDOWNS -->
+      <div class="section-card">
+        <div class="section-title">17-18. Cascading & Asynchronously Delayed Dropdowns</div>
+        <div class="present-address-box">
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="present_district">17. Parent Dropdown (Present District)</label>
+              <select id="present_district" name="present_district">
+                <option value="">Select a District</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Chittagong">Chittagong</option>
+                <option value="Rajshahi">Rajshahi</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="present_upazila">17b. Dependent Child Dropdown (Present Upazila)</label>
+              <select id="present_upazila" name="present_upazila">
+                <option value="">Select a P.S./Upazila</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="delayed_sub_category">18. Asynchronously Delayed Dropdown (Loads after 200ms)</label>
+          <select id="delayed_sub_category" name="delayed_sub_category">
+            <option value="">Loading options...</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- SECTION 9: SPLIT DATE CONTROLS -->
+      <div class="section-card">
+        <div class="section-title">19. Split Date of Birth Controls (Day, Month, Year Dropdowns)</div>
+        <label>Date of Birth (দিন / মাস / বছর)</label>
+        <div class="grid-3">
+          <div class="form-group">
+            <select id="dob_day" name="dob_day">
+              <option value="">Day</option>
+              <!-- 1 to 31 populated via JS -->
+            </select>
+          </div>
+          <div class="form-group">
+            <select id="dob_month" name="dob_month">
+              <option value="">Month</option>
+              <option value="1">January</option>
+              <option value="2">February</option>
+              <option value="3">March</option>
+              <option value="4">April</option>
+              <option value="5">May</option>
+              <option value="6">June</option>
+              <option value="7">July</option>
+              <option value="8">August</option>
+              <option value="9">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <select id="dob_year" name="dob_year">
+              <option value="">Year</option>
+              <!-- Years populated via JS -->
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 10: REPEATED EDUCATION FIELDSETS -->
+      <div class="section-card">
+        <div class="section-title">20. Repeated Fieldsets & Section Isolation (SSC vs. HSC)</div>
+        
+        <!-- SSC Fieldset -->
+        <fieldset class="edu-block" id="ssc_section" style="border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 16px;">
+          <legend style="font-weight: 700; color: var(--primary);">SSC or Equivalent Level</legend>
+          <div class="grid-3">
+            <div class="form-group">
+              <label for="ssc_examination">Examination</label>
+              <select id="ssc_examination" name="ssc_examination">
+                <option value="">Select One</option>
+                <option value="SSC">S.S.C</option>
+                <option value="Dakhil">Dakhil</option>
+                <option value="SSC Vocational">S.S.C Vocational</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ssc_board">Board</label>
+              <select id="ssc_board" name="ssc_board">
+                <option value="">Select One</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Comilla">Comilla</option>
+                <option value="Madrasah">Madrasah</option>
+                <option value="Technical">Technical</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ssc_roll">Roll No</label>
+              <input type="text" id="ssc_roll" name="ssc_roll" placeholder="Roll No">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- HSC Fieldset -->
+        <fieldset class="edu-block" id="hsc_section" style="border: 1px solid var(--border); border-radius: 6px; padding: 15px;">
+          <legend style="font-weight: 700; color: var(--primary);">HSC or Equivalent Level</legend>
+          <div class="grid-3">
+            <div class="form-group">
+              <label for="hsc_examination">Examination</label>
+              <select id="hsc_examination" name="hsc_examination">
+                <option value="">Select One</option>
+                <option value="HSC">H.S.C</option>
+                <option value="Alim">Alim</option>
+                <option value="HSC Vocational">H.S.C Vocational</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="hsc_board">Board</label>
+              <select id="hsc_board" name="hsc_board">
+                <option value="">Select One</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Comilla">Comilla</option>
+                <option value="Madrasah">Madrasah</option>
+                <option value="Technical">Technical</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="hsc_roll">Roll No</label>
+              <input type="text" id="hsc_roll" name="hsc_roll" placeholder="Roll No">
+            </div>
+          </div>
+        </fieldset>
+      </div>
+
+      <!-- SECTION 11: CUSTOM REACT & UNKNOWN CUSTOM CONTROLS -->
+      <div class="section-card">
+        <div class="section-title">21-22. Custom React Dropdown & Unknown Custom Control</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label id="lbl_react_select">21. Custom React Dropdown (Question Version)</label>
+            <div class="custom-select-trigger" id="react_version_select" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0">
+              <span class="selected-text">Bangla (বাংলা)</span>
+              <span>▼</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>22. Unknown Custom Control (Non-standard Widget)</label>
+            <div id="unknown_color_widget" data-custom-widget="color-picker" style="padding: 10px; border: 2px dashed #9ca3af; border-radius: 6px; text-align: center; color: var(--text-muted); cursor: pointer;">
+              Clickable non-standard container (Must NOT guess unsafe values)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 12: FILE INPUTS -->
+      <div class="section-card">
+        <div class="section-title">23. Approved File Inputs (Document Repository Integration)</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="applicant_photo">Applicant Photo (300x300, max 100KB)</label>
+            <input type="file" id="applicant_photo" name="applicant_photo" accept="image/jpeg,image/png">
+            <div class="help-text">Mapped to Document Repository Profile Photo.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="applicant_signature">Applicant Signature (300x80, max 60KB)</label>
+            <input type="file" id="applicant_signature" name="applicant_signature" accept="image/jpeg,image/png">
+            <div class="help-text">Mapped to Document Repository Signature.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 13: DISABLED CONTROL & MISSING OPTION -->
+      <div class="section-card">
+        <div class="section-title">24-25. Disabled Control & Missing Option</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="disabled_field">24. Disabled Control (Read-Only / Protected)</label>
+            <input type="text" id="disabled_field" name="disabled_field" value="AUTO-GENERATED-ID" disabled readonly style="background: #e5e7eb;">
+            <div class="help-text">Must be classified as Unsupported Control / Skipped.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="missing_option_select">25. Dropdown with Missing Option</label>
+            <select id="missing_option_select" name="missing_option">
+              <option value="">Select Option</option>
+              <option value="Standard">Standard</option>
+              <option value="Basic">Basic</option>
+            </select>
+            <div class="help-text">Profile requires 'Advanced Tier' (not in list; reports OPTION_NOT_FOUND).</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 14: SECURITY EXCLUSIONS -->
+      <div class="section-card" style="border: 1px solid #f87171; background: #fff5f5;">
+        <div class="section-title" style="color: var(--danger); border-bottom-color: #f87171;">
+          26. Security Exclusions (CAPTCHA, OTP, Password & Declarations)
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="security_captcha">Security CAPTCHA / Verification Code</label>
+            <input type="text" id="security_captcha" name="captcha" placeholder="Enter characters shown above" style="border-color: #f87171;">
+            <div class="help-text" style="color: var(--danger);">MUST NEVER BE TOUCHED BY AUTOFILL ENGINE.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="security_otp">OTP / PIN Field</label>
+            <input type="password" id="security_otp" name="otp_code" placeholder="Enter 6-digit OTP" style="border-color: #f87171;">
+            <div class="help-text" style="color: var(--danger);">MUST NEVER BE AUTOMATED.</div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <div class="checkbox-group">
+            <label style="color: var(--danger); font-weight: 600;">
+              <input type="checkbox" id="legal_declaration" name="declaration" value="1">
+              I certify that all statements made in this application are true, complete and correct.
+            </label>
+          </div>
+          <div class="help-text" style="color: var(--danger);">LEGAL DECLARATION: NEVER AUTO-CHECKED.</div>
+        </div>
+      </div>
+
+      <!-- SUBMIT ACTIONS -->
+      <div style="margin-top: 30px; display: flex; gap: 16px;">
+        <button type="button" id="btn_manual_review" style="padding: 12px 24px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+          Manual Review & Submit Application (User-Initiated Only)
+        </button>
+        <button type="reset" style="padding: 12px 24px; background: #e5e7eb; color: var(--text); border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+          Reset Test Form
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+  <script>
+    // 1. Populate Day Dropdown (1-31) and Year Dropdown (1975-2010)
+    const daySelect = document.getElementById('dob_day');
+    for (let i = 1; i <= 31; i++) {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = String(i).padStart(2, '0');
+      daySelect.appendChild(opt);
+    }
+    const yearSelect = document.getElementById('dob_year');
+    for (let y = 2010; y >= 1975; y--) {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearSelect.appendChild(opt);
+    }
+
+    // 2. Cascading District -> Upazila logic
+    const upazilaData = {
+      dhaka: ['Dhanmondi', 'Gulshan', 'Mirpur', 'Mohammadpur', 'Uttara', 'Motijheel'],
+      chittagong: ['Kotwali', 'Pahartali', 'Panchlaish', 'Double Mooring'],
+      rajshahi: ['Boalia', 'Motihar', 'Rajpara', 'Shah Makhdum']
+    };
+    const distEl = document.getElementById('present_district');
+    const upazilaEl = document.getElementById('present_upazila');
+
+    distEl.addEventListener('change', function() {
+      const val = (this.value || '').toLowerCase();
+      upazilaEl.innerHTML = '<option value="">Select a P.S./Upazila</option>';
+      if (upazilaData[val]) {
+        upazilaData[val].forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = t;
+          upazilaEl.appendChild(opt);
+        });
+      }
+    });
+
+    // 3. Delayed Dropdown Population (simulates AJAX latency)
+    setTimeout(() => {
+      const delayedEl = document.getElementById('delayed_sub_category');
+      delayedEl.innerHTML = `
+        <option value="">Select Specialization</option>
+        <option value="software">Software Engineering</option>
+        <option value="network">Network Administration</option>
+        <option value="data">Data Science</option>
+      `;
+    }, 200);
+
+    // 4. Toggle Switch Interactive Logic
+    const toggleSwitch = document.getElementById('departmental_switch');
+    const toggleText = document.getElementById('departmental_status_text');
+    toggleSwitch.addEventListener('click', function() {
+      const isChecked = this.getAttribute('aria-checked') === 'true';
+      const newState = !isChecked;
+      this.setAttribute('aria-checked', newState ? 'true' : 'false');
+      toggleText.textContent = newState ? 'Yes / বিভাগীয় প্রার্থী' : 'No / সাধারণ প্রার্থী';
+    });
+
+    // 5. Custom Combobox Dropdown Logic
+    const comboboxTrigger = document.getElementById('custom_centre_trigger');
+    const comboboxListbox = document.getElementById('custom_centre_listbox');
+    const comboboxText = document.getElementById('custom_centre_text');
+
+    comboboxTrigger.addEventListener('click', function() {
+      const open = comboboxListbox.classList.toggle('open');
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    comboboxListbox.querySelectorAll('.combobox-option').forEach(opt => {
+      opt.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const val = this.getAttribute('data-value');
+        comboboxText.textContent = this.textContent;
+        comboboxListbox.querySelectorAll('.combobox-option').forEach(o => o.removeAttribute('aria-selected'));
+        this.setAttribute('aria-selected', 'true');
+        comboboxListbox.classList.remove('open');
+        comboboxTrigger.setAttribute('aria-expanded', 'false');
+        comboboxTrigger.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+    // 6. React Value Tracker Simulator on Mobile Input
+    const mobileEl = document.getElementById('contact_mobile');
+    let reactMobileState = '';
+    mobileEl._valueTracker = {
+      getValue() { return reactMobileState; },
+      setValue(val) { reactMobileState = val; }
+    };
+    mobileEl.addEventListener('input', (e) => {
+      reactMobileState = e.target.value;
+    });
+  </script>
+</body>
+</html>

@@ -763,13 +763,25 @@ const JOB_CATEGORY_LABELS_BN: Record<string, string> = {
 };
 
 const APPLICATION_STATUS_LABELS_BN: Record<string, string> = {
+  Interested: 'আগ্রহী',
   Bookmarked: 'সংরক্ষিত',
+  Saved: 'সংরক্ষিত',
   'Ready to Apply': 'আবেদনের জন্য প্রস্তুত',
+  Visited: 'দেখা হয়েছে',
+  'Application Started': 'আবেদন শুরু হয়েছে',
+  'Submission Pending Verification': 'জমা যাচাইাধীন',
   Applied: 'আবেদনকৃত',
+  'Submission Failed': 'আবেদন ব্যর্থ হয়েছে',
+  'Needs Manual Confirmation': 'যাচাই প্রয়োজন',
+  Cancelled: 'বাতিল',
+  'Payment Pending': 'ফি বাকি',
+  'Payment Completed': 'ফি পরিশোধিত',
+  'Admit Card Available': 'প্রবেশপত্র প্রস্তুত',
   'Exam Scheduled': 'পরীক্ষার সূচি',
   'Result Published': 'ফলাফল প্রকাশিত',
   Selected: 'নির্বাচিত',
   Rejected: 'বাতিল / অকৃতকার্য',
+  Expired: 'মেয়াদোত্তীর্ণ',
 };
 
 export function formatJobCategoryLabel(category: string, bn: boolean): string {

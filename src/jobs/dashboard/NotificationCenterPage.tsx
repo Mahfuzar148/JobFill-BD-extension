@@ -27,6 +27,7 @@ type NotifTab =
   | 'all'
   | 'new_jobs'
   | 'matching'
+  | 'exam_alerts'
   | 'deadline_reminders'
   | 'deadline_changed'
   | 'urgent'
@@ -120,6 +121,12 @@ export const NotificationCenterPage: React.FC<NotificationCenterPageProps> = ({
         return n.type === 'new_job' || n.type === 'daily_digest' || n.type === 'matching_job';
       case 'matching':
         return n.type === 'matching_job';
+      case 'exam_alerts':
+        return (
+          n.type === 'exam_reminder' ||
+          n.type === 'admit_card_alert' ||
+          n.type === 'result_alert'
+        );
       case 'deadline_reminders':
         return n.type === 'deadline_reminder' || n.type === 'urgent_deadline' || n.type === 'deadline_changed';
       case 'deadline_changed':
@@ -175,6 +182,7 @@ export const NotificationCenterPage: React.FC<NotificationCenterPageProps> = ({
     { id: 'all', labelEn: 'All', labelBn: 'সব' },
     { id: 'new_jobs', labelEn: 'New Jobs', labelBn: 'নতুন চাকরি' },
     { id: 'matching', labelEn: 'Matching Jobs', labelBn: 'পছন্দসই চাকরি' },
+    { id: 'exam_alerts', labelEn: 'Exams, Admit & Results', labelBn: 'পরীক্ষা, প্রবেশপত্র ও ফলাফল' },
     { id: 'deadline_reminders', labelEn: 'Deadline Reminders', labelBn: 'সময়সীমা সতর্কতা' },
     { id: 'deadline_changed', labelEn: 'Deadline Changed', labelBn: 'সময়সীমা পরিবর্তন' },
     { id: 'urgent', labelEn: 'Urgent', labelBn: 'জরুরি' },

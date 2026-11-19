@@ -281,13 +281,40 @@ export class SelectHandler implements ControlHandler {
         availableOptions: availableOpts,
         selectedOption: null,
         result: 'Profile value missing',
-        details: 'No examination or select value saved in the active user profile.',
+        details: 'PROFILE_DATA_MISSING: No examination or select value saved in the active user profile.',
       });
       return {
         success: false,
         element: select,
         status: 'Fill Failed',
-        message: 'No value found in active profile.',
+        message: 'PROFILE_DATA_MISSING: No value found in active profile.',
+        appliedValue: '',
+      };
+    }
+
+    // Bounded wait for dependent options if select currently has only placeholder/empty options
+    if (select.options.length <= 1) {
+      await SelectHandler.waitForOptions(select, select.options.length, 1200);
+    }
+
+    // Re-snapshot available options after potential async population
+    const currentOptions = Array.from(select.options).map((o) => ({ value: o.value, text: o.text }));
+
+    if (select.options.length <= 1 && this.isPlaceholderOption(select.options[0], 0)) {
+      SelectHandler.debugReports.push({
+        section: sectionName,
+        field: fieldName,
+        savedValue: proposedValue,
+        availableOptions: currentOptions,
+        selectedOption: null,
+        result: 'Dependent options not loaded',
+        details: `OPTIONS_NOT_LOADED: Dropdown options did not load within timeout (count: ${select.options.length}).`,
+      });
+      return {
+        success: false,
+        element: select,
+        status: 'Fill Failed',
+        message: `OPTIONS_NOT_LOADED: Dropdown options failed to load within timeout.`,
         appliedValue: '',
       };
     }
@@ -298,23 +325,34 @@ export class SelectHandler implements ControlHandler {
         section: sectionName,
         field: fieldName,
         savedValue: proposedValue,
-        availableOptions: availableOpts,
+        availableOptions: currentOptions,
         selectedOption: null,
         result: 'No matching option',
-        details: `Available options: ${availableOpts.map((o) => o.text).join(', ')}`,
+        details: `OPTION_NOT_FOUND: Available options: ${currentOptions.map((o) => o.text).join(', ')}`,
       });
 
       return {
         success: false,
         element: select,
         status: 'Fill Failed',
-        message: `No matching option found for "${proposedValue}" among ${select.options.length} options.`,
+        message: `OPTION_NOT_FOUND: No matching option found for "${proposedValue}" among ${select.options.length} options.`,
         appliedValue: proposedValue,
       };
     }
 
     try {
-      select.value = matchedOpt.value;
+      try {
+        const prototype = window.HTMLSelectElement?.prototype;
+        const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
+        if (descriptor && descriptor.set) {
+          descriptor.set.call(select, matchedOpt.value);
+        } else {
+          select.value = matchedOpt.value;
+        }
+      } catch {
+        select.value = matchedOpt.value;
+      }
+
       select.selectedIndex = matchedOpt.index;
       matchedOpt.selected = true;
 
@@ -351,7 +389,7 @@ export class SelectHandler implements ControlHandler {
           success: true,
           element: select,
           status: 'Filled',
-          message: `Option "${matchedOpt.text}" successfully selected.`,
+          message: `FILLED_VERIFIED: Option "${matchedOpt.text}" successfully selected.`,
           appliedValue: matchedOpt.text || matchedOpt.value,
         };
       } else {
@@ -362,14 +400,14 @@ export class SelectHandler implements ControlHandler {
           availableOptions: availableOpts,
           selectedOption: select.value,
           result: 'Website rejected selection',
-          details: `Selection reverted by host page scripts. Expected: "${matchedOpt.text}", got: "${select.value}".`,
+          details: `FRAMEWORK_UPDATE_FAILED: Selection reverted by host page scripts. Expected: "${matchedOpt.text}", got: "${select.value}".`,
         });
 
         return {
           success: false,
           element: select,
           status: 'Fill Failed',
-          message: 'Selected dropdown option reverted by host website.',
+          message: 'FRAMEWORK_UPDATE_FAILED: Selected dropdown option reverted by host website.',
           appliedValue: select.value,
         };
       }

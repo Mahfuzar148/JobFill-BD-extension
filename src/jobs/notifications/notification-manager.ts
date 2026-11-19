@@ -19,7 +19,7 @@ export interface DispatchNotificationInput {
   applicationUrl?: string | null;
   isUrgent?: boolean;
   actionButtonTitle?: string;
-  routeTab?: 'circulars' | 'search' | 'govt_orgs' | 'notifications';
+  routeTab?: 'circulars' | 'search' | 'govt_orgs' | 'notifications' | 'tracker';
   createdAt?: number;
 }
 

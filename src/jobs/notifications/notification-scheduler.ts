@@ -10,6 +10,7 @@ import {
 } from '../types/job.types';
 import { JobRepository } from '../database/job-repository';
 import { BookmarkRepository } from '../database/bookmark-repository';
+import { JobNotificationRepository } from '../database/notification-repository';
 import { ApplicationRepository } from '../database/application-repository';
 import { evaluateJobReminderSchedule, TWO_HOURS_MS } from './deadline-reminder';
 import { NotificationManager } from './notification-manager';
@@ -39,13 +40,18 @@ export class NotificationScheduler {
 
     this.isRunning = true;
     try {
-      const [jobs, schedules, prefs, applications, bookmarkedIds] = await Promise.all([
+      const [jobs, schedules, prefs, applications, bookmarkedIds, existingNotifs] = await Promise.all([
         JobRepository.getAllRawJobs(),
         JobRepository.getReminderSchedules(),
         JobRepository.getPreferences(),
         ApplicationRepository.getAll(),
         BookmarkRepository.getBookmarkedJobIds(),
+        JobNotificationRepository.getAll(),
       ]);
+
+      const emittedKeys = new Set(
+        existingNotifs.map((n) => `${n.type}::${n.jobId || ''}::${n.remainingText || n.title}`)
+      );
 
       const trackedNonAppliedIds = new Set(
         applications
@@ -55,15 +61,113 @@ export class NotificationScheduler {
 
       const appliedJobIds = new Set(
         applications
-          .filter((a) => ['Applied', 'Exam Scheduled', 'Result Published', 'Rejected', 'Selected'].includes(a.status))
+          .filter((a) =>
+            [
+              'Applied',
+              'Payment Pending',
+              'Payment Completed',
+              'Admit Card Available',
+              'Exam Scheduled',
+              'Result Published',
+              'Rejected',
+              'Selected',
+            ].includes(a.status)
+          )
           .map((a) => a.jobId)
       );
+
+      const notificationsSent: JobNotificationRecord[] = [];
+      const expiredNotificationsSent: JobNotificationRecord[] = [];
+
+      // Process Tracker-level Exam, Admit Card & Result Alerts (strictly deduplicated)
+      for (const app of applications) {
+        if (prefs.examRemindersEnabled !== false && app.examDate) {
+          const examTs = Date.parse(`${app.examDate}T09:00:00+06:00`);
+          if (Number.isFinite(examTs) && examTs > now) {
+            const msUntilExam = examTs - now;
+            if (msUntilExam <= 7 * 86_400_000) {
+              const examDedupKey = `exam_reminder::${app.jobId}::${app.examDate}`;
+              if (!emittedKeys.has(examDedupKey)) {
+                emittedKeys.add(examDedupKey);
+                const daysLeft = Math.max(1, Math.ceil(msUntilExam / 86_400_000));
+                const notif = await NotificationManager.dispatch({
+                  type: 'exam_reminder',
+                  title: `Upcoming Exam (${daysLeft}d): ${app.jobTitle}`,
+                  message: `Exam scheduled for ${app.examDate}${app.examVenue ? ` at ${app.examVenue}` : ''}. (${app.organization})`,
+                  jobId: app.jobId,
+                  jobTitle: app.jobTitle,
+                  organization: app.organization,
+                  remainingText: app.examDate,
+                  circularUrl: app.circularUrl,
+                  applicationUrl: app.applicationUrl,
+                  isUrgent: msUntilExam <= 48 * 3_600_000,
+                  actionButtonTitle: 'Open Tracker',
+                  routeTab: 'tracker',
+                  createdAt: now,
+                });
+                notificationsSent.push(notif);
+              }
+            }
+          }
+        }
+
+        if (
+          prefs.admitResultAlertsEnabled !== false &&
+          (app.admitCardStatus === 'Available' || app.status === 'Admit Card Available')
+        ) {
+          const admitDedupKey = `admit_card_alert::${app.jobId}::Available`;
+          if (!emittedKeys.has(admitDedupKey)) {
+            emittedKeys.add(admitDedupKey);
+            const notif = await NotificationManager.dispatch({
+              type: 'admit_card_alert',
+              title: `Admit Card Available: ${app.jobTitle}`,
+              message: `Download admit card for ${app.organization}${app.examDate ? ` (Exam: ${app.examDate})` : ''}.`,
+              jobId: app.jobId,
+              jobTitle: app.jobTitle,
+              organization: app.organization,
+              remainingText: 'Available',
+              circularUrl: app.circularUrl,
+              applicationUrl: app.admitCardUrl || app.applicationUrl,
+              isUrgent: true,
+              actionButtonTitle: 'Open Tracker',
+              routeTab: 'tracker',
+              createdAt: now,
+            });
+            notificationsSent.push(notif);
+          }
+        }
+
+        if (
+          prefs.admitResultAlertsEnabled !== false &&
+          (app.status === 'Result Published' || Boolean(app.resultSummary?.trim()))
+        ) {
+          const resultTag = (app.resultSummary || 'Published').trim();
+          const resultDedupKey = `result_alert::${app.jobId}::${resultTag}`;
+          if (!emittedKeys.has(resultDedupKey)) {
+            emittedKeys.add(resultDedupKey);
+            const notif = await NotificationManager.dispatch({
+              type: 'result_alert',
+              title: `Result Update: ${app.jobTitle}`,
+              message: `${app.organization}: ${app.resultSummary || 'Result published — check official portal.'}`,
+              jobId: app.jobId,
+              jobTitle: app.jobTitle,
+              organization: app.organization,
+              remainingText: resultTag,
+              circularUrl: app.circularUrl,
+              applicationUrl: app.resultUrl || app.applicationUrl,
+              isUrgent: false,
+              actionButtonTitle: 'View Tracker',
+              routeTab: 'tracker',
+              createdAt: now,
+            });
+            notificationsSent.push(notif);
+          }
+        }
+      }
 
       const updatedJobs: NormalizedJobCircular[] = [];
       let expiredJobsUpdated = 0;
       const updatedSchedules: Record<string, ReminderScheduleRecord> = { ...schedules };
-      const notificationsSent: JobNotificationRecord[] = [];
-      const expiredNotificationsSent: JobNotificationRecord[] = [];
       let earliestNextAt: number | null = null;
 
       for (const rawJob of jobs) {

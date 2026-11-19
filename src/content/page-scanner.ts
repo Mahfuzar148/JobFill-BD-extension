@@ -15,6 +15,10 @@ import { FieldStatus, DiagnosticFieldStatus } from '../types/field-status';
 import { resolveSiteAdapter } from '../adapters/adapter-registry';
 import { PETROBANGLA_FIELD_MAPS } from '../adapters/petrobangla/petrobangla.field-map';
 import { ControlHandlerRouter, CheckboxHandler, SelectHandler } from '../handlers';
+import { UniversalSemanticEngine } from '../intelligence/universal-semantic-engine';
+import { FormSectionEngine } from '../intelligence/form-section-engine';
+import { CascadingDropdownEngine } from '../engine/cascadingDropdownEngine';
+import { CompositeFieldAdapter } from '../intelligence/composite-field-adapter';
 
 export interface PageScanResult {
   timestamp: string;
@@ -60,7 +64,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
       },
       dateOfBirth: p.personal.dob || '',
       gender: p.personal.gender || '',
-      nationality: p.personal.nationality || 'Bangladeshi',
+      nationality: p.personal.nationality || '',
       religion: p.personal.religion || '',
       maritalStatus: p.personal.maritalStatus || '',
       spouseName: {
@@ -74,8 +78,12 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
         passportExpiry: p.personal.passportExpiry || '',
       },
       contact: {
-        mobile: p.personal.mobile || '',
-        confirmMobile: p.personal.mobile || p.personal.confirmMobile || '',
+        mobile: ValueNormalizer.normalizeMobileNumber(
+          p.personal.mobile || (p.personal as any).phone || (p.personal as any).contactNumber || ''
+        ),
+        confirmMobile: ValueNormalizer.normalizeMobileNumber(
+          p.personal.mobile || p.personal.confirmMobile || (p.personal as any).phone || ''
+        ),
         email: p.personal.email || '',
       },
       quota: p.personal.quota || '',
@@ -83,30 +91,45 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
     },
     address: {
       present: {
-        careOf: p.address.present.careOf || '',
-        village: p.address.present.village || '',
-        road: p.address.present.road || '',
-        house: p.address.present.house || '',
-        flat: p.address.present.flat || '',
-        division: p.address.present.division || '',
-        district: p.address.present.district || '',
-        upazila: p.address.present.upazila || '',
-        postOffice: p.address.present.postOffice || '',
-        postCode: p.address.present.postCode || '',
+        careOf: p.address?.present?.careOf || '',
+        village: p.address?.present?.village || '',
+        road: p.address?.present?.road || '',
+        house: p.address?.present?.house || '',
+        flat: p.address?.present?.flat || '',
+        division: p.address?.present?.division || '',
+        district: p.address?.present?.district || '',
+        upazila: p.address?.present?.upazila || '',
+        postOffice: p.address?.present?.postOffice || '',
+        postCode: p.address?.present?.postCode || '',
       },
       permanent: {
-        careOf: p.address.permanent.careOf || '',
-        village: p.address.permanent.village || '',
-        road: p.address.permanent.road || '',
-        house: p.address.permanent.house || '',
-        flat: p.address.permanent.flat || '',
-        division: p.address.permanent.division || '',
-        district: p.address.permanent.district || '',
-        upazila: p.address.permanent.upazila || '',
-        postOffice: p.address.permanent.postOffice || '',
-        postCode: p.address.permanent.postCode || '',
+        careOf: p.address?.permanent?.careOf || '',
+        village: p.address?.permanent?.village || '',
+        road: p.address?.permanent?.road || '',
+        house: p.address?.permanent?.house || '',
+        flat: p.address?.permanent?.flat || '',
+        division: p.address?.permanent?.division || '',
+        district: p.address?.permanent?.district || '',
+        upazila: p.address?.permanent?.upazila || '',
+        postOffice: p.address?.permanent?.postOffice || '',
+        postCode: p.address?.permanent?.postCode || '',
       },
-      sameAsPresent: p.address.sameAsPresent || false,
+      sameAsPresent: (() => {
+        if (!p.address?.sameAsPresent) return false;
+        const pres = p.address?.present || ({} as any);
+        const perm = p.address?.permanent || ({} as any);
+        const clean = (s: string | undefined) => (s || '').trim().toLowerCase();
+        const hasExplicitConflict = Boolean(
+          (pres.district && perm.district && clean(pres.district) !== clean(perm.district)) ||
+          (pres.upazila && perm.upazila && clean(pres.upazila) !== clean(perm.upazila)) ||
+          (pres.village && perm.village && clean(pres.village) !== clean(perm.village)) ||
+          (pres.careOf && perm.careOf && clean(pres.careOf) !== clean(perm.careOf)) ||
+          (pres.road && perm.road && clean(pres.road) !== clean(perm.road)) ||
+          (pres.house && perm.house && clean(pres.house) !== clean(perm.house)) ||
+          (pres.postCode && perm.postCode && clean(pres.postCode) !== clean(perm.postCode))
+        );
+        return !hasExplicitConflict;
+      })(),
     },
     education: {
       ssc: {
@@ -117,6 +140,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
         group: p.ssc?.groupSubject || '',
         result: p.ssc?.resultType || '',
         gpa: p.ssc?.gpa || '',
+        gpaScale: p.ssc?.gpaScale || '5.0',
         passingYear: p.ssc?.passingYear || '',
       },
       hsc: {
@@ -127,6 +151,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
         group: p.hsc?.groupSubject || '',
         result: p.hsc?.resultType || '',
         gpa: p.hsc?.gpa || '',
+        gpaScale: p.hsc?.gpaScale || '5.0',
         passingYear: p.hsc?.passingYear || '',
       },
       graduation: p.graduation
@@ -136,6 +161,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
             institution: p.graduation.universityInstitute || '',
             result: p.graduation.resultType || '',
             gpa: p.graduation.gpa || '',
+            gpaScale: p.graduation.gpaScale || '4.0',
             passingYear: p.graduation.passingYear || '',
             courseDuration: p.graduation.courseDuration || '',
           }
@@ -147,6 +173,7 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
             institution: p.masters.universityInstitute || '',
             result: p.masters.resultType || '',
             gpa: p.masters.gpa || '',
+            gpaScale: p.masters.gpaScale || '4.0',
             passingYear: p.masters.passingYear || '',
             courseDuration: p.masters.courseDuration || '',
           }
@@ -163,6 +190,16 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
       currentlyWorking: exp.currentlyWorking || false,
       jobDescription: exp.jobDescription || '',
     })),
+    references: (p.references || []).map((ref, idx) => ({
+      id: ref.id || `ref_${idx}`,
+      name: ref.name || '',
+      designation: ref.designation || '',
+      organization: ref.organization || '',
+      mobile: ref.mobile || '',
+      email: ref.email || '',
+      address: ref.address || '',
+      relation: ref.relation || '',
+    })),
     circularPreferences: {
       recruitmentTitle: '',
       postCode: '',
@@ -176,6 +213,8 @@ export function toCanonicalProfile(p: UserProfile): MasterCanonicalProfile {
       orgChoice1: p.special?.orgChoice1 || '',
       orgChoice2: p.special?.orgChoice2 || '',
     },
+    customFields: p.customFields || [],
+    special: (p.special as any) || {},
   };
 }
 
@@ -190,9 +229,9 @@ export class PageScanner {
     const missingProfileFields: string[] = [];
 
     // Query candidate inputs (filter out hidden, submit buttons, captchas, csrf tokens)
-    const elements = Array.from(document.querySelectorAll<HTMLElement>('input, select, textarea')).filter((el) =>
-      FieldExtractor.isSafeEditableField(el)
-    );
+    const elements = Array.from(
+      document.querySelectorAll<HTMLElement>('input, select, textarea, [role="combobox"]')
+    ).filter((el) => FieldExtractor.isSafeEditableField(el));
 
     const siteAdapter = resolveSiteAdapter(window.location.href, document);
     const isPetroBanglaSite = siteAdapter?.id === 'petrobangla';
@@ -221,6 +260,21 @@ export class PageScanner {
       const learned = await MappingRepository.findMapping(fp);
       if (learned && learned.canonicalKey) {
         matchedCanonicalId = learned.canonicalKey;
+        const learnedExp: MatchExplanation = {
+          detectedLabel: evidence.label || evidence.name || 'Learned Field',
+          elementSelector: evidence.selector,
+          selectedCanonicalId: learned.canonicalKey,
+          matchScore: 100,
+          decisionTier: 'HIGH_CONFIDENCE',
+          confidencePercent: 100,
+          hierarchyContext: evidence.parentContextText,
+          supportingEvidence: ['Learned Adaptive Mapping Memory'],
+          penalties: [],
+          alternativeCandidates: [],
+          isSafeToAutofill: true,
+          requiresUserConfirmation: false,
+        };
+        explanations.set(evidence.selector, learnedExp);
       }
 
       // Check 2: Universal Matcher with Rigorous Context Analysis
@@ -234,6 +288,77 @@ export class PageScanner {
           ambiguityReason = explanation.rejectionReason || 'Ambiguous matching candidates. Requires user clarification.';
         } else if (explanation.selectedCanonicalId) {
           matchedCanonicalId = explanation.selectedCanonicalId;
+        } else {
+          // Fallback to Universal Multi-Signal Semantic Engine
+          const uniMatch = UniversalSemanticEngine.matchElement(evidence);
+          if (uniMatch.decisionTier === 'AMBIGUOUS') {
+            isAmbiguous = true;
+            ambiguityReason = uniMatch.rejectionReason || 'Ambiguous matching candidates in universal engine.';
+          } else if (uniMatch.canonicalId && uniMatch.isSafeToAutofill) {
+            matchedCanonicalId = uniMatch.canonicalId;
+            explanation = {
+              detectedLabel: evidence.label || evidence.name || 'Field',
+              elementSelector: evidence.selector,
+              selectedCanonicalId: uniMatch.canonicalId,
+              matchScore: uniMatch.confidenceScore,
+              decisionTier: uniMatch.decisionTier,
+              confidencePercent: uniMatch.confidenceScore,
+              hierarchyContext: evidence.parentContextText,
+              supportingEvidence: uniMatch.supportingEvidence,
+              penalties: uniMatch.penalties,
+              alternativeCandidates: [],
+              isSafeToAutofill: uniMatch.isSafeToAutofill,
+              requiresUserConfirmation: uniMatch.requiresUserConfirmation,
+              rejectionReason: uniMatch.rejectionReason,
+            };
+            explanations.set(evidence.selector, explanation);
+          }
+        }
+      }
+
+      // Check 3: Learned Dynamic Custom Fields Matcher (Enables Future Autofill of Learned Fields)
+      if (!matchedCanonicalId && profile.customFields && profile.customFields.length > 0) {
+        const textToMatch = [
+          evidence.name,
+          evidence.id,
+          evidence.label,
+          evidence.placeholder,
+          evidence.ariaLabel,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        const elNameClean = (evidence.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+        const elIdClean = (evidence.id || '').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+
+        for (const cf of profile.customFields) {
+          if (cf.reuseInAutofill === false) continue;
+          const cleanKey = cf.fieldKey.replace(/^custom_/, '').toLowerCase();
+          const keyRaw = cleanKey.replace(/_/g, ' ');
+          const labelEn = cf.labelEn ? cf.labelEn.toLowerCase() : '';
+          const labelBn = cf.labelBn ? cf.labelBn.trim() : '';
+
+          // Significant words (length >= 3, excluding common stopwords)
+          const stopWords = new Set(['the', 'and', 'for', 'with', 'your', 'from']);
+          const keyWords = keyRaw.split(' ').filter((w) => w.length >= 3 && !stopWords.has(w));
+          const labelWords = labelEn.split(' ').filter((w) => w.length >= 3 && !stopWords.has(w));
+          const wordsToTest = Array.from(new Set([...keyWords, ...labelWords]));
+          const matchedWords = wordsToTest.filter((w) => textToMatch.includes(w));
+          const hasSemanticWordOverlap =
+            wordsToTest.length >= 2 ? matchedWords.length >= 2 : matchedWords.length >= 1;
+
+          if (
+            (cleanKey && (cleanKey === elNameClean || cleanKey === elIdClean)) ||
+            (keyRaw && textToMatch.includes(keyRaw)) ||
+            (cleanKey && textToMatch.includes(cleanKey)) ||
+            (labelEn && textToMatch.includes(labelEn)) ||
+            (labelBn && textToMatch.includes(labelBn)) ||
+            hasSemanticWordOverlap
+          ) {
+            matchedCanonicalId = cf.fieldKey;
+            break;
+          }
         }
       }
 
@@ -241,23 +366,50 @@ export class PageScanner {
       let proposedVal = '';
       let isIdentityYesNoSelect = false;
       if (matchedCanonicalId) {
-        if (matchedCanonicalId === 'contact.confirmMobile') {
+        if (
+          matchedCanonicalId === 'contact.confirmMobile' ||
+          matchedCanonicalId === 'contact.alternateMobile' ||
+          matchedCanonicalId === 'candidate.confirmMobile'
+        ) {
           // Always mirror primary contact.mobile rather than a stale/divergent confirmMobile
           proposedVal = canonicalProfile.personal.contact.mobile || '';
         } else {
           proposedVal = resolveCanonicalValue(canonicalProfile, matchedCanonicalId) || '';
         }
 
-        // Handle Teletalk/BOGMC Yes/No presence dropdowns for National ID, Birth Registration, and Passport ID
         if (
-          (matchedCanonicalId === 'identity.birthRegistration' ||
+          matchedCanonicalId === 'contact.mobile' ||
+          matchedCanonicalId === 'candidate.mobile' ||
+          matchedCanonicalId === 'contact.confirmMobile' ||
+          matchedCanonicalId === 'contact.alternateMobile' ||
+          matchedCanonicalId === 'candidate.confirmMobile'
+        ) {
+          proposedVal = ValueNormalizer.normalizeMobileNumber(proposedVal);
+        }
+
+        // Handle Teletalk/BOGMC Yes/No presence controls (Dropdowns or Radio groups) for National ID, Birth Registration, and Passport ID
+        if (
+          matchedCanonicalId === 'candidate.nationalId.hasNid' ||
+          ((matchedCanonicalId === 'identity.birthRegistration' ||
             matchedCanonicalId === 'identity.nationalId' ||
+            matchedCanonicalId === 'candidate.nationalId.number' ||
             matchedCanonicalId === 'identity.passport') &&
-          el instanceof HTMLSelectElement &&
-          SelectHandler.isYesNoSelect(el)
+            ((el instanceof HTMLSelectElement && SelectHandler.isYesNoSelect(el)) ||
+             (el instanceof HTMLInputElement && el.type.toLowerCase() === 'radio')))
         ) {
           isIdentityYesNoSelect = true;
-          const trimmedId = proposedVal.trim();
+          if (el instanceof HTMLInputElement && el.type.toLowerCase() === 'radio' && (el.name === 'nid' || el.name.toLowerCase().includes('nid'))) {
+            matchedCanonicalId = 'candidate.nationalId.hasNid';
+          }
+          let trimmedId = proposedVal.trim();
+          if (
+            (matchedCanonicalId === 'candidate.nationalId.number' ||
+              matchedCanonicalId === 'candidate.nationalId.hasNid' ||
+              matchedCanonicalId === 'identity.nationalId') &&
+            !trimmedId
+          ) {
+            trimmedId = (canonicalProfile.personal.identities.nationalId || '').trim();
+          }
           const negativeTokens = new Set(['no', 'none', 'n/a', 'না', 'নেই']);
           if (trimmedId && !negativeTokens.has(trimmedId.toLowerCase())) {
             proposedVal = 'Yes';
@@ -276,9 +428,58 @@ export class PageScanner {
           proposedVal = ValueNormalizer.formatDateForTarget(proposedVal, evidence.inputType, evidence.placeholder);
         }
 
-        // Enforce input maxLength limit
+        // Coordinate Day/Month/Year components using CompositeFieldAdapter
+        if (
+          matchedCanonicalId.includes('dateOfBirth.day') ||
+          matchedCanonicalId.includes('dob.day') ||
+          matchedCanonicalId.includes('dateOfBirth.month') ||
+          matchedCanonicalId.includes('dob.month') ||
+          matchedCanonicalId.includes('dateOfBirth.year') ||
+          matchedCanonicalId.includes('dob.year')
+        ) {
+          const rawDob = profile.personal.dob || canonicalProfile.personal.dateOfBirth;
+          const parsed = CompositeFieldAdapter.parseDateOfBirth(rawDob);
+          if (parsed) {
+            const kind = (matchedCanonicalId.includes('.day')
+              ? 'day'
+              : matchedCanonicalId.includes('.month')
+              ? 'month'
+              : 'year') as 'day' | 'month' | 'year';
+
+            if (el instanceof HTMLSelectElement) {
+              const matchedOpt = CompositeFieldAdapter.matchDateSelectOption(el, parsed, kind);
+              if (matchedOpt) {
+                proposedVal = matchedOpt.value;
+              }
+            } else if (el instanceof HTMLInputElement) {
+              if (kind === 'day') {
+                proposedVal = (evidence.placeholder.toLowerCase() === 'dd' || evidence.maxLength === 2)
+                  ? parsed.dayPadded
+                  : parsed.day;
+              } else if (kind === 'month') {
+                proposedVal = (evidence.placeholder.toLowerCase() === 'mm' || evidence.maxLength === 2)
+                  ? parsed.monthPadded
+                  : parsed.month;
+              } else {
+                proposedVal = parsed.year;
+              }
+            }
+          }
+        }
+
+        // Enforce input maxLength limit for free-text fields, but NEVER silently truncate critical numeric identities (Mobile, NID, PostCode)
+        const isCriticalNumeric =
+          matchedCanonicalId.includes('mobile') ||
+          matchedCanonicalId.includes('nationalId') ||
+          matchedCanonicalId.includes('nid') ||
+          matchedCanonicalId.includes('postCode');
+
         if (evidence.maxLength > 0 && proposedVal) {
-          proposedVal = ValueNormalizer.truncate(proposedVal, evidence.maxLength);
+          if (isCriticalNumeric && proposedVal.length > evidence.maxLength) {
+            // Keep full string so validation cleanly rejects rather than inserting a corrupted partial number
+          } else {
+            proposedVal = ValueNormalizer.truncate(proposedVal, evidence.maxLength);
+          }
         }
       }
 
@@ -302,6 +503,11 @@ export class PageScanner {
         diagnosticStatus = 'Unsupported Control';
         statusReason = 'Safety Policy: Legal declarations and terms must be checked manually by the applicant.';
         isApproved = false;
+      } else if (evidence.isDisabled || evidence.isReadOnly) {
+        status = 'Unsupported Field';
+        diagnosticStatus = 'Unsupported Control';
+        statusReason = 'Unsupported Control: Field is currently disabled or read-only on the website.';
+        isApproved = false;
       } else if (!matchedCanonicalId && !isAmbiguous) {
         status = 'Unsupported Field';
         diagnosticStatus = 'Mapping Not Found';
@@ -321,6 +527,12 @@ export class PageScanner {
         } else if (isIdentityYesNoSelect) {
           statusReason =
             'Profile Information Missing: No saved number in profile; Yes/No option cannot be assumed.';
+        } else if (matchedCanonicalId === 'education.ssc.board') {
+          statusReason =
+            'PROFILE_DATA_MISSING: SSC Board is not set in active profile. Please update SSC Education record.';
+        } else if (matchedCanonicalId === 'education.hsc.board') {
+          statusReason =
+            'PROFILE_DATA_MISSING: HSC Board is not set in active profile. Please update HSC Education record.';
         } else {
           statusReason = 'Profile Information Missing: No saved value in active profile.';
         }
@@ -344,8 +556,10 @@ export class PageScanner {
         hasConflict = false;
         isApproved = false;
       } else if (currentVal !== '' && !isCorrect) {
-        // For checkboxes, unchecked ('false') is ready to fill when user profile has true
-        if (evidence.inputType === 'checkbox' && currentVal === 'false') {
+        // For checkboxes:
+        // - Unchecked ('false') ready to check when profile has 'true'
+        // - Checked ('true') ready to uncheck when profile has 'false' (e.g. Same as Present when addresses differ)
+        if (evidence.inputType === 'checkbox') {
           status = 'Matched';
           diagnosticStatus = 'Successfully Filled';
           statusReason = 'Matched with saved profile and ready to fill.';
@@ -414,4 +628,158 @@ export class PageScanner {
       needsReviewCount: missingInfoCount + ambiguousCount + conflictsCount + confirmationRequiredCount,
     };
   }
+
+  /**
+   * Resolves dependent cascading dropdown pairs (Division -> District -> Upazila, Degree -> Subject)
+   * using bounded MutationObserver option waits rather than fragile sleep delays.
+   */
+  public static async resolveCascadingFields(
+    doc: Document = document,
+    profile: UserProfile
+  ): Promise<{ addressResolved: boolean; educationResolved: boolean }> {
+    let addressResolved = false;
+    let educationResolved = false;
+
+    // 1. Present Address Cascading: Division -> District -> Upazila
+    const presDiv = doc.querySelector<HTMLSelectElement>(
+      'select[name*="present" i][name*="div" i], select[id*="present" i][id*="div" i], select#present_division, select#p_division'
+    );
+    const presDist = doc.querySelector<HTMLSelectElement>(
+      'select[name*="present" i][name*="dist" i], select[id*="present" i][id*="dist" i], select#present_district, select#p_district'
+    );
+    const presUpz = doc.querySelector<HTMLSelectElement>(
+      'select[name*="present" i][name*="upaz" i], select[name*="present" i][name*="thana" i], select[id*="present" i][id*="upaz" i], select#present_upazila, select#p_upazila'
+    );
+
+    if (presDiv && presDist && profile.address?.present?.division && profile.address?.present?.district) {
+      await CascadingDropdownEngine.handleCascadingPair(
+        presDiv,
+        presDist,
+        profile.address.present.division,
+        profile.address.present.district
+      );
+    }
+    if (presDist && presUpz && profile.address?.present?.district && profile.address?.present?.upazila) {
+      const res = await CascadingDropdownEngine.handleCascadingPair(
+        presDist,
+        presUpz,
+        profile.address.present.district,
+        profile.address.present.upazila
+      );
+      if (res.success) addressResolved = true;
+    }
+
+    // 2. Permanent Address Cascading: Division -> District -> Upazila
+    const permDiv = doc.querySelector<HTMLSelectElement>(
+      'select[name*="permanent" i][name*="div" i], select[id*="permanent" i][id*="div" i], select#permanent_division, select#per_division'
+    );
+    const permDist = doc.querySelector<HTMLSelectElement>(
+      'select[name*="permanent" i][name*="dist" i], select[id*="permanent" i][id*="dist" i], select#permanent_district, select#per_district'
+    );
+    const permUpz = doc.querySelector<HTMLSelectElement>(
+      'select[name*="permanent" i][name*="upaz" i], select[name*="permanent" i][name*="thana" i], select[id*="permanent" i][id*="upaz" i], select#permanent_upazila, select#per_upazila'
+    );
+
+    if (permDiv && permDist && profile.address?.permanent?.division && profile.address?.permanent?.district) {
+      await CascadingDropdownEngine.handleCascadingPair(
+        permDiv,
+        permDist,
+        profile.address.permanent.division,
+        profile.address.permanent.district
+      );
+    }
+    if (permDist && permUpz && profile.address?.permanent?.district && profile.address?.permanent?.upazila) {
+      const res = await CascadingDropdownEngine.handleCascadingPair(
+        permDist,
+        permUpz,
+        profile.address.permanent.district,
+        profile.address.permanent.upazila
+      );
+      if (res.success) addressResolved = true;
+    }
+
+    // 3. Education Cascading: Degree -> Subject (Graduation & Masters)
+    const gradDegree = doc.querySelector<HTMLSelectElement>(
+      'select[name*="gra" i][name*="deg" i], select[id*="gra" i][id*="deg" i], select#gra_degree, select#n_grad_degree'
+    );
+    const gradSubject = doc.querySelector<HTMLSelectElement>(
+      'select[name*="gra" i][name*="sub" i], select[id*="gra" i][id*="sub" i], select#gra_subject, select#n_grad_subject'
+    );
+    if (gradDegree && gradSubject && profile.graduation?.examination && profile.graduation?.subjectDegree) {
+      const res = await CascadingDropdownEngine.handleCascadingPair(
+        gradDegree,
+        gradSubject,
+        profile.graduation.examination,
+        profile.graduation.subjectDegree
+      );
+      if (res.success) educationResolved = true;
+    }
+
+    const masDegree = doc.querySelector<HTMLSelectElement>(
+      'select[name*="mas" i][name*="deg" i], select[id*="mas" i][id*="deg" i], select#mas_degree, select#n_mas_degree'
+    );
+    const masSubject = doc.querySelector<HTMLSelectElement>(
+      'select[name*="mas" i][name*="sub" i], select[id*="mas" i][id*="sub" i], select#mas_subject, select#n_mas_subject'
+    );
+    if (masDegree && masSubject && profile.masters?.examination && profile.masters?.subjectDegree) {
+      const res = await CascadingDropdownEngine.handleCascadingPair(
+        masDegree,
+        masSubject,
+        profile.masters.examination,
+        profile.masters.subjectDegree
+      );
+      if (res.success) educationResolved = true;
+    }
+
+    // 4. Secondary Education Board -> Group
+    const sscBoard = doc.querySelector<HTMLSelectElement>(
+      'select[name*="ssc" i][name*="board" i], select[id*="ssc" i][id*="board" i], select#ssc_board'
+    );
+    const sscGroup = doc.querySelector<HTMLSelectElement>(
+      'select[name*="ssc" i][name*="group" i], select[id*="ssc" i][id*="group" i], select#ssc_group'
+    );
+    if (sscBoard && sscGroup && profile.ssc?.board && profile.ssc?.groupSubject) {
+      const res = await CascadingDropdownEngine.handleCascadingPair(
+        sscBoard,
+        sscGroup,
+        profile.ssc.board,
+        profile.ssc.groupSubject
+      );
+      if (res.success) educationResolved = true;
+    }
+
+    return { addressResolved, educationResolved };
+  }
+
+  /**
+   * Coordinates composite Date of Birth triplets (Day/Month/Year dropdowns or inputs)
+   * using CompositeFieldAdapter.
+   */
+  public static async coordinateCompositeDob(
+    containerOrDoc: Element | Document = document,
+    dobIso: string
+  ): Promise<{ success: boolean; message: string }> {
+    const dayControl = containerOrDoc.querySelector<HTMLElement>(
+      'select[name*="dob" i][name*="day" i], select[id*="dob" i][id*="day" i], select[name*="birth" i][name*="day" i], select#dob_day, select#b_day, select#day, input[name*="dob" i][name*="day" i], input[id*="dob" i][id*="day" i], input#dob_day, input#b_day, select[name*="day" i], select[id*="day" i], input[name*="day" i], input[id*="day" i]'
+    );
+    const monthControl = containerOrDoc.querySelector<HTMLElement>(
+      'select[name*="dob" i][name*="month" i], select[id*="dob" i][id*="month" i], select[name*="birth" i][name*="month" i], select#dob_month, select#b_month, select#month, input[name*="dob" i][name*="month" i], input[id*="dob" i][id*="month" i], input#dob_month, input#b_month, select[name*="month" i], select[id*="month" i], input[name*="month" i], input[id*="month" i]'
+    );
+    const yearControl = containerOrDoc.querySelector<HTMLElement>(
+      'select[name*="dob" i][name*="year" i], select[id*="dob" i][id*="year" i], select[name*="birth" i][name*="year" i], select#dob_year, select#b_year, select#year, input[name*="dob" i][name*="year" i], input[id*="dob" i][id*="year" i], input#dob_year, input#b_year, select[name*="year" i], select[id*="year" i], input[name*="year" i], input[id*="year" i]'
+    );
+
+    if (dayControl && monthControl && yearControl && dobIso) {
+      const res = await CompositeFieldAdapter.fillCompositeDateOfBirth(
+        dayControl,
+        monthControl,
+        yearControl,
+        dobIso
+      );
+      return { success: res.success, message: res.message };
+    }
+    return { success: false, message: 'Could not find all 3 Day/Month/Year controls' };
+  }
 }
+
+export { CascadingDropdownEngine, CompositeFieldAdapter };

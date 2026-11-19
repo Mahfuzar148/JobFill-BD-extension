@@ -26,13 +26,15 @@ export const GenericAdapter: SiteAdapter = {
   },
 
   postFill(document: Document, profile: UserProfile) {
-    // Handle "Same as Present Address" checkbox if present and enabled
-    if (profile.address.sameAsPresent) {
-      const sameAddressChk = document.querySelector<HTMLInputElement>(
-        'input[type="checkbox"][id*="same" i], input[type="checkbox"][name*="same" i]'
-      );
-      if (sameAddressChk && !sameAddressChk.checked) {
-        sameAddressChk.click();
+    // Handle "Same as Present Address" checkbox if present and synchronize strictly with profile
+    const sameAddressChk = document.querySelector<HTMLInputElement>(
+      'input[type="checkbox"][id*="same" i], input[type="checkbox"][name*="same" i], input[type="checkbox"]#copy, input[type="checkbox"][name="copy"]'
+    );
+    if (sameAddressChk) {
+      const shouldCheck = !!profile.address.sameAsPresent;
+      if (sameAddressChk.checked !== shouldCheck) {
+        sameAddressChk.checked = shouldCheck;
+        sameAddressChk.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
   },

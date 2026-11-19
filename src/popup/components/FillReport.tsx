@@ -10,6 +10,7 @@ export interface FillReportData {
   conflicts: number;
   confirmationRequired?: number;
   failed: number;
+  imagesAttached?: number;
   completenessReport?: FieldCompletenessEntry[];
 }
 
@@ -18,6 +19,7 @@ interface FillReportProps {
   onUndo: () => void;
   onScanAgain: () => void;
   onOpenDashboard: () => void;
+  onFocusField?: (selector: string) => void;
   isUndoing?: boolean;
 }
 
@@ -26,8 +28,23 @@ export const FillReport: React.FC<FillReportProps> = ({
   onUndo,
   onScanAgain,
   onOpenDashboard,
+  onFocusField,
   isUndoing = false,
 }) => {
+  const handleFieldClick = (selector: string) => {
+    if (onFocusField) {
+      onFocusField(selector);
+      return;
+    }
+    if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tabId = tabs[0]?.id;
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, { action: 'FOCUS_FIELD', selector });
+        }
+      });
+    }
+  };
   return (
     <div className="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm space-y-3.5">
       <div className="flex items-center gap-2 text-emerald-800 border-b border-emerald-100 pb-2.5">
@@ -60,6 +77,18 @@ export const FillReport: React.FC<FillReportProps> = ({
         </div>
       </div>
 
+      {typeof report.imagesAttached === 'number' && report.imagesAttached > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <span>📷</span>
+            <span>Photo & Signature Attached:</span>
+          </div>
+          <span className="font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+            {report.imagesAttached}
+          </span>
+        </div>
+      )}
+
       {(report.ambiguous > 0 || report.failed > 0 || (report.confirmationRequired || 0) > 0) && (
         <div className="flex flex-wrap gap-2">
           {(report.confirmationRequired || 0) > 0 && (
@@ -85,16 +114,39 @@ export const FillReport: React.FC<FillReportProps> = ({
 
       {report.completenessReport &&
         report.completenessReport.some((c) => c.status !== 'Successfully Filled' && c.status !== 'Already Correct') && (
-          <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-900 space-y-1 max-h-28 overflow-y-auto">
+          <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-900 space-y-1 max-h-32 overflow-y-auto">
             <div className="font-bold">Completeness Report (Attention Needed):</div>
-            {report.completenessReport
-              .filter((c) => c.status !== 'Successfully Filled' && c.status !== 'Already Correct')
-              .slice(0, 6)
-              .map((entry, idx) => (
-                <div key={idx} className="truncate">
-                  <span className="font-semibold">{entry.fieldLabel.split(' (')[0]}</span>: {entry.status}
-                </div>
-              ))}
+            {(() => {
+              const attentionItems = report.completenessReport.filter(
+                (c) => c.status !== 'Successfully Filled' && c.status !== 'Already Correct'
+              );
+              const visible = attentionItems.slice(0, 6);
+              const remaining = attentionItems.length - visible.length;
+              return (
+                <>
+                  {visible.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleFieldClick(entry.selector)}
+                      title="Click to focus and highlight this field on the page"
+                      className="truncate cursor-pointer hover:bg-amber-100/90 hover:text-amber-950 px-1.5 py-0.5 rounded transition-colors flex items-center justify-between group"
+                    >
+                      <span className="truncate">
+                        <span className="font-semibold">{entry.fieldLabel.split(' (')[0]}</span>: {entry.status}
+                      </span>
+                      <span className="text-[9.5px] font-bold text-amber-700 opacity-70 group-hover:opacity-100 shrink-0 ml-1">
+                        🔍 Focus
+                      </span>
+                    </div>
+                  ))}
+                  {remaining > 0 && (
+                    <div className="text-[10px] text-amber-700 font-semibold italic pl-1 pt-0.5">
+                      +{remaining} more item{remaining > 1 ? 's' : ''} requiring review in full report
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 

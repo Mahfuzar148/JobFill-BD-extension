@@ -24,20 +24,41 @@ import {
   Lock,
   AlertTriangle,
   Calculator,
+  Award,
+  Briefcase,
+  HelpCircle,
+  Download,
+  EyeOff,
 } from 'lucide-react';
 import { NormalizedJobCircular, ApplicationStatus } from '../types/job.types';
 import { formatDhakaDate, parseDeadlineDate } from '../services/deadline-parser';
+import { getCompleteLifecycleForCircular } from '../database/job-lifecycle-repository';
+import {
+  isNonGovernmentCategoryLetter,
+  type JobLifecycleTimeline,
+  type ExamSchedule,
+  type JobResult,
+  type AdmitCardNotice,
+  type SeatPlanNotice,
+} from '../types/job-system.types';
+import { mapJobToCategoryLetter } from '../taxonomy/canonical-categories';
 import {
   calculateAgeOnCutoffDate,
+  evaluateProfileEligibility,
   formatIsoCalendarDate,
   parseFlexibleDateString,
 } from '../services/eligibility-helper';
 import { getActiveProfile } from '../../services/storage';
+import type { UserProfile } from '../../types/profile';
 import {
   getDetailedVerificationBadges,
   sanitizeCircularRefForDisplay,
   verifyJobUrl,
 } from '../services/source-verifier';
+import {
+  assessCircularScamSignals,
+  classifyOfficialSourceTier,
+} from '../services/scam-awareness';
 import { formatJobCategoryLabel } from '../services/source-health-state';
 import {
   buildApplicationSearchUrl,
@@ -51,6 +72,7 @@ import {
 } from './MissingApplicationUrlModal';
 import { DeadlineCountdown } from './DeadlineCountdown';
 import { BookmarkButton } from './BookmarkButton';
+import { JobVisitRepository } from '../database/job-visit-repository';
 
 interface JobDetailsProps {
   job: NormalizedJobCircular;
@@ -80,6 +102,37 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
   onShare,
 }) => {
   const bn = language === 'bn';
+  const catLetter = (job as any).categoryLetter || mapJobToCategoryLetter(job);
+  const orgOrTitleLower = `${job.organization || ''} ${job.jobTitle || ''} ${job.position || ''}`.toLowerCase();
+  const isPrivateEntityText =
+    orgOrTitleLower.includes('private') ||
+    orgOrTitleLower.includes('বেসরকারি') ||
+    orgOrTitleLower.includes('think tank');
+
+  const isNonGovt =
+    isNonGovernmentCategoryLetter(catLetter) ||
+    catLetter === 'D' ||
+    catLetter === 'E' ||
+    catLetter === 'O' ||
+    catLetter === 'P' ||
+    catLetter === 'Q' ||
+    ((catLetter === 'N' || catLetter === 'R') &&
+      ((job as any).sector !== 'Government' &&
+        (job as any).sector !== 'Autonomous' &&
+        (job as any).sector !== 'Semi-Government' &&
+        job.category !== 'Government' ||
+        isPrivateEntityText ||
+        (job as any).isGovernmentJob === false)) ||
+    (job as any).isGovernmentJob === false ||
+    (job as any).sector === 'Private' ||
+    (job as any).sector === 'NGO' ||
+    (job as any).sector === 'International' ||
+    job.category === 'Private' ||
+    job.category === 'NGO' ||
+    job.category === 'International Jobs' ||
+    job.gradeVerificationStatus === 'NOT_APPLICABLE' ||
+    (job as any).grade?.gradeVerificationStatus === 'NOT_APPLICABLE';
+
   const verificationBadges = getDetailedVerificationBadges(job);
   const cleanMemo = sanitizeCircularRefForDisplay(job.circularNumber);
   const appCls = classifyApplicationDestination(job.applicationUrl);
@@ -109,19 +162,39 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
   const [cutoffInput, setCutoffInput] = useState(() =>
     initialParsedCutoff ? formatIsoCalendarDate(initialParsedCutoff) : new Date().toISOString().slice(0, 10)
   );
+  const [loadedProfile, setLoadedProfile] = useState<UserProfile | null>(null);
+  const [timeline, setTimeline] = useState<JobLifecycleTimeline | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(true);
 
   useEffect(() => {
-    if (applicantDob) {
-      const parsed = parseFlexibleDateString(applicantDob);
-      if (parsed) setDobInput(formatIsoCalendarDate(parsed));
-      return;
-    }
+    let mounted = true;
+    setTimelineLoading(true);
+    getCompleteLifecycleForCircular(job.id, job.position || job.jobTitle, job.organization)
+      .then((data) => {
+        if (mounted) {
+          setTimeline(data);
+          setTimelineLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('JobFill BD [JobDetails]: failed to load lifecycle timeline', err);
+        if (mounted) setTimelineLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [job.id, job.position, job.jobTitle, job.organization]);
+
+  useEffect(() => {
     let mounted = true;
     getActiveProfile()
       .then((profile) => {
-        if (!mounted) return;
-        const parsed = parseFlexibleDateString(profile?.personal?.dob);
-        if (parsed) setDobInput(formatIsoCalendarDate(parsed));
+        if (!mounted || !profile) return;
+        setLoadedProfile(profile);
+        if (!applicantDob) {
+          const parsed = parseFlexibleDateString(profile.personal?.dob);
+          if (parsed) setDobInput(formatIsoCalendarDate(parsed));
+        }
       })
       .catch(() => {});
     return () => {
@@ -129,7 +202,21 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
     };
   }, [applicantDob]);
 
+  useEffect(() => {
+    if (!job?.id) return;
+    JobVisitRepository.recordVisit({
+      jobId: job.id,
+      sourceId: job.sourceId || 'job_hub',
+      organization: job.organization,
+      jobTitle: job.jobTitle,
+      circularUrl: job.circularUrl || job.applicationUrl || '',
+      deadlineAt: job.deadlineAt,
+      verificationStatus: job.sourceVerification === 'official_verified' ? 'verified' : 'internal',
+    }).catch((err) => console.warn('JobFill BD: Could not record job visit:', err));
+  }, [job?.id]);
+
   const ageCheck = calculateAgeOnCutoffDate(dobInput, cutoffInput);
+  const fullEligibility = loadedProfile ? evaluateProfileEligibility(loadedProfile, job) : null;
 
   const handleSaveManualDeadline = async () => {
     if (!onUpdateDeadline) return;
@@ -146,6 +233,144 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
       setUpdatingDeadline(false);
     }
   };
+
+  const now = Date.now();
+  const stages = [
+    {
+      id: 'circular_published',
+      labelEn: 'Circular Published',
+      labelBn: 'বিজ্ঞপ্তি প্রকাশ',
+      status: 'COMPLETED' as const,
+      date: job.publishedDateText || (job.publishedAt ? formatDhakaDate(job.publishedAt) : null),
+      details: job.circularNumber || job.sourceName,
+    },
+    {
+      id: 'app_started',
+      labelEn: 'Application Started',
+      labelBn: 'আবেদন শুরু',
+      status: job.applicationStartAt && now < job.applicationStartAt ? ('UPCOMING' as const) : ('COMPLETED' as const),
+      date: job.applicationStartText || (job.applicationStartAt ? formatDhakaDate(job.applicationStartAt) : null),
+      details: job.applicationUrl ? 'Online Portal' : undefined,
+    },
+    {
+      id: 'app_deadline',
+      labelEn: 'Application Deadline',
+      labelBn: 'আবেদনের শেষ তারিখ',
+      status: job.deadlineAt && now > job.deadlineAt ? ('COMPLETED' as const) : ('ACTIVE' as const),
+      date: job.deadlineText || (job.deadlineAt ? formatDhakaDate(job.deadlineAt) : null),
+      details: job.deadlineTimezone || 'Asia/Dhaka',
+    },
+    {
+      id: 'admit_card',
+      labelEn: 'Admit Card Published',
+      labelBn: 'প্রবেশপত্র প্রকাশ',
+      status: timeline?.admitCardNotices?.some((a) => a.status === 'Available')
+        ? ('ACTIVE' as const)
+        : timeline?.admitCardNotices?.some((a) => a.status === 'Downloaded' || a.status === 'Expired')
+          ? ('COMPLETED' as const)
+          : ('PENDING' as const),
+      date: timeline?.admitCardNotices?.[0]?.downloadStartDate || null,
+      details: timeline?.admitCardNotices?.[0]?.jobTitle || undefined,
+    },
+    {
+      id: 'seat_plan',
+      labelEn: 'Seat Plan Published',
+      labelBn: 'আসন বিন্যাস প্রকাশ',
+      status: timeline?.seatPlanNotices?.some((s) => s.status === 'Announced')
+        ? ('ACTIVE' as const)
+        : ('PENDING' as const),
+      date: timeline?.seatPlanNotices?.[0]?.examDate || null,
+      details: timeline?.seatPlanNotices?.[0]?.venue || undefined,
+    },
+    {
+      id: 'exam_announced',
+      labelEn: 'Exam Date Announced',
+      labelBn: 'পরীক্ষার তারিখ ঘোষণা',
+      status: timeline?.examSchedules?.some((e) => e.status === 'Completed')
+        ? ('COMPLETED' as const)
+        : timeline?.examSchedules?.some((e) => e.status === 'Announced' || e.status === 'Rescheduled')
+          ? ('UPCOMING' as const)
+          : ('PENDING' as const),
+      date: timeline?.examSchedules?.[0]?.examDate
+        ? (typeof timeline.examSchedules[0].examDate === 'number'
+            ? formatDhakaDate(timeline.examSchedules[0].examDate)
+            : formatDhakaDate(new Date(timeline.examSchedules[0].examDate).getTime(), timeline.examSchedules[0].examDate))
+        : null,
+      details: timeline?.examSchedules?.[0]?.stage ? `${timeline.examSchedules[0].stage} Exam` : undefined,
+    },
+    {
+      id: 'exam_completed',
+      labelEn: 'Examination Completed',
+      labelBn: 'পরীক্ষা সম্পন্ন',
+      status: timeline?.examSchedules?.some((e) => e.status === 'Completed') || (timeline?.results && timeline.results.length > 0)
+        ? ('COMPLETED' as const)
+        : ('PENDING' as const),
+      date: null,
+      details: undefined,
+    },
+    {
+      id: 'preli_result',
+      labelEn: 'Preliminary Result',
+      labelBn: 'প্রিলিমিনারি ফলাফল',
+      status: timeline?.results?.some(
+        (r) =>
+          r.stage === 'Preliminary' &&
+          (r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published')
+      )
+        ? ('COMPLETED' as const)
+        : ('PENDING' as const),
+      date: timeline?.results?.find((r) => r.stage === 'Preliminary')?.publishedDate || null,
+      details: timeline?.results?.find((r) => r.stage === 'Preliminary')?.selectedCandidateCount
+        ? `${timeline.results.find((r) => r.stage === 'Preliminary')?.selectedCandidateCount} selected`
+        : undefined,
+    },
+    {
+      id: 'written_result',
+      labelEn: 'Written Result',
+      labelBn: 'লিখিত পরীক্ষার ফলাফল',
+      status: timeline?.results?.some(
+        (r) =>
+          r.stage === 'Written' &&
+          (r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published')
+      )
+        ? ('COMPLETED' as const)
+        : ('PENDING' as const),
+      date: timeline?.results?.find((r) => r.stage === 'Written')?.publishedDate || null,
+      details: timeline?.results?.find((r) => r.stage === 'Written')?.selectedCandidateCount
+        ? `${timeline.results.find((r) => r.stage === 'Written')?.selectedCandidateCount} selected`
+        : undefined,
+    },
+    {
+      id: 'viva_result',
+      labelEn: 'Viva Result',
+      labelBn: 'মৌখিক পরীক্ষার ফলাফল',
+      status: timeline?.results?.some(
+        (r) =>
+          r.stage === 'Viva' &&
+          (r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published')
+      )
+        ? ('COMPLETED' as const)
+        : ('PENDING' as const),
+      date: timeline?.results?.find((r) => r.stage === 'Viva')?.publishedDate || null,
+      details: undefined,
+    },
+    {
+      id: 'final_selection',
+      labelEn: 'Final Selection / Merit List',
+      labelBn: 'চূড়ান্ত সুপারিশ / মেধা তালিকা',
+      status: timeline?.results?.some(
+        (r) =>
+          (r.stage === 'Final' || r.stage === 'Merit List') &&
+          (r.publicationStatus === 'Result Published' || r.publicationStatus === 'Revised Result Published')
+      )
+        ? ('COMPLETED' as const)
+        : ('PENDING' as const),
+      date: timeline?.results?.find((r) => r.stage === 'Final' || r.stage === 'Merit List')?.publishedDate || null,
+      details: timeline?.results?.find((r) => r.stage === 'Final' || r.stage === 'Merit List')?.selectedCandidateCount
+        ? `${timeline.results.find((r) => r.stage === 'Final' || r.stage === 'Merit List')?.selectedCandidateCount} recommended`
+        : undefined,
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -224,6 +449,22 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200 dark:bg-slate-800/70 dark:text-slate-300 dark:border-slate-700">
                 {job.sourceName}
               </span>
+              {isNonGovt ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                  <Briefcase className="w-3 h-3 text-slate-500" />
+                  <span>{bn ? 'বেসরকারি বেতন ভিত্তিক' : 'Private Salary-Based'}</span>
+                </span>
+              ) : job.gradeNumber ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700">
+                  <Award className="w-3 h-3 text-amber-600" />
+                  {job.gradeLabel || `Grade ${job.gradeNumber}`}
+                </span>
+              ) : job.category === 'Government' ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
+                  <Award className="w-3 h-3 text-slate-400" />
+                  {bn ? 'গ্রেড উল্লেখ নেই' : 'Grade Not Specified'}
+                </span>
+              ) : null}
               {cleanMemo && (
                 <span className="text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded">
                   {cleanMemo}
@@ -365,10 +606,40 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
         </div>
 
         {/* Key Metadata Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" /> {bn ? 'শিক্ষাগত যোগ্যতা' : 'Educational Qualification'}</div>
-            <div className="font-bold text-slate-800 dark:text-slate-100">{job.qualification || 'Any Qualification'}</div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.qualification || 'Any Qualification'}
+              {job.minGpa ? ` (Min GPA: ${job.minGpa})` : job.minCgpa ? ` (Min CGPA: ${job.minCgpa})` : ''}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              {bn ? 'সরকারি বেতন গ্রেড' : 'Govt Pay Grade'}
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {isNonGovt ? (
+                <span className="text-slate-500 font-medium">
+                  {bn ? 'প্রযোজ্য নয় (বেসরকারি)' : 'Not Applicable (Private)'}
+                </span>
+              ) : job.gradeNumber ? (
+                <span className="text-amber-700 dark:text-amber-400">
+                  {job.gradeLabel || `Grade ${job.gradeNumber}`}
+                </span>
+              ) : (
+                <span className="text-slate-500 font-medium">
+                  {bn ? 'গ্রেড উল্লেখ নেই' : 'Grade Not Specified'}
+                </span>
+              )}
+            </div>
+            {!isNonGovt && job.gradeOriginalText && (
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                {bn ? 'চিহ্নিত: ' : 'From: '}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">"{job.gradeOriginalText}"</span>
+              </div>
+            )}
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {bn ? 'কর্মস্থল / স্থান' : 'Location'}</div>
@@ -380,6 +651,13 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
               {job.salary || (bn ? 'অফিশিয়াল বিজ্ঞপ্তি দেখুন' : 'Per Official Circular')}
               {job.vacancies ? ` • ${job.vacancies} Posts` : ''}
             </div>
+            {(job.salaryMin || job.salaryMax) && (
+              <div className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                {job.salaryMin ? `৳${job.salaryMin.toLocaleString()}` : ''}
+                {job.salaryMin && job.salaryMax ? ' - ' : ''}
+                {job.salaryMax ? `৳${job.salaryMax.toLocaleString()}` : ''}
+              </div>
+            )}
           </div>
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
             <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {bn ? 'প্রকাশ ও আবেদন শুরু' : 'Published & Start Date'}</div>
@@ -400,12 +678,345 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
                 : bn ? 'শেষ তারিখ যাচাইকৃত নয়' : 'Deadline Not Verified'}
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 sm:col-span-2">
             <div className="text-slate-400 font-semibold mb-0.5">{bn ? 'অভিজ্ঞতা / বয়স / ফি' : 'Experience / Age / Fee'}</div>
             <div className="font-bold text-slate-800 dark:text-slate-100">
               {[job.experience, job.ageRequirement, job.applicationFee].filter(Boolean).join(' • ') || (bn ? 'বিজ্ঞপ্তিতে উল্লিখিত' : 'See official circular')}
             </div>
           </div>
+        </div>
+
+        {/* Universal Job Taxonomy, Industry, Employer Type & Work Mode */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Briefcase className="w-3.5 h-3.5 text-petro-600" />
+              <span>{bn ? 'সার্বজনীন পেশাগত ক্যাটাগরি' : 'Universal Job Taxonomy'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {bn ? job.taxonomyCategoryNameBn || job.taxonomyCategoryNameEn || job.category : job.taxonomyCategoryNameEn || job.category}
+              {job.taxonomySubcategoryNameEn && (
+                <span className="text-slate-500 font-normal">
+                  {' › '}{bn ? job.taxonomySubcategoryNameBn || job.taxonomySubcategoryNameEn : job.taxonomySubcategoryNameEn}
+                </span>
+              )}
+            </div>
+            {job.isUnclassified ? (
+              <span className="text-[10px] text-amber-600 font-medium">({bn ? 'অনির্দিষ্ট / যাচাই প্রয়োজন' : 'Unclassified'})</span>
+            ) : job.classificationConfidence ? (
+              <span className="text-[10px] text-slate-400">({bn ? 'নিশ্চয়তা' : 'Confidence'}: {job.classificationConfidence}%)</span>
+            ) : null}
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{bn ? 'নিয়োগকর্তার ধরন ও শিল্প' : 'Employer Type & Industry'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.employerType || (bn ? 'উল্লিখিত নেই' : 'Not specified')}
+              {job.industry && job.industry !== 'General' && (
+                <span className="text-slate-500 font-normal"> • {job.industry}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="text-slate-400 font-semibold mb-0.5 flex items-center gap-1">
+              <Globe className="w-3.5 h-3.5 text-cyan-600" />
+              <span>{bn ? 'কাজের মোড ও অভিজ্ঞতা' : 'Work Mode & Experience'}</span>
+            </div>
+            <div className="font-bold text-slate-800 dark:text-slate-100">
+              {job.workMode || 'On-Site'} • {job.employmentType || 'Full Time'}
+              {job.experienceLevel && job.experienceLevel !== 'Not Specified' && (
+                <span className="text-slate-500 font-normal"> ({job.experienceLevel})</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 11-Stage Interactive Lifecycle Timeline Visualizer (Milestone M2) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3.5 shadow-xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-petro-600 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                {bn ? '১১-ধাপ চাকরির পূর্ণাঙ্গ লাইফসাইকেল টাইমলাইন' : '11-Stage Complete Circular Lifecycle Timeline'}
+              </h3>
+            </div>
+            <span className="text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              {bn ? 'অফিশিয়াল নোটিশ ট্র্যাকিং' : 'Official Notice Tracking'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-1">
+            {stages.map((stage, idx) => {
+              const isCompleted = stage.status === 'COMPLETED';
+              const isActive = stage.status === 'ACTIVE';
+              const isUpcoming = stage.status === 'UPCOMING';
+
+              return (
+                <div
+                  key={stage.id}
+                  className={`p-3 rounded-xl border text-xs transition-all ${
+                    isCompleted
+                      ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                      : isActive
+                        ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700 text-blue-900 dark:text-blue-100 ring-1 ring-blue-400'
+                        : isUpcoming
+                          ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                          : 'bg-slate-50/80 dark:bg-slate-850 border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 opacity-80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-md bg-white/70 dark:bg-slate-800/80">
+                      #{idx + 1}
+                    </span>
+                    <span
+                      className={`text-[9.5px] font-bold uppercase px-1.5 py-0.5 rounded-full ${
+                        isCompleted
+                          ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+                          : isActive
+                            ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 animate-pulse'
+                            : isUpcoming
+                              ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                      }`}
+                    >
+                      {isCompleted ? (bn ? 'সম্পন্ন' : 'Completed') : isActive ? (bn ? 'চলমান' : 'Active') : isUpcoming ? (bn ? 'আসন্ন' : 'Announced') : (bn ? 'অপেক্ষমাণ' : 'Pending')}
+                    </span>
+                  </div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                    {bn ? stage.labelBn : stage.labelEn}
+                  </div>
+                  {stage.date && (
+                    <div className="text-[10.5px] mt-1 font-medium opacity-90">
+                      📅 {stage.date}
+                    </div>
+                  )}
+                  {stage.details && (
+                    <div className="text-[10px] mt-0.5 text-slate-500 dark:text-slate-400 truncate">
+                      {stage.details}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Dedicated Exam Schedule & Details Section */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 shadow-xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                {bn ? 'পরীক্ষার সময়সূচি ও কেন্দ্র বিবরণ' : 'Exam Schedule & Venue Details'}
+              </h3>
+            </div>
+            {timeline?.examSchedules && timeline.examSchedules.length > 0 && (
+              <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800">
+                {timeline.examSchedules.length} {bn ? 'টি পরীক্ষা ঘোষিত' : 'Exams Scheduled'}
+              </span>
+            )}
+          </div>
+
+          {timeline?.examSchedules && timeline.examSchedules.length > 0 ? (
+            <div className="space-y-2.5">
+              {timeline.examSchedules.map((schedule) => (
+                <div
+                  key={schedule.id}
+                  className="p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      {schedule.jobTitle || `${schedule.stage} Exam`}
+                    </span>
+                    <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
+                      {schedule.stage}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-slate-700 dark:text-slate-300 pt-1">
+                    <div>
+                      <span className="text-slate-400 font-semibold">{bn ? 'তারিখ ও সময়:' : 'Date & Time:'}</span>{' '}
+                      <span className="font-bold text-slate-800 dark:text-slate-100">
+                        {schedule.examDate
+                          ? (typeof schedule.examDate === 'number'
+                              ? formatDhakaDate(schedule.examDate)
+                              : formatDhakaDate(new Date(schedule.examDate).getTime(), schedule.examDate))
+                          : (bn ? 'তারিখ নির্ধারিত হয়নি' : 'Exam Date Not Announced')}{' '}
+                        {schedule.examTime ? `(${schedule.examTime})` : ''}
+                      </span>
+                    </div>
+                    {schedule.center && (
+                      <div>
+                        <span className="text-slate-400 font-semibold">{bn ? 'কেন্দ্র:' : 'Center:'}</span>{' '}
+                        <span>{schedule.center}</span>
+                      </div>
+                    )}
+                    {schedule.venue && (
+                      <div>
+                        <span className="text-slate-400 font-semibold">{bn ? 'স্থান/ভেন্যু:' : 'Venue:'}</span>{' '}
+                        <span>{schedule.venue}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {schedule.instructions && (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-850 p-2 rounded-lg">
+                      <strong>{bn ? 'নির্দেশনা:' : 'Instructions:'}</strong> {schedule.instructions}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    {schedule.seatPlanUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openSafeExternalTab(schedule.seatPlanUrl!)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                        <span>{bn ? 'আসন বিন্যাস দেখুন' : 'View Seat Plan'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+
+                    {schedule.admitCardUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openSafeExternalTab(schedule.admitCardUrl!)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>{bn ? 'প্রবেশপত্র ডাউনলোড' : 'Download Admit Card'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {bn ? 'তারিখ নির্ধারিত হয়নি' : 'Exam Date Not Announced'}
+                </span>
+                <p className="text-[11px] mt-0.5">
+                  {bn
+                    ? 'কর্তৃপক্ষ কর্তৃক এখনও কোনো অফিসিয়াল পরীক্ষার তারিখ ঘোষণা করা হয়নি। তারিখ ঘোষিত হলে স্বয়ংক্রিয়ভাবে আপডেট হবে।'
+                    : 'The recruiting authority has not officially announced exam dates yet. Dates will appear automatically upon official notice.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Dedicated Results Section */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4.5 space-y-3 shadow-xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-emerald-600 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+                {bn ? 'পরীক্ষার ফলাফল ও মেধা তালিকা' : 'Job Results & Merit Lists'}
+              </h3>
+            </div>
+            {timeline?.results && timeline.results.length > 0 && (
+              <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+                {timeline.results.length} {bn ? 'টি ফলাফল প্রকাশিত' : 'Results Published'}
+              </span>
+            )}
+          </div>
+
+          {timeline?.results && timeline.results.length > 0 ? (
+            <div className="space-y-2.5">
+              {timeline.results.map((result) => (
+                <div
+                  key={result.id}
+                  className="p-3.5 rounded-xl border border-emerald-100 dark:border-emerald-900/60 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                      {result.jobTitle || `${result.stage} Result`}
+                    </span>
+                    <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                      {result.stage}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-slate-700 dark:text-slate-300 pt-1">
+                    <div>
+                      <span className="text-slate-400 font-semibold">{bn ? 'প্রকাশের তারিখ:' : 'Published Date:'}</span>{' '}
+                      <span className="font-bold text-slate-800 dark:text-slate-100">
+                        {result.publishedDate
+                          ? (typeof result.publishedDate === 'number'
+                              ? formatDhakaDate(result.publishedDate)
+                              : formatDhakaDate(new Date(result.publishedDate).getTime(), result.publishedDate))
+                          : (bn ? 'সম্প্রতি প্রকাশিত' : 'Recently Published')}
+                      </span>
+                    </div>
+                    {(result.selectedCandidateCount ?? (result as any).selectedCandidatesCount) !== undefined && (result.selectedCandidateCount ?? (result as any).selectedCandidatesCount) !== null && (
+                      <div>
+                        <span className="text-slate-400 font-semibold">{bn ? 'উত্তীর্ণ প্রার্থী সংখ্যা:' : 'Selected Candidates:'}</span>{' '}
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                          {(result.selectedCandidateCount ?? (result as any).selectedCandidatesCount).toLocaleString()} {bn ? 'জন' : 'Candidates'}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-slate-400 font-semibold">{bn ? 'স্ট্যাটাস:' : 'Status:'}</span>{' '}
+                      <span className="font-semibold">{result.publicationStatus}</span>
+                    </div>
+                  </div>
+
+                  {result.summary && (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400 bg-white/70 dark:bg-slate-850 p-2 rounded-lg">
+                      {result.summary}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    {result.pdfUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openSafeExternalTab(result.pdfUrl!)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>{bn ? 'ফলাফল নোটিশ (PDF)' : 'Official Result Notice (PDF)'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+                    {result.noticeUrl && result.noticeUrl !== result.pdfUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openSafeExternalTab(result.noticeUrl!)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{bn ? 'অফিশিয়াল পোর্টাল নোটিশ' : 'Portal Notice'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <EyeOff className="w-4 h-4 text-slate-400 shrink-0" />
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {bn ? 'ফলাফল এখনও প্রকাশিত হয়নি' : 'Result Not Published'}
+                </span>
+                <p className="text-[11px] mt-0.5">
+                  {bn
+                    ? 'এই বিজ্ঞপ্তির জন্য এখনও কোনো ফলাফল বা মেধা তালিকা প্রকাশিত হয়নি।'
+                    : 'No results or merit lists have been published yet for this circular.'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Local Offline Age-on-Circular-Cutoff Calculator */}
@@ -473,6 +1084,52 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
                   : 'Set DOB in Profile or pick above'}
             </div>
           </div>
+
+          {fullEligibility && (
+            <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  {bn ? 'সার্বিক প্রোফাইল যোগ্যতা:' : 'Profile Eligibility Summary:'}
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                    fullEligibility.overallStatus === 'ELIGIBLE'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                      : fullEligibility.overallStatus === 'NOT_ELIGIBLE'
+                        ? 'bg-rose-100 text-rose-800 border-rose-200'
+                        : fullEligibility.overallStatus === 'INSUFFICIENT_PROFILE_DATA'
+                          ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                          : 'bg-amber-100 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  {fullEligibility.overallStatus === 'ELIGIBLE'
+                    ? bn ? 'যোগ্য (Eligible)' : 'ELIGIBLE'
+                    : fullEligibility.overallStatus === 'NOT_ELIGIBLE'
+                      ? bn ? 'যোগ্য নন (Not Eligible)' : 'NOT ELIGIBLE'
+                      : fullEligibility.overallStatus === 'INSUFFICIENT_PROFILE_DATA'
+                        ? bn ? 'তথ্য অসম্পূর্ণ (Insufficient Data)' : 'INSUFFICIENT DATA'
+                        : bn ? 'ম্যানুয়াল যাচাই প্রয়োজন' : 'MANUAL REVIEW REQUIRED'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {fullEligibility.criteria.map((cr) => (
+                  <span
+                    key={cr.key}
+                    title={bn ? cr.reasonBn : cr.reasonEn}
+                    className={`px-2 py-0.5 rounded text-[10.5px] font-semibold border ${
+                      cr.status === 'Matched'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : cr.status === 'Failed'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {bn ? cr.labelBn : cr.labelEn}: {cr.status}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Manual Deadline Verification Helper when PDF/Source has unverified deadline */}
@@ -503,6 +1160,122 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
           </div>
         )}
 
+        {/* Official Source Provenance & Job Scam Awareness */}
+        {(() => {
+          const provenance = classifyOfficialSourceTier(job);
+          const scamReport = assessCircularScamSignals(job);
+          return (
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-petro-600" />
+                  <span>Source Verification Tier: {provenance.tier}</span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                    scamReport.warningLevel === 'High Attention'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : scamReport.warningLevel === 'Moderate'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}
+                >
+                  Scam Signals: {scamReport.warningLevel}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 flex flex-wrap gap-3">
+                <span>Method: {provenance.verificationMethod}</span>
+                <span>Last Checked: {new Date(provenance.lastCheckedDate).toLocaleDateString('en-GB')}</span>
+                {provenance.verificationTimestamp && (
+                  <span>Verified At: {new Date(provenance.verificationTimestamp).toLocaleDateString('en-GB')}</span>
+                )}
+              </div>
+              {scamReport.reasons.length > 0 && (
+                <ul className="list-disc list-inside text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5">
+                  {scamReport.reasons.map((r) => (
+                    <li key={r.code}>
+                      <strong>{r.title}:</strong> {r.evidence}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="text-[10.5px] text-slate-400">{scamReport.cautionNotice}</div>
+            </div>
+          );
+        })()}
+
+        {/* Secondary Source & Official Verification Card */}
+        {job.secondarySourceUrl && (
+          <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-xs space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>{bn ? 'মাধ্যমিক উৎস ও অফিশিয়াল ভেরিফিকেশন' : 'Secondary Discovery Source & Official Verification'}</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                {job.verificationStatus || 'SECONDARY_SOURCE_ONLY'}
+              </span>
+            </div>
+            <div className="text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+              <p>
+                {bn
+                  ? 'এই বিজ্ঞপ্তিটি মাধ্যমিক উৎস (bdgovtjob.net) থেকে সংগৃহীত। এটি সরকারি কর্তৃপক্ষের নিজস্ব অফিশিয়াল উৎস নয়। আবেদন করার পূর্বে অফিশিয়াল ওয়েবসাইট ও টেলিটক পোর্টালে তথ্য যাচাই করা হয়েছে।'
+                  : 'This circular was discovered from secondary aggregator bdgovtjob.net, not the official authority itself. Official endpoints and documents have been cross-checked.'}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {job.secondarySourceUrl && (
+                  <a
+                    href={job.secondarySourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800"
+                  >
+                    <span>{bn ? 'মূল আর্টিকেল (bdgovtjob.net)' : 'Original Article (bdgovtjob.net)'}</span>
+                    <ExternalLink className="w-3 h-3 text-amber-500" />
+                  </a>
+                )}
+                {job.officialSourceUrl && (
+                  <a
+                    href={job.officialSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700"
+                  >
+                    <span>{bn ? 'অফিশিয়াল ওয়েবসাইট' : 'Official Portal'}</span>
+                    <ExternalLink className="w-3 h-3 text-emerald-600" />
+                  </a>
+                )}
+                {job.applicationUrl && (
+                  <a
+                    href={job.applicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-600 text-white"
+                  >
+                    <span>{bn ? 'টেলিটক আবেদন লিংক' : 'Official Apply Link'}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Conflict Detection Warning Banner */}
+        {job.hasConflict && job.conflictNotes && job.conflictNotes.length > 0 && (
+          <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs space-y-1.5">
+            <div className="font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-rose-600" />
+              <span>{bn ? 'সতর্কতা: তথ্যের অসঙ্গতি শনাক্ত হয়েছে' : 'Warning: Conflicting Information Detected'}</span>
+            </div>
+            <ul className="list-disc list-inside text-[11px] text-rose-700 dark:text-rose-300 space-y-0.5">
+              {job.conflictNotes.map((note, idx) => (
+                <li key={idx}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Description & Procedure */}
         <div className="space-y-4 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
           <div>
@@ -515,7 +1288,7 @@ export const JobDetails: React.FC<JobDetailsProps> = ({
             </p>
           </div>
 
-          {job.requirements.length > 0 && (
+          {Array.isArray(job.requirements) && job.requirements.length > 0 && (
             <div>
               <h3 className="text-sm font-bold text-slate-800 dark:text-white mb-1.5">{bn ? 'যোগ্যতা ও শর্তাবলি' : 'Requirements'}</h3>
               <ul className="list-disc list-inside space-y-1 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">

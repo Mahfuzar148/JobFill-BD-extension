@@ -49,6 +49,8 @@ function makeSyntheticPdfDataUrl(byteSize = 2048): string {
 }
 
 function installChromeDataTransferPolyfill() {
+  if ((HTMLInputElement.prototype as any).__hasDataTransferPolyfill) return;
+  (HTMLInputElement.prototype as any).__hasDataTransferPolyfill = true;
   class MockFileList extends Array<File> {
     item(index: number) {
       return this[index] || null;
@@ -867,5 +869,168 @@ describe('JobFill BD - Smart Photo & Signature Auto Upload Suite', () => {
     expect(lockedPlan[0].status).toBe('Manual Upload Required');
     expect(lockedPlan[0].statusMessage).toContain('Vault Locked');
     expect(lockedPlan[0].isApproved).toBe(false);
+  });
+
+  it('12. autoAttachEligibleDocuments automatically attaches conforming Photo and Signature to empty inputs and updates DOM previews', async () => {
+    document.body.innerHTML = `
+      <form id="appForm">
+        <div>
+          <label for="applicant_photo">Passport Size Photograph (300x300 px, max 100 KB)</label>
+          <input type="file" id="applicant_photo" name="photo" accept="image/jpeg,image/jpg" />
+          <img id="photo_preview_box" style="display:none;" />
+        </div>
+        <div>
+          <label for="applicant_sig">Applicant Signature (300x80 px, max 60 KB)</label>
+          <input type="file" id="applicant_sig" name="signature" accept="image/jpeg,image/jpg" />
+          <img id="sig_preview_box" style="display:none;" />
+        </div>
+      </form>
+    `;
+
+    const photoInput = document.getElementById('applicant_photo') as HTMLInputElement;
+    const sigInput = document.getElementById('applicant_sig') as HTMLInputElement;
+    const photoBox = document.getElementById('photo_preview_box') as HTMLImageElement;
+    const sigBox = document.getElementById('sig_preview_box') as HTMLImageElement;
+
+    photoInput.addEventListener('change', () => {
+      if (photoInput.files && photoInput.files[0]) {
+        photoBox.src = 'data:image/jpeg;base64,photo_preview_rendered';
+        photoBox.style.display = 'block';
+      }
+    });
+
+    sigInput.addEventListener('change', () => {
+      if (sigInput.files && sigInput.files[0]) {
+        sigBox.src = 'data:image/jpeg;base64,sig_preview_rendered';
+        sigBox.style.display = 'block';
+      }
+    });
+
+    const mockProfileId = 'prof_auto_att_1';
+    const mockFetcher = async (category: any) => {
+      if (category === 'photo') {
+        return {
+          metadata: {
+            documentId: 'doc_photo_1',
+            documentType: 'photo' as const,
+            profileId: mockProfileId,
+            title: 'Applicant Photo',
+            fileName: 'profile_photo.jpg',
+            mimeType: 'image/jpeg',
+            fileSize: 15 * 1024,
+            width: 300,
+            height: 300,
+            createdAt: new Date().toISOString(),
+          },
+          dataUrl: makeSyntheticJpegDataUrl(15 * 1024),
+        };
+      }
+      if (category === 'signature') {
+        return {
+          metadata: {
+            documentId: 'doc_sig_1',
+            documentType: 'signature' as const,
+            profileId: mockProfileId,
+            title: 'Applicant Signature',
+            fileName: 'profile_sig.jpg',
+            mimeType: 'image/jpeg',
+            fileSize: 8 * 1024,
+            width: 300,
+            height: 80,
+            createdAt: new Date().toISOString(),
+          },
+          dataUrl: makeSyntheticJpegDataUrl(8 * 1024),
+        };
+      }
+      return null;
+    };
+
+    const result = await DocumentUploadCoordinator.autoAttachEligibleDocuments(document, mockFetcher);
+
+    expect(result.attempted).toBe(2);
+    expect(result.attachedCount).toBe(2);
+    expect(result.failedCount).toBe(0);
+    expect(result.pendingManualReview.length).toBe(0);
+
+    expect(photoInput.files).toBeDefined();
+    expect(photoInput.files!.length).toBe(1);
+    expect(photoInput.files![0].name).toBe('profile_photo.jpg');
+
+    expect(sigInput.files).toBeDefined();
+    expect(sigInput.files!.length).toBe(1);
+    expect(sigInput.files![0].name).toBe('profile_sig.jpg');
+
+    // Synthetic event dispatching verified:
+    expect(photoBox.style.display).toBe('block');
+    expect(sigBox.style.display).toBe('block');
+  });
+
+  it('13. autoAttachEligibleDocuments preserves pre-selected files and diverts non-conforming or missing docs to pendingManualReview', async () => {
+    document.body.innerHTML = `
+      <form id="appForm">
+        <div>
+          <label for="p1">Photo (300x300, 100KB)</label>
+          <input type="file" id="p1" name="photo" />
+        </div>
+        <div>
+          <label for="p2">Signature</label>
+          <input type="file" id="p2" name="signature" />
+          <small>Signature must be 300 x 80 px and not exceed 60 KB</small>
+        </div>
+        <div>
+          <label for="p3">National ID Card</label>
+          <input type="file" id="p3" name="nid_attachment" accept="image/jpeg,image/png" />
+          <small>Upload NID Scan (JPEG only)</small>
+        </div>
+      </form>
+    `;
+
+    const p1 = document.getElementById('p1') as HTMLInputElement;
+    const p2 = document.getElementById('p2') as HTMLInputElement;
+    const p3 = document.getElementById('p3') as HTMLInputElement;
+
+    // Simulate pre-existing file on p1 (user already uploaded manual file)
+    const existingFile = new File(['preexisting'], 'user_manual.jpg', { type: 'image/jpeg' });
+    const dt = new (globalThis as any).DataTransfer();
+    dt.items.add(existingFile);
+    p1.files = dt.files;
+
+    // Fetcher returns:
+    // - signature: null (missing document)
+    // - nid: PDF file (unconvertible for JPEG-only field)
+    const mockFetcher = async (category: any) => {
+      if (category === 'nid') {
+        return {
+          metadata: {
+            documentId: 'doc_nid_pdf',
+            documentType: 'nid' as const,
+            profileId: 'prof_test',
+            title: 'National ID',
+            fileName: 'nid.pdf',
+            mimeType: 'application/pdf',
+            fileSize: 10 * 1024,
+            width: 0,
+            height: 0,
+            createdAt: new Date().toISOString(),
+          },
+          dataUrl: makeSyntheticPdfDataUrl(10 * 1024),
+        };
+      }
+      return null;
+    };
+
+    const result = await DocumentUploadCoordinator.autoAttachEligibleDocuments(document, mockFetcher);
+
+    // p1 was skipped because it already had a file (no destructive overwriting)
+    expect(p1.files![0].name).toBe('user_manual.jpg');
+
+    // p2 (missing signature) and p3 (unconvertible PDF for image field) moved to pending manual review
+    expect(result.pendingManualReview.length).toBe(2);
+    const pendingElementIds = result.pendingManualReview.map((item) => item.field.element.id);
+    expect(pendingElementIds).toContain('p2');
+    expect(pendingElementIds).toContain('p3');
+    expect(result.attachedCount).toBe(0);
+    expect(p2.files?.length || 0).toBe(0);
+    expect(p3.files?.length || 0).toBe(0);
   });
 });

@@ -15,11 +15,13 @@ import { RemoteOkAdapter } from './remoteok.adapter';
 import { HimalayasAdapter } from './himalayas.adapter';
 import { ArbeitnowAdapter } from './arbeitnow.adapter';
 import { ReliefWebAdapter } from './reliefweb.adapter';
+import { BdGovtJobAdapter } from './bdgovtjob';
 
 export const JOB_SOURCE_ADAPTERS: JobSourceAdapter[] = [
   TeletalkAdapter,
   OfficialWebsiteAdapter,
   BpscAdapter,
+  BdGovtJobAdapter,
   BangladeshBankAdapter,
   NtrcaAdapter,
   DpeAdapter,
@@ -46,11 +48,11 @@ export class JobSourceRegistry {
   }
 
   public static getOfficialAdapters(): JobSourceAdapter[] {
-    return this.getAll().filter((a) => a.sourceType !== 'discovery_rss');
+    return this.getAll().filter((a) => a.publisherType === 'Official');
   }
 
   public static getDiscoveryAdapters(): JobSourceAdapter[] {
-    return this.getAll().filter((a) => a.sourceType === 'discovery_rss');
+    return this.getAll().filter((a) => a.publisherType !== 'Official');
   }
 
   public static registerCustomAdapter(adapter: JobSourceAdapter): void {
